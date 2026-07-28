@@ -1,5 +1,6 @@
 import {
   Notice,
+  normalizePath,
   Platform,
   Plugin,
   WorkspaceLeaf
@@ -24,6 +25,7 @@ import {
   TaskManagerSettings,
   TaskManagerSettingTab
 } from "./src/settings";
+import { legacyOpenAiApiKey } from "./src/settings-migration";
 import { TaskWorkspaceService } from "./src/workspace-service";
 
 export default class FjgTaskManagerPlugin extends Plugin {
@@ -34,6 +36,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async onload(): Promise<void> {
     this.settings = normalizeSettings(await this.loadData() || DEFAULT_SETTINGS);
+    const importedLegacyKey = await this.restoreOpenAiApiKey();
     await this.saveData(this.settings);
     this.workspaceService = new TaskWorkspaceService(this.app, () => this.settings);
     await this.workspaceService.initialize();
@@ -105,6 +108,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
     this.app.workspace.onLayoutReady(() => {
+      if (importedLegacyKey) {
+        new Notice("FJG Task Manager reused the OpenAI key already saved by Task Capture.");
+      }
       void this.finishStartupAfterLayoutReady();
     });
     await this.restartCatalog();
@@ -118,6 +124,24 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  async resolveOpenAiApiKey(): Promise<string> {
+    const currentKey = this.settings.openAiApiKey.trim();
+    if (currentKey) return currentKey;
+
+    const savedSettings = normalizeSettings(await this.loadData() || DEFAULT_SETTINGS);
+    if (savedSettings.openAiApiKey) {
+      this.settings.openAiApiKey = savedSettings.openAiApiKey;
+      return savedSettings.openAiApiKey;
+    }
+
+    if (await this.restoreOpenAiApiKey()) {
+      await this.saveSettings();
+      new Notice("FJG Task Manager recovered your saved OpenAI key.");
+      return this.settings.openAiApiKey;
+    }
+    return "";
   }
 
   async restartCatalog(): Promise<void> {
@@ -332,6 +356,29 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private async recordRequest(requestId: string): Promise<void> {
     this.settings.processedRequestIds = [...this.settings.processedRequestIds, requestId].slice(-500);
     await this.saveSettings();
+  }
+
+  private async restoreOpenAiApiKey(): Promise<boolean> {
+    if (this.settings.openAiApiKey.trim()) return false;
+    const legacyDataPath = normalizePath(
+      `${this.app.vault.configDir}/plugins/task-capture/data.json`
+    );
+    try {
+      if (!(await this.app.vault.adapter.exists(legacyDataPath))) return false;
+      const legacyData = JSON.parse(
+        await this.app.vault.adapter.read(legacyDataPath)
+      ) as unknown;
+      const key = legacyOpenAiApiKey(legacyData);
+      if (!key) return false;
+      this.settings.openAiApiKey = key;
+      return true;
+    } catch (error) {
+      console.warn(
+        "[FJG Task Manager] Could not read legacy Task Capture settings.",
+        error
+      );
+      return false;
+    }
   }
 
   private recoverMissedAdvancedUriLaunch(): void {

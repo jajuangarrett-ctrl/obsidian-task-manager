@@ -170,10 +170,15 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h3", { text: "Quick Capture AI" });
 
+    let openAiKeyInput: HTMLInputElement | null = null;
     new Setting(containerEl)
       .setName("OpenAI API key")
-      .setDesc("Used for voice transcription and AI task drafting. Stored in this plugin's local Obsidian data.")
+      .setDesc(
+        "Used for voice transcription and AI task drafting. FJG Task Manager "
+        + "will reuse a key already saved by the older Task Capture plugin."
+      )
       .addText((text) => {
+        openAiKeyInput = text.inputEl;
         text.inputEl.type = "password";
         text
           .setPlaceholder("sk-...")
@@ -184,12 +189,16 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           });
       })
       .addButton((button) => button
-        .setButtonText("Test")
+        .setButtonText("Save & Test")
         .onClick(async () => {
           button.setDisabled(true);
           try {
-            await testOpenAiKey(this.taskPlugin.settings.openAiApiKey);
-            new Notice("OpenAI API key is active.");
+            const key = (openAiKeyInput?.value
+              || this.taskPlugin.settings.openAiApiKey).trim();
+            this.taskPlugin.settings.openAiApiKey = key;
+            await this.taskPlugin.saveSettings();
+            await testOpenAiKey(key);
+            new Notice("OpenAI API key is saved and active on this device.");
           } catch (error) {
             new Notice(`OpenAI connection failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
           } finally {

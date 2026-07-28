@@ -21,10 +21,12 @@ Task creation works through the Obsidian protocol. Live Add Update search additi
 
 In **Settings → Community plugins → FJG Task Manager → Quick Capture AI**:
 
-1. Enter an active OpenAI API key.
+1. Enter an active OpenAI API key. If the older **Task Capture** plugin
+   already has one, FJG Task Manager imports it automatically.
 2. Keep `gpt-4.1-mini` as the drafting model unless a tested replacement is preferred.
 3. Keep `gpt-4o-mini-transcribe` as the transcription model.
-4. Use **Test** to confirm the credential.
+4. Use **Save & Test** to explicitly save and confirm the credential on
+   iPhone, iPad, or desktop.
 5. Leave **Draft after dictation** enabled to populate task fields immediately after transcription.
 
 The key is stored in `.obsidian/plugins/fjg-task-manager/data.json`. Never add that file or a real key to the source repository.

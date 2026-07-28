@@ -153,7 +153,8 @@ export class QuickCaptureModal extends Modal {
   private async toggleRecording(): Promise<void> {
     if (this.busy || !this.recordButton) return;
     if (!this.recording) {
-      if (!this.taskPlugin.settings.openAiApiKey) {
+      const apiKey = await this.taskPlugin.resolveOpenAiApiKey();
+      if (!apiKey) {
         new Notice("Add an OpenAI API key in FJG Task Manager settings before dictating.");
         return;
       }
@@ -176,7 +177,7 @@ export class QuickCaptureModal extends Modal {
       this.recorder = null;
       const transcript = await transcribeTaskAudio(
         audio,
-        this.taskPlugin.settings.openAiApiKey,
+        await this.taskPlugin.resolveOpenAiApiKey(),
         this.taskPlugin.settings.transcriptionModel
       );
       this.rawCapture = mergeText(this.rawCapture, transcript);
@@ -186,7 +187,7 @@ export class QuickCaptureModal extends Modal {
         if (this.detailsInput) this.detailsInput.value = this.value.details;
       }
       if (this.taskPlugin.settings.autoDraftAfterTranscription) {
-        await this.requestDraft();
+        await this.requestDraft(await this.taskPlugin.resolveOpenAiApiKey());
       }
     }, "Voice capture failed");
     this.setButton(this.recordButton, "microphone", "Dictate");
@@ -198,20 +199,21 @@ export class QuickCaptureModal extends Modal {
       new Notice("Type or dictate the task before drafting.");
       return;
     }
-    if (!this.taskPlugin.settings.openAiApiKey) {
+    const apiKey = await this.taskPlugin.resolveOpenAiApiKey();
+    if (!apiKey) {
       new Notice("Add an OpenAI API key in FJG Task Manager settings to draft task fields.");
       return;
     }
     await this.withBusy(async () => {
-      await this.requestDraft();
+      await this.requestDraft(apiKey);
     }, showFailure ? "Task drafting failed" : "Voice capture failed");
     if (this.draftButton) this.setButton(this.draftButton, "sparkles", "Draft Task");
   }
 
-  private async requestDraft(): Promise<void> {
+  private async requestDraft(apiKey: string): Promise<void> {
     if (this.draftButton) this.setButton(this.draftButton, "loader-circle", "Drafting…");
     const draft = await draftTaskFromCapture({
-      apiKey: this.taskPlugin.settings.openAiApiKey,
+      apiKey,
       model: this.taskPlugin.settings.openAiModel,
       rawCapture: this.rawCapture,
       projects: this.taskPlugin.projectNames()
