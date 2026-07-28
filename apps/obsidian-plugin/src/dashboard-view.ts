@@ -3,6 +3,7 @@ import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import {
   ALL_PROJECTS,
+  canArchiveProject,
   countTasksForView,
   DashboardMode,
   isDueOrOverdue,
@@ -14,7 +15,7 @@ import {
   taskMatchesView,
   TaskViewKey
 } from "./dashboard-model";
-import type { IndexedTask } from "./workspace-service";
+import type { IndexedProject, IndexedTask } from "./workspace-service";
 import { formatFileSize, RelatedFileKind } from "./related-files";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
@@ -25,6 +26,7 @@ export class TaskDashboardView extends ItemView {
   private projectQuery = "";
   private view: TaskViewKey = "do-first";
   private project = ALL_PROJECTS;
+  private projectScope: "active" | "archived" = "active";
   private readonly expandedFileTasks = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private readonly taskPlugin: FjgTaskManagerPlugin) {
@@ -55,15 +57,16 @@ export class TaskDashboardView extends ItemView {
     this.renderHeader(root);
 
     const tasks = this.taskPlugin.workspaceService.list();
+    const allTasks = this.taskPlugin.workspaceService.list({ includeArchived: true });
     const projects = summarizeProjects(
       tasks.map((task) => task.record),
       this.taskPlugin.workspaceService.projectNames()
     );
     this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length);
     if (this.mode === "projects") {
-      this.renderProjects(root, projects);
+      this.renderProjects(root, projects, allTasks);
     } else {
-      this.renderTasks(root, tasks, projects);
+      this.renderTasks(root, allTasks, projects);
     }
   }
 
@@ -117,14 +120,18 @@ export class TaskDashboardView extends ItemView {
 
   private renderTasks(root: HTMLElement, tasks: IndexedTask[], projects: ProjectSummary[]): void {
     const activeProject = projects.find((project) => project.key === this.project);
-    if (activeProject) this.renderActiveProject(root);
+    const selectedRecords = tasks.filter((task) => matchesProject(task.record, this.project));
+    const selectedName = this.project === NO_PROJECT ? "No project" : this.project;
+    if (this.project !== ALL_PROJECTS) this.renderActiveProject(root);
 
     const heading = root.createDiv({ cls: "fjg-section-heading" });
     const headingCopy = heading.createDiv();
-    headingCopy.createEl("h2", { text: activeProject ? activeProject.name : "Task Views" });
+    headingCopy.createEl("h2", {
+      text: this.project === ALL_PROJECTS ? "Task Views" : (activeProject?.name || selectedName)
+    });
     headingCopy.createEl("p", {
-      text: activeProject
-        ? `${activeProject.openCount} open · ${activeProject.totalCount} total`
+      text: this.project !== ALL_PROJECTS
+        ? `${selectedRecords.filter((task) => task.record.status !== "completed" && task.record.status !== "archived").length} open · ${selectedRecords.length} total`
         : "Choose a focus and keep the rest of the dashboard quiet."
     });
 
@@ -173,7 +180,33 @@ export class TaskDashboardView extends ItemView {
       attr: { "aria-label": "Filter tasks by project" }
     });
     projectSelect.createEl("option", { text: "All projects", value: ALL_PROJECTS });
-    for (const project of projects) {
+    const projectOptions = [...projects];
+    if (this.view === "archived") {
+      const known = new Set(projectOptions.map((project) => normalize(project.key)));
+      const archivedProjects = tasks.filter((task) => task.archived && task.record.project.trim());
+      for (const task of archivedProjects) {
+        const name = task.record.project.trim();
+        if (known.has(normalize(name))) continue;
+        const totalCount = archivedProjects.filter((candidate) => normalize(candidate.record.project) === normalize(name)).length;
+        projectOptions.push({ key: name, name, openCount: 0, totalCount });
+        known.add(normalize(name));
+      }
+      const archivedWithoutProject = tasks.filter((task) => task.archived && !task.record.project.trim()).length;
+      if (archivedWithoutProject && !projectOptions.some((project) => project.key === NO_PROJECT)) {
+        projectOptions.push({
+          key: NO_PROJECT,
+          name: "No project",
+          openCount: 0,
+          totalCount: archivedWithoutProject
+        });
+      }
+      projectOptions.sort((left, right) => {
+        if (left.key === NO_PROJECT) return 1;
+        if (right.key === NO_PROJECT) return -1;
+        return left.name.localeCompare(right.name);
+      });
+    }
+    for (const project of projectOptions) {
       projectSelect.createEl("option", { text: project.name, value: project.key });
     }
     projectSelect.value = this.project;
@@ -203,46 +236,91 @@ export class TaskDashboardView extends ItemView {
     back.createSpan({ text: "All projects" });
     back.addEventListener("click", () => {
       this.mode = "projects";
+      this.projectScope = this.view === "archived" ? "archived" : "active";
       this.render();
     });
   }
 
-  private renderProjects(root: HTMLElement, projects: ProjectSummary[]): void {
+  private renderProjects(root: HTMLElement, projects: ProjectSummary[], tasks: IndexedTask[]): void {
+    const archivedProjects = this.taskPlugin.workspaceService
+      .listProjects({ includeArchived: true })
+      .filter((project) => project.archived);
+    const showingArchived = this.projectScope === "archived";
     const heading = root.createDiv({ cls: "fjg-section-heading fjg-project-heading" });
     const copy = heading.createDiv();
-    copy.createEl("h2", { text: "Projects" });
-    copy.createEl("p", { text: "See every project at a glance, then open only the work you need." });
+    copy.createEl("h2", { text: showingArchived ? "Archived Projects" : "Projects" });
+    copy.createEl("p", {
+      text: showingArchived
+        ? "Review completed project work or return a project to your active list."
+        : "See every project at a glance, then open only the work you need."
+    });
     const namedProjectCount = projects.filter((project) => project.key !== NO_PROJECT).length;
     const totalOpen = projects.reduce((total, project) => total + project.openCount, 0);
     heading.createSpan({
-      text: `${countLabel(namedProjectCount, "project")} · ${totalOpen} open ${totalOpen === 1 ? "task" : "tasks"}`,
+      text: showingArchived
+        ? countLabel(archivedProjects.length, "archived project")
+        : `${countLabel(namedProjectCount, "project")} · ${totalOpen} open ${totalOpen === 1 ? "task" : "tasks"}`,
       cls: "fjg-project-rollup"
     });
+
+    const scope = root.createDiv({
+      cls: "fjg-project-scope",
+      attr: { role: "tablist", "aria-label": "Project lists" }
+    });
+    this.projectScopeButton(scope, "active", "Active Projects", projects.filter((project) => project.key !== NO_PROJECT).length);
+    this.projectScopeButton(scope, "archived", "Archived Projects", archivedProjects.length);
 
     const tools = root.createDiv({ cls: "fjg-project-tools" });
     const search = tools.createEl("input", {
       type: "search",
-      placeholder: "Search projects",
-      attr: { "aria-label": "Search projects" }
+      placeholder: showingArchived ? "Search archived projects" : "Search projects",
+      attr: { "aria-label": showingArchived ? "Search archived projects" : "Search projects" }
     });
     search.value = this.projectQuery;
-    const createProject = tools.createEl("button", {
-      cls: "mod-cta fjg-create-project-button",
-      attr: { type: "button", "aria-label": "Create a new project" }
-    });
-    const createIcon = createProject.createSpan();
-    setIcon(createIcon, "plus");
-    createProject.createSpan({ text: "New Project" });
-    createProject.addEventListener("click", () => this.taskPlugin.openCreateProjectModal());
+    if (!showingArchived) {
+      const createProject = tools.createEl("button", {
+        cls: "mod-cta fjg-create-project-button",
+        attr: { type: "button", "aria-label": "Create a new project" }
+      });
+      const createIcon = createProject.createSpan();
+      setIcon(createIcon, "plus");
+      createProject.createSpan({ text: "New Project" });
+      createProject.addEventListener("click", () => this.taskPlugin.openCreateProjectModal());
+    }
     const cards = root.createDiv({
       cls: "fjg-project-grid",
       attr: { "data-fjg-project-grid": "true", "aria-live": "polite" }
     });
     search.addEventListener("input", () => {
       this.projectQuery = search.value;
-      this.renderProjectCards(cards, projects);
+      if (showingArchived) this.renderArchivedProjectCards(cards, archivedProjects, tasks);
+      else this.renderProjectCards(cards, projects);
     });
-    this.renderProjectCards(cards, projects);
+    if (showingArchived) this.renderArchivedProjectCards(cards, archivedProjects, tasks);
+    else this.renderProjectCards(cards, projects);
+  }
+
+  private projectScopeButton(
+    parent: HTMLElement,
+    scope: "active" | "archived",
+    label: string,
+    count: number
+  ): void {
+    const button = parent.createEl("button", {
+      cls: this.projectScope === scope ? "is-active" : "",
+      attr: {
+        type: "button",
+        role: "tab",
+        "aria-selected": String(this.projectScope === scope)
+      }
+    });
+    button.createSpan({ text: label });
+    button.createSpan({ text: String(count), cls: "fjg-project-scope-count" });
+    button.addEventListener("click", () => {
+      this.projectScope = scope;
+      this.projectQuery = "";
+      this.render();
+    });
   }
 
   private renderProjectCards(parent: HTMLElement, projects: ProjectSummary[]): void {
@@ -256,9 +334,13 @@ export class TaskDashboardView extends ItemView {
       });
       return;
     }
+    const registered = new Set(
+      this.taskPlugin.workspaceService.listProjects().map((project) => normalize(project.record.name))
+    );
     for (const project of visible) {
-      const button = parent.createEl("button", {
-        cls: "fjg-project-card",
+      const card = parent.createEl("article", { cls: "fjg-project-card" });
+      const button = card.createEl("button", {
+        cls: "fjg-project-card-main",
         attr: {
           "aria-label": `${project.name}, ${project.openCount} open ${project.openCount === 1 ? "task" : "tasks"}, ${project.totalCount} total ${project.totalCount === 1 ? "task" : "tasks"}`
         }
@@ -271,7 +353,8 @@ export class TaskDashboardView extends ItemView {
         text: `${project.openCount} open`,
         cls: "fjg-project-open"
       });
-      const total = button.createSpan({ cls: "fjg-project-total" });
+      const actions = card.createDiv({ cls: "fjg-project-card-actions" });
+      const total = actions.createSpan({ cls: "fjg-project-total" });
       total.createSpan({ text: String(project.totalCount) });
       const chevron = total.createSpan({ cls: "fjg-project-chevron" });
       setIcon(chevron, "chevron-right");
@@ -282,6 +365,85 @@ export class TaskDashboardView extends ItemView {
         this.query = "";
         this.render();
       });
+      if (canArchiveProject(project) && registered.has(normalize(project.name))) {
+        const archive = actions.createEl("button", {
+          text: "Archive",
+          cls: "fjg-project-archive-button",
+          attr: {
+            type: "button",
+            "aria-label": `Archive project ${project.name}`
+          }
+        });
+        archive.addEventListener("click", () => {
+          this.taskPlugin.openArchiveProjectModal(project.name, project.totalCount);
+        });
+      }
+    }
+  }
+
+  private renderArchivedProjectCards(
+    parent: HTMLElement,
+    projects: IndexedProject[],
+    tasks: IndexedTask[]
+  ): void {
+    parent.empty();
+    const query = normalize(this.projectQuery);
+    const visible = projects.filter((project) => !query || normalize(project.record.name).includes(query));
+    if (!visible.length) {
+      parent.createDiv({
+        cls: "fjg-empty",
+        text: projects.length ? "No archived projects match this search." : "No projects have been archived."
+      });
+      return;
+    }
+    for (const project of visible) {
+      const taskCount = tasks.filter((task) => {
+        return task.archived && normalize(task.record.project) === normalize(project.record.name);
+      }).length;
+      const card = parent.createEl("article", { cls: "fjg-project-card is-archived" });
+      const open = card.createEl("button", {
+        cls: "fjg-project-card-main",
+        attr: {
+          type: "button",
+          "aria-label": `View archived tasks for ${project.record.name}`
+        }
+      });
+      const iconEl = open.createSpan({ cls: "fjg-project-icon" });
+      setIcon(iconEl, "archive");
+      const copy = open.createSpan({ cls: "fjg-project-copy" });
+      copy.createSpan({ text: project.record.name, cls: "fjg-project-name" });
+      copy.createSpan({
+        text: countLabel(taskCount, "archived task"),
+        cls: "fjg-project-open"
+      });
+      open.addEventListener("click", () => {
+        this.mode = "tasks";
+        this.project = project.record.name;
+        this.view = "archived";
+        this.query = "";
+        this.render();
+      });
+      const actions = card.createDiv({ cls: "fjg-project-card-actions" });
+      const reopen = actions.createEl("button", {
+        text: "Reopen",
+        cls: "fjg-project-reopen-button",
+        attr: {
+          type: "button",
+          "aria-label": `Reopen project ${project.record.name}`
+        }
+      });
+      reopen.addEventListener("click", async () => {
+        reopen.disabled = true;
+        try {
+          await this.taskPlugin.reopenProject(project.record.name);
+          this.projectScope = "active";
+          this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error), 8000);
+        } finally {
+          reopen.disabled = false;
+        }
+      });
     }
   }
 
@@ -290,7 +452,7 @@ export class TaskDashboardView extends ItemView {
     if (!rows) return;
     rows.empty();
     const query = normalize(this.query);
-    const tasks = this.taskPlugin.workspaceService.list().filter((task) => {
+    const tasks = this.taskPlugin.workspaceService.list({ includeArchived: true }).filter((task) => {
       if (!taskMatchesSearch(task, query)) return false;
       if (!matchesProject(task.record, this.project)) return false;
       return taskMatchesView(task.record, this.view);
@@ -325,38 +487,54 @@ export class TaskDashboardView extends ItemView {
     }
     if (task.record.delegated_to) meta.createSpan({ text: `Delegated to ${task.record.delegated_to}` });
     const controls = overview.createDiv({ cls: "fjg-task-controls" });
-    const status = controls.createEl("select", {
-      attr: { "aria-label": `Status for ${task.record.title}` }
-    });
-    for (const value of TASK_STATUSES.filter((item) => item !== "archived")) {
-      status.createEl("option", { text: statusLabel(value), value });
+    if (task.archived || task.record.status === "archived") {
+      const reopen = controls.createEl("button", {
+        text: "Reopen to Do First",
+        cls: "mod-cta",
+        attr: { "aria-label": `Reopen ${task.record.title} to Do First` }
+      });
+      reopen.addEventListener("click", async () => {
+        try {
+          await this.taskPlugin.changeStatus(task.record.task_id, "do-first");
+          this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error));
+        }
+      });
+    } else {
+      const status = controls.createEl("select", {
+        attr: { "aria-label": `Status for ${task.record.title}` }
+      });
+      for (const value of TASK_STATUSES.filter((item) => item !== "archived")) {
+        status.createEl("option", { text: statusLabel(value), value });
+      }
+      status.value = task.record.status;
+      status.addEventListener("change", async () => {
+        try {
+          await this.taskPlugin.changeStatus(task.record.task_id, status.value);
+          this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error));
+        }
+      });
+      const update = controls.createEl("button", {
+        text: "Update",
+        attr: { "aria-label": `Add an update to ${task.record.title}` }
+      });
+      update.addEventListener("click", () => this.taskPlugin.openUpdateModal(task.record.task_id));
+      const archive = controls.createEl("button", {
+        text: "Archive",
+        attr: { "aria-label": `Archive ${task.record.title}` }
+      });
+      archive.addEventListener("click", async () => {
+        try {
+          await this.taskPlugin.changeStatus(task.record.task_id, "archived");
+          this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error));
+        }
+      });
     }
-    status.value = task.record.status;
-    status.addEventListener("change", async () => {
-      try {
-        await this.taskPlugin.changeStatus(task.record.task_id, status.value);
-        this.render();
-      } catch (error) {
-        new Notice(error instanceof Error ? error.message : String(error));
-      }
-    });
-    const update = controls.createEl("button", {
-      text: "Update",
-      attr: { "aria-label": `Add an update to ${task.record.title}` }
-    });
-    update.addEventListener("click", () => this.taskPlugin.openUpdateModal(task.record.task_id));
-    const archive = controls.createEl("button", {
-      text: "Archive",
-      attr: { "aria-label": `Archive ${task.record.title}` }
-    });
-    archive.addEventListener("click", async () => {
-      try {
-        await this.taskPlugin.changeStatus(task.record.task_id, "archived");
-        this.render();
-      } catch (error) {
-        new Notice(error instanceof Error ? error.message : String(error));
-      }
-    });
     this.renderRelatedFiles(row, task);
     this.renderRecentUpdates(row, task);
   }
@@ -372,8 +550,10 @@ export class TaskDashboardView extends ItemView {
       attr: { "aria-label": `${task.relatedFiles.length} related ${task.relatedFiles.length === 1 ? "file" : "files"}` }
     });
     const actions = heading.createDiv({ cls: "fjg-related-file-actions" });
-    const add = this.iconButton(actions, "paperclip", "Add file", `Add a file to ${task.record.title}`);
-    add.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
+    if (!task.archived) {
+      const add = this.iconButton(actions, "paperclip", "Add file", `Add a file to ${task.record.title}`);
+      add.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
+    }
     const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task folder for ${task.record.title}`);
     folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
 
