@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, setIcon, Setting, TFile } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
 
 export interface CreateTaskFormValue {
@@ -245,4 +245,60 @@ export class TaskFileModal extends Modal {
 function fileSelectionLabel(files: File[]): string {
   if (files.length === 1) return files[0].name;
   return files.length ? `${files.length} files selected` : "";
+}
+
+export interface TaskFolderEntry {
+  file: TFile;
+  description: string;
+  icon: string;
+}
+
+export class TaskFolderModal extends Modal {
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    private readonly folderPath: string,
+    private readonly entries: TaskFolderEntry[],
+    private readonly openFile: (file: TFile) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-folder-modal-shell");
+    this.setTitle(this.taskTitle);
+    this.contentEl.createEl("p", {
+      text: "Task folder",
+      cls: "fjg-task-folder-eyebrow"
+    });
+    this.contentEl.createEl("code", {
+      text: this.folderPath,
+      cls: "fjg-task-folder-path"
+    });
+    const list = this.contentEl.createDiv({ cls: "fjg-task-folder-list" });
+    for (const entry of this.entries) {
+      const button = list.createEl("button", {
+        cls: "fjg-task-folder-entry",
+        attr: {
+          type: "button",
+          "aria-label": `Open ${entry.file.name}`
+        }
+      });
+      const icon = button.createSpan({ cls: "fjg-task-folder-entry-icon" });
+      setIcon(icon, entry.icon);
+      const copy = button.createSpan({ cls: "fjg-task-folder-entry-copy" });
+      copy.createSpan({ text: entry.file.name, cls: "fjg-task-folder-entry-name" });
+      copy.createSpan({ text: entry.description, cls: "fjg-task-folder-entry-description" });
+      const chevron = button.createSpan({ cls: "fjg-task-folder-entry-chevron" });
+      setIcon(chevron, "chevron-right");
+      button.addEventListener("click", async () => {
+        await this.openFile(entry.file);
+        this.close();
+      });
+    }
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
 }

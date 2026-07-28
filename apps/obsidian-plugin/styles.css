@@ -864,6 +864,105 @@
   text-align: center;
 }
 
+.fjg-task-folder-modal-shell {
+  width: min(92vw, 640px);
+}
+
+.fjg-task-folder-eyebrow {
+  margin: 0 0 5px;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fjg-task-folder-path {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 16px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fjg-task-folder-list {
+  display: grid;
+  gap: 7px;
+  max-height: min(58vh, 560px);
+  overflow-y: auto;
+}
+
+.fjg-task-folder-entry {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  box-shadow: none;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.fjg-task-folder-entry:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.fjg-task-folder-entry-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--background-primary);
+  color: var(--interactive-accent);
+}
+
+.fjg-task-folder-entry-icon svg,
+.fjg-task-folder-entry-chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fjg-task-folder-entry-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fjg-task-folder-entry-name,
+.fjg-task-folder-entry-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fjg-task-folder-entry-name {
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.fjg-task-folder-entry-description {
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+
+.fjg-task-folder-entry-chevron {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
 .fjg-quick-capture {
   --fjg-capture-teal: #0f766e;
   --fjg-capture-orange: #f58220;

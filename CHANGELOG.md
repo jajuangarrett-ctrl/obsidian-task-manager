@@ -7,7 +7,7 @@
 - Add a Related files section to each dashboard task with compact previews for Markdown notes, image thumbnails, file type, size, and task-relative location.
 - Add a polished Add file flow with separate options to create and open a new task note or import one or more existing supporting files.
 - Store imported files inside the task workspace's `attachments/` folder and keep new Markdown notes at the task workspace root.
-- Add Open folder controls that open a native file-explorer sidebar tab when needed and reveal the selected task, with a mobile-safe fallback that opens `task.md`.
+- Add Open folder controls that use Obsidian's native file explorer when available and otherwise open a complete in-plugin task-folder browser for consistent desktop and mobile access.
 - Add active-task commands for Add File to Task Workspace and Open Task Folder.
 - Add collision-safe related-file naming so existing files are never overwritten.
 

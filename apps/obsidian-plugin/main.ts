@@ -8,7 +8,13 @@ import {
 import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
-import { CreateTaskModal, TaskFileModal, TextEntryModal } from "./src/modals";
+import {
+  CreateTaskModal,
+  TaskFileModal,
+  TaskFolderEntry,
+  TaskFolderModal,
+  TextEntryModal
+} from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
 import {
@@ -255,12 +261,30 @@ export default class FjgTaskManagerPlugin extends Plugin {
       this.app.workspace.revealLeaf(explorerLeaf);
       return;
     }
-    await this.openTask(taskId);
-    const commands = (this.app as unknown as {
-      commands?: { executeCommandById?: (id: string) => boolean };
-    }).commands;
-    if (commands?.executeCommandById?.("file-explorer:reveal-active-file")) return;
-    new Notice("Task opened. Its workspace folder is available in Obsidian’s file navigation.");
+    const entries: TaskFolderEntry[] = [
+      { file: task.taskFile, description: "Canonical task record", icon: "list-checks" }
+    ];
+    if (task.updatesFile) {
+      entries.push({ file: task.updatesFile, description: "Complete chronological update log", icon: "history" });
+    }
+    entries.push(...task.relatedFiles.map((related) => ({
+      file: related.file,
+      description: related.file.path.slice(task.folderPath.length + 1),
+      icon: related.kind === "image"
+        ? "image"
+        : related.kind === "note"
+          ? "notebook-pen"
+          : related.kind === "pdf"
+            ? "file-text"
+            : "file"
+    })));
+    new TaskFolderModal(
+      this.app,
+      task.record.title,
+      task.folderPath,
+      entries,
+      async (file) => this.app.workspace.getLeaf("tab").openFile(file)
+    ).open();
   }
 
   private async handleClipperPayload(encoded: string): Promise<void> {
