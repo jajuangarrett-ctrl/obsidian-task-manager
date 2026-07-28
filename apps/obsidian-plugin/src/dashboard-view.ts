@@ -54,7 +54,7 @@ export class TaskDashboardView extends ItemView {
 
     const tasks = this.taskPlugin.workspaceService.list();
     const projects = summarizeProjects(tasks.map((task) => task.record));
-    this.renderSectionTabs(root, projects.length);
+    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length);
     if (this.mode === "projects") {
       this.renderProjects(root, projects);
     } else {
@@ -141,7 +141,7 @@ export class TaskDashboardView extends ItemView {
       const copy = button.createSpan({ cls: "fjg-view-copy" });
       copy.createSpan({ text: definition.label, cls: "fjg-view-label" });
       copy.createSpan({
-        text: `${countTasksForView(records, definition.key)} tasks`,
+        text: taskCountLabel(countTasksForView(records, definition.key)),
         cls: "fjg-view-count"
       });
       button.addEventListener("click", () => {
@@ -210,9 +210,10 @@ export class TaskDashboardView extends ItemView {
     const copy = heading.createDiv();
     copy.createEl("h2", { text: "Projects" });
     copy.createEl("p", { text: "See every project at a glance, then open only the work you need." });
+    const namedProjectCount = projects.filter((project) => project.key !== NO_PROJECT).length;
     const totalOpen = projects.reduce((total, project) => total + project.openCount, 0);
     heading.createSpan({
-      text: `${projects.length} projects · ${totalOpen} open tasks`,
+      text: `${countLabel(namedProjectCount, "project")} · ${totalOpen} open ${totalOpen === 1 ? "task" : "tasks"}`,
       cls: "fjg-project-rollup"
     });
 
@@ -249,7 +250,7 @@ export class TaskDashboardView extends ItemView {
       const button = parent.createEl("button", {
         cls: "fjg-project-card",
         attr: {
-          "aria-label": `${project.name}, ${project.openCount} open tasks, ${project.totalCount} total tasks`
+          "aria-label": `${project.name}, ${project.openCount} open ${project.openCount === 1 ? "task" : "tasks"}, ${project.totalCount} total ${project.totalCount === 1 ? "task" : "tasks"}`
         }
       });
       const iconEl = button.createSpan({ cls: "fjg-project-icon" });
@@ -363,4 +364,12 @@ function taskMatchesSearch(task: IndexedTask, query: string): boolean {
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function taskCountLabel(count: number): string {
+  return countLabel(count, "task");
+}
+
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

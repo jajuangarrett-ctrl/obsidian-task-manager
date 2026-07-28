@@ -188,11 +188,10 @@
 }
 
 .fjg-view-label {
-  overflow: hidden;
   font-size: 0.88rem;
   font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+  white-space: normal;
 }
 
 .fjg-view-count {
