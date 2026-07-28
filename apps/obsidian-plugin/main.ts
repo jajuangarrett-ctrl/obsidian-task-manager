@@ -8,6 +8,7 @@ import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import {
+  CreateProjectModal,
   CreateTaskModal,
   TaskFileModal,
   TaskFolderEntry,
@@ -47,6 +48,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
     this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
+    this.addCommand({ id: "create-project", name: "Create Project", callback: () => this.openCreateProjectModal() });
     this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
     this.addCommand({ id: "append-task-update", name: "Append Task Update", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
@@ -124,7 +126,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       await this.catalogServer.start({
         port: this.settings.catalogPort,
         token: this.settings.catalogToken,
-        getTasks: () => this.workspaceService.catalog()
+        getTasks: () => this.workspaceService.catalog(),
+        getProjects: () => this.workspaceService.projectNames()
       });
     } catch (error) {
       console.error("[FJG Task Manager] Catalog failed to start", error);
@@ -157,17 +160,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }).open();
   }
 
+  openCreateProjectModal(): void {
+    new CreateProjectModal(this.app, async (value) => {
+      const project = await this.workspaceService.createProject(value.name, value.description);
+      new Notice(`Project created: ${project.record.name}`);
+      this.refreshDashboard();
+    }).open();
+  }
+
   openQuickCaptureModal(initialText = ""): void {
     new QuickCaptureModal(this.app, this, initialText).open();
   }
 
   projectNames(): string[] {
-    return [...new Set(
-      this.workspaceService
-        .list({ includeArchived: true })
-        .map((task) => task.record.project.trim())
-        .filter(Boolean)
-    )].sort((left, right) => left.localeCompare(right));
+    return this.workspaceService.projectNames();
   }
 
   async createCapturedTask(value: TaskCaptureDraft): Promise<void> {

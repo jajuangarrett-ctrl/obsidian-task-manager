@@ -55,7 +55,10 @@ export class TaskDashboardView extends ItemView {
     this.renderHeader(root);
 
     const tasks = this.taskPlugin.workspaceService.list();
-    const projects = summarizeProjects(tasks.map((task) => task.record));
+    const projects = summarizeProjects(
+      tasks.map((task) => task.record),
+      this.taskPlugin.workspaceService.projectNames()
+    );
     this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length);
     if (this.mode === "projects") {
       this.renderProjects(root, projects);
@@ -223,6 +226,14 @@ export class TaskDashboardView extends ItemView {
       attr: { "aria-label": "Search projects" }
     });
     search.value = this.projectQuery;
+    const createProject = tools.createEl("button", {
+      cls: "mod-cta fjg-create-project-button",
+      attr: { type: "button", "aria-label": "Create a new project" }
+    });
+    const createIcon = createProject.createSpan();
+    setIcon(createIcon, "plus");
+    createProject.createSpan({ text: "New Project" });
+    createProject.addEventListener("click", () => this.taskPlugin.openCreateProjectModal());
     const cards = root.createDiv({
       cls: "fjg-project-grid",
       attr: { "data-fjg-project-grid": "true", "aria-live": "polite" }
@@ -241,7 +252,7 @@ export class TaskDashboardView extends ItemView {
     if (!visible.length) {
       parent.createDiv({
         cls: "fjg-empty",
-        text: projects.length ? "No projects match this search." : "Projects will appear here when tasks have a project."
+        text: projects.length ? "No projects match this search." : "Create a project to get started."
       });
       return;
     }

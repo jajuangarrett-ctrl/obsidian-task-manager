@@ -28,7 +28,8 @@ describe("TaskCatalogServer", () => {
     await server.start({
       port: 0,
       token: "test-secret",
-      getTasks: () => [task]
+      getTasks: () => [task],
+      getProjects: () => ["Empty Project", "Task Manager"]
     });
     return { server, url: `http://127.0.0.1:${server.getPort()}` };
   }
@@ -77,7 +78,7 @@ describe("TaskCatalogServer", () => {
     });
     expect(extensionOrigin.status).toBe(200);
     expect(extensionOrigin.headers.get("access-control-allow-origin")).toBe("chrome-extension://abcdefghijklmnop");
-    expect(await extensionOrigin.json()).toEqual({ projects: ["Task Manager"] });
+    expect(await extensionOrigin.json()).toEqual({ projects: ["Empty Project", "Task Manager"] });
   });
 
   it("uses Electron's require function when it is available", async () => {

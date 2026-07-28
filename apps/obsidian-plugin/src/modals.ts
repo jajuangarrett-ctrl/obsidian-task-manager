@@ -10,6 +10,63 @@ export interface CreateTaskFormValue {
   delegatedTo: string;
 }
 
+export interface CreateProjectFormValue {
+  name: string;
+  description: string;
+}
+
+export class CreateProjectModal extends Modal {
+  private value: CreateProjectFormValue = {
+    name: "",
+    description: ""
+  };
+
+  constructor(app: App, private readonly submit: (value: CreateProjectFormValue) => Promise<void>) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.setTitle("Create Project");
+    new Setting(this.contentEl)
+      .setName("Project name")
+      .setDesc("This name will appear in the dashboard, Quick Capture, and Chrome clipper.")
+      .addText((text) => {
+        text.setPlaceholder("Project name");
+        text.onChange((value) => this.value.name = value);
+        window.setTimeout(() => text.inputEl.focus(), 0);
+      });
+    new Setting(this.contentEl)
+      .setName("Description")
+      .setDesc("Optional starting context for the project workspace.")
+      .addTextArea((area) => {
+        area.inputEl.rows = 5;
+        area.onChange((value) => this.value.description = value);
+      });
+    new Setting(this.contentEl).addButton((button) => button
+      .setButtonText("Create Project")
+      .setCta()
+      .onClick(async () => {
+        if (!this.value.name.trim()) {
+          new Notice("Enter a project name.");
+          return;
+        }
+        button.setDisabled(true);
+        try {
+          await this.submit(this.value);
+          this.close();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error), 8000);
+        } finally {
+          button.setDisabled(false);
+        }
+      }));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export class CreateTaskModal extends Modal {
   private value: CreateTaskFormValue = {
     title: "",

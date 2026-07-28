@@ -7,6 +7,7 @@ import {
   parseTaskMarkdown,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
+  sanitizeTitleForPath,
   TaskRecord,
   TaskStatus,
   TaskUpdateInput,
@@ -19,6 +20,12 @@ import {
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
 import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
+import {
+  createProjectRecord,
+  parseProjectMarkdown,
+  ProjectRecord,
+  renderProjectMarkdown
+} from "./project-workspace";
 import {
   isCanonicalTaskFile,
   markdownPreview,
@@ -43,8 +50,15 @@ export interface IndexedTask {
   archived: boolean;
 }
 
+export interface IndexedProject {
+  record: ProjectRecord;
+  folderPath: string;
+  projectFile: TFile;
+}
+
 export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
+  private readonly projectIndex = new Map<string, IndexedProject>();
 
   constructor(
     private readonly app: App,
@@ -55,6 +69,7 @@ export class TaskWorkspaceService {
     const settings = this.getSettings();
     await this.ensureFolder(settings.activeRoot);
     await this.ensureFolder(settings.archiveRoot);
+    await this.ensureFolder(settings.projectRoot);
     await this.refresh();
     await this.normalizeVisibleFolderNames();
   }
@@ -63,29 +78,44 @@ export class TaskWorkspaceService {
     const settings = this.getSettings();
     const activePrefix = `${normalizePath(settings.activeRoot)}/`;
     const archivePrefix = `${normalizePath(settings.archiveRoot)}/`;
+    const projectPrefix = `${normalizePath(settings.projectRoot)}/`;
     const next = new Map<string, IndexedTask>();
+    const nextProjects = new Map<string, IndexedProject>();
     for (const file of this.app.vault.getMarkdownFiles()) {
-      if (file.name !== "task.md") continue;
-      if (!file.path.startsWith(activePrefix) && !file.path.startsWith(archivePrefix)) continue;
-      try {
-        const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
-        if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
-        const folderPath = file.parent?.path || "";
-        const updateFile = this.app.vault.getAbstractFileByPath(updatesFilePath(folderPath));
-        const updates = updateFile instanceof TFile
-          ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
-          : [];
-        next.set(document.record.task_id, {
-          record: document.record,
-          folderPath,
-          taskFile: file,
-          updatesFile: updateFile instanceof TFile ? updateFile : null,
-          updates,
-          relatedFiles: [],
-          archived: file.path.startsWith(archivePrefix)
-        });
-      } catch (error) {
-        console.error("[FJG Task Manager] Invalid task workspace", file.path, error);
+      if (file.name === "task.md" && (file.path.startsWith(activePrefix) || file.path.startsWith(archivePrefix))) {
+        try {
+          const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
+          if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
+          const folderPath = file.parent?.path || "";
+          const updateFile = this.app.vault.getAbstractFileByPath(updatesFilePath(folderPath));
+          const updates = updateFile instanceof TFile
+            ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
+            : [];
+          next.set(document.record.task_id, {
+            record: document.record,
+            folderPath,
+            taskFile: file,
+            updatesFile: updateFile instanceof TFile ? updateFile : null,
+            updates,
+            relatedFiles: [],
+            archived: file.path.startsWith(archivePrefix)
+          });
+        } catch (error) {
+          console.error("[FJG Task Manager] Invalid task workspace", file.path, error);
+        }
+      } else if (file.name === "project.md" && file.path.startsWith(projectPrefix)) {
+        try {
+          const record = parseProjectMarkdown(await this.app.vault.cachedRead(file));
+          const key = normalizeSearch(record.name);
+          if (nextProjects.has(key)) throw new Error(`Duplicate project name ${record.name}`);
+          nextProjects.set(key, {
+            record,
+            folderPath: file.parent?.path || "",
+            projectFile: file
+          });
+        } catch (error) {
+          console.error("[FJG Task Manager] Invalid project workspace", file.path, error);
+        }
       }
     }
     const vaultFiles = this.app.vault.getFiles();
@@ -108,6 +138,8 @@ export class TaskWorkspaceService {
     }
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);
+    this.projectIndex.clear();
+    for (const [key, project] of nextProjects) this.projectIndex.set(key, project);
   }
 
   list(options: { includeArchived?: boolean } = {}): IndexedTask[] {
@@ -117,6 +149,48 @@ export class TaskWorkspaceService {
         const dueCompare = (left.record.due || "9999-12-31").localeCompare(right.record.due || "9999-12-31");
         return dueCompare || left.record.title.localeCompare(right.record.title);
       });
+  }
+
+  listProjects(): IndexedProject[] {
+    return [...this.projectIndex.values()]
+      .sort((left, right) => left.record.name.localeCompare(right.record.name));
+  }
+
+  projectNames(): string[] {
+    const projects = new Map<string, string>();
+    for (const project of this.listProjects()) {
+      projects.set(normalizeSearch(project.record.name), project.record.name);
+    }
+    for (const task of this.list({ includeArchived: true })) {
+      const name = task.record.project.trim();
+      const key = normalizeSearch(name);
+      if (name && !projects.has(key)) projects.set(key, name);
+    }
+    return [...projects.values()].sort((left, right) => left.localeCompare(right));
+  }
+
+  async createProject(name: string, description = ""): Promise<IndexedProject> {
+    const record = createProjectRecord(name);
+    const key = normalizeSearch(record.name);
+    if (this.projectNames().some((project) => normalizeSearch(project) === key)) {
+      throw new Error(`Project already exists: ${record.name}`);
+    }
+    const folderPath = await this.availableProjectPath(this.getSettings().projectRoot, record.name);
+    await this.ensureFolder(folderPath);
+    const projectPath = `${folderPath}/project.md`;
+    let projectFile: TFile | null = null;
+    try {
+      projectFile = await this.app.vault.create(projectPath, renderProjectMarkdown(record, description));
+    } catch (error) {
+      if (projectFile) await this.app.vault.delete(projectFile, true);
+      const folder = this.app.vault.getAbstractFileByPath(folderPath);
+      if (folder instanceof TFolder) await this.app.vault.delete(folder, true);
+      throw error;
+    }
+    await this.refresh();
+    const project = this.projectIndex.get(key);
+    if (!project) throw new Error(`Project was created but could not be indexed: ${record.name}`);
+    return project;
   }
 
   catalog(): CatalogTask[] {
@@ -390,6 +464,18 @@ export class TaskWorkspaceService {
       if (!cached && !diskEntry) return candidate;
     }
     throw new Error(`Could not create a unique file named ${fileName}.`);
+  }
+
+  private async availableProjectPath(root: string, name: string): Promise<string> {
+    const base = sanitizeTitleForPath(name);
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const suffix = copyNumber === 1 ? "" : ` (${copyNumber})`;
+      const candidate = normalizePath(`${root}/${base.slice(0, Math.max(1, 120 - suffix.length)).trim()}${suffix}`);
+      const cached = this.app.vault.getAbstractFileByPath(candidate);
+      const diskEntry = cached ? null : await this.app.vault.adapter.stat(candidate);
+      if (!cached && !diskEntry) return candidate;
+    }
+    throw new Error(`Could not create a unique project folder for ${name}.`);
   }
 
   private async ensureFolder(path: string): Promise<void> {

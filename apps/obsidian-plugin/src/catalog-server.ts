@@ -13,6 +13,7 @@ export class TaskCatalogServer {
     port: number;
     token: string;
     getTasks: () => CatalogTask[];
+    getProjects?: () => string[];
   }): Promise<void> {
     await this.stop();
     const http = await loadHttp();
@@ -57,7 +58,7 @@ export class TaskCatalogServer {
   private async handle(
     request: IncomingMessage,
     response: ServerResponse,
-    options: { token: string; getTasks: () => CatalogTask[] }
+    options: { token: string; getTasks: () => CatalogTask[]; getProjects?: () => string[] }
   ): Promise<void> {
     const origin = String(request.headers.origin || "");
     if (origin && !isAllowedExtensionOrigin(origin)) return sendJson(response, 403, { error: "Origin is not allowed." });
@@ -76,7 +77,12 @@ export class TaskCatalogServer {
       return sendJson(response, 200, { ok: true, service: "fjg-task-catalog", version: 1 });
     }
     if (url.pathname === "/projects") {
-      const projects = [...new Set(options.getTasks().map((task) => task.project).filter(Boolean))]
+      const projects = [...new Set(
+        options.getProjects
+          ? options.getProjects()
+          : options.getTasks().map((task) => task.project).filter(Boolean)
+      )]
+        .filter(Boolean)
         .sort((left, right) => left.localeCompare(right));
       return sendJson(response, 200, { projects });
     }

@@ -3,9 +3,12 @@ import { createRequestId, DEFAULT_ACTIVE_ROOT, DEFAULT_ARCHIVE_ROOT, normalizeVa
 import type FjgTaskManagerPlugin from "../main";
 import { testOpenAiKey } from "./openai-capture";
 
+export const DEFAULT_PROJECT_ROOT = "08 Tasks/Projects";
+
 export interface TaskManagerSettings {
   activeRoot: string;
   archiveRoot: string;
+  projectRoot: string;
   dashboardDefault: "do-first";
   catalogEnabled: boolean;
   catalogPort: number;
@@ -20,6 +23,7 @@ export interface TaskManagerSettings {
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   activeRoot: DEFAULT_ACTIVE_ROOT,
   archiveRoot: DEFAULT_ARCHIVE_ROOT,
+  projectRoot: DEFAULT_PROJECT_ROOT,
   dashboardDefault: "do-first",
   catalogEnabled: true,
   catalogPort: 27124,
@@ -37,6 +41,7 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     ...value,
     activeRoot: normalizeVaultPath(value.activeRoot || DEFAULT_ACTIVE_ROOT),
     archiveRoot: normalizeVaultPath(value.archiveRoot || DEFAULT_ARCHIVE_ROOT),
+    projectRoot: normalizeVaultPath(value.projectRoot || DEFAULT_PROJECT_ROOT),
     dashboardDefault: "do-first",
     catalogEnabled: value.catalogEnabled !== false,
     catalogPort: normalizePort(value.catalogPort),
@@ -81,6 +86,17 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         .setValue(this.taskPlugin.settings.archiveRoot)
         .onChange(async (value) => {
           this.taskPlugin.settings.archiveRoot = normalizeVaultPath(value || DEFAULT_ARCHIVE_ROOT);
+          await this.taskPlugin.saveSettings();
+          await this.taskPlugin.workspaceService.refresh();
+        }));
+
+    new Setting(containerEl)
+      .setName("Project workspace root")
+      .setDesc("Vault-relative folder containing project definitions created from the dashboard.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.projectRoot)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.projectRoot = normalizeVaultPath(value || DEFAULT_PROJECT_ROOT);
           await this.taskPlugin.saveSettings();
           await this.taskPlugin.workspaceService.refresh();
         }));
