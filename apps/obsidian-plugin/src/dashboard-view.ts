@@ -554,6 +554,13 @@ export class TaskDashboardView extends ItemView {
       const add = this.iconButton(actions, "paperclip", "Add file", `Add a file to ${task.record.title}`);
       add.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
     }
+    const copyPath = this.iconButton(
+      actions,
+      "copy",
+      "Copy path",
+      `Copy the task folder path for ${task.record.title}`
+    );
+    copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
     const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task folder for ${task.record.title}`);
     folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
 

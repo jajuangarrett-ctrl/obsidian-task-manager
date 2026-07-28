@@ -1,4 +1,5 @@
 import {
+  FileSystemAdapter,
   Notice,
   normalizePath,
   Platform,
@@ -26,6 +27,7 @@ import {
   TaskManagerSettingTab
 } from "./src/settings";
 import { legacyOpenAiApiKey } from "./src/settings-migration";
+import { taskFolderClipboardPath } from "./src/task-folder-path";
 import { TaskWorkspaceService } from "./src/workspace-service";
 
 export default class FjgTaskManagerPlugin extends Plugin {
@@ -70,6 +72,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.openTaskFolder(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "copy-task-folder-path", name: "Copy Task Folder Path", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) void this.copyTaskFolderPath(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "mark-task-completed", name: "Mark Task Completed", checkCallback: (checking) => {
@@ -324,6 +332,26 @@ export default class FjgTaskManagerPlugin extends Plugin {
       entries,
       async (file) => this.app.workspace.getLeaf("tab").openFile(file)
     ).open();
+  }
+
+  async copyTaskFolderPath(taskId: string): Promise<void> {
+    const task = this.workspaceService.getById(taskId);
+    const adapter = this.app.vault.adapter;
+    const desktopBasePath = adapter instanceof FileSystemAdapter
+      ? adapter.getBasePath()
+      : "";
+    const path = taskFolderClipboardPath(task.folderPath, desktopBasePath);
+    try {
+      await navigator.clipboard.writeText(path);
+      new Notice(
+        desktopBasePath
+          ? `Task folder path copied: ${path}`
+          : `Vault-relative task folder path copied: ${path}`
+      );
+    } catch (error) {
+      console.error("[FJG Task Manager] Could not copy task folder path", error);
+      new Notice("Could not copy the task folder path.");
+    }
   }
 
   private async handleClipperPayload(encoded: string): Promise<void> {
