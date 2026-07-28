@@ -311,8 +311,6 @@ export class TaskDashboardView extends ItemView {
       });
     }
     if (task.record.delegated_to) meta.createSpan({ text: `Delegated to ${task.record.delegated_to}` });
-    meta.createSpan({ text: `ID ${task.record.task_id}`, cls: "fjg-task-id" });
-
     const controls = overview.createDiv({ cls: "fjg-task-controls" });
     const status = controls.createEl("select", {
       attr: { "aria-label": `Status for ${task.record.title}` }

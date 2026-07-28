@@ -42,6 +42,7 @@ export class TaskWorkspaceService {
     await this.ensureFolder(settings.activeRoot);
     await this.ensureFolder(settings.archiveRoot);
     await this.refresh();
+    await this.normalizeVisibleFolderNames();
   }
 
   async refresh(): Promise<void> {
@@ -169,8 +170,7 @@ export class TaskWorkspaceService {
     const record = createTaskRecord(input);
     if (this.index.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
     const root = record.status === "archived" ? this.getSettings().archiveRoot : this.getSettings().activeRoot;
-    const folderPath = taskFolderPath(root, record.task_id, record.title);
-    if (this.app.vault.getAbstractFileByPath(folderPath)) throw new Error(`Task folder already exists: ${folderPath}`);
+    const folderPath = await this.availableWorkspacePath(root, record);
     await this.ensureFolder(folderPath);
     const taskPath = taskFilePath(folderPath);
     const updatesPath = updatesFilePath(folderPath);
@@ -284,9 +284,37 @@ export class TaskWorkspaceService {
     await this.ensureFolder(targetRoot);
     const folder = this.app.vault.getAbstractFileByPath(currentPath);
     if (!(folder instanceof TFolder)) throw new Error(`Workspace folder not found: ${currentPath}`);
-    const destination = taskFolderPath(targetRoot, record.task_id, record.title);
-    if (this.app.vault.getAbstractFileByPath(destination)) throw new Error(`Archive destination already exists: ${destination}`);
+    const destination = await this.availableWorkspacePath(targetRoot, record);
     await this.app.vault.rename(folder, destination);
+  }
+
+  private async normalizeVisibleFolderNames(): Promise<void> {
+    let changed = false;
+    for (const task of this.list({ includeArchived: true })) {
+      const root = task.archived ? this.getSettings().archiveRoot : this.getSettings().activeRoot;
+      const destination = await this.availableWorkspacePath(root, task.record, task.folderPath);
+      if (destination === task.folderPath) continue;
+      const folder = this.app.vault.getAbstractFileByPath(task.folderPath);
+      if (!(folder instanceof TFolder)) continue;
+      await this.app.vault.rename(folder, destination);
+      changed = true;
+    }
+    if (changed) await this.refresh();
+  }
+
+  private async availableWorkspacePath(
+    root: string,
+    record: TaskRecord,
+    currentPath = ""
+  ): Promise<string> {
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const candidate = taskFolderPath(root, record.task_id, record.title, copyNumber);
+      if (candidate === currentPath) return candidate;
+      const cached = this.app.vault.getAbstractFileByPath(candidate);
+      const diskEntry = cached ? null : await this.app.vault.adapter.stat(candidate);
+      if (!cached && !diskEntry) return candidate;
+    }
+    throw new Error(`Could not create a unique workspace folder for ${record.title}.`);
   }
 
   private async ensureFolder(path: string): Promise<void> {

@@ -5,6 +5,8 @@ import {
   createTaskRecord,
   normalizeStatus,
   normalizeTags,
+  legacyTaskFolderName,
+  numberedTaskFolderName,
   parseTaskMarkdown,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
@@ -29,7 +31,9 @@ describe("task core", () => {
 
   test("creates readable stable folder names", () => {
     expect(sanitizeTitleForPath('Review: "budget" / packet')).toBe("Review budget packet");
-    expect(taskFolderName("tsk_123", "Review budget")).toBe("tsk_123 - Review budget");
+    expect(taskFolderName("tsk_123", "Review budget")).toBe("Review budget");
+    expect(numberedTaskFolderName("tsk_456", "Review budget", 2)).toBe("Review budget (2)");
+    expect(legacyTaskFolderName("tsk_123", "Review budget")).toBe("tsk_123 - Review budget");
   });
 
   test("round trips task Markdown", () => {

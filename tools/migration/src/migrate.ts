@@ -2,10 +2,10 @@ import {
   appendUpdateMarkdown,
   createTaskRecord,
   normalizeStatus,
+  legacyTaskFolderName,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
   TaskRecord,
-  taskFolderName
 } from "@fjg/task-core";
 
 export interface LegacyUpdate {
@@ -89,7 +89,7 @@ export function planLegacyMigration(
     }, new Date(fallbackTimestamp));
     if (status === "completed" && legacy.doneDate) record.completed_at = validTimestamp(legacy.doneDate) || `${legacy.doneDate}T12:00:00.000Z`;
     const root = status === "archived" ? archiveRoot : activeRoot;
-    const destination = `${root}/${taskFolderName(record.task_id, record.title)}`;
+    const destination = `${root}/${legacyTaskFolderName(record.task_id, record.title)}`;
     let updates = appendUpdateMarkdown(renderUpdatesMarkdown(), {
       updateId: `upd_migration_${safeId(legacyId)}`,
       actor: "Task Manager migration",

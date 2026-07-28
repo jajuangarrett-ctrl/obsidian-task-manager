@@ -6,12 +6,12 @@ import {
   DEFAULT_ACTIVE_ROOT,
   DEFAULT_ARCHIVE_ROOT,
   NewTaskInput,
+  numberedTaskFolderName,
   parseTaskMarkdown,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
   TaskRecord,
   TaskStatus,
-  taskFolderName,
   transitionTaskRecord,
   validateTaskRecord
 } from "@fjg/task-core";
@@ -52,7 +52,7 @@ export class DiskTaskStore {
   async create(input: NewTaskInput): Promise<DiskTask> {
     const record = createTaskRecord(input);
     const root = record.status === "archived" ? this.archiveRoot : this.activeRoot;
-    const folder = this.resolve(root, taskFolderName(record.task_id, record.title));
+    const folder = await this.availableFolder(root, record);
     await fs.mkdir(path.join(folder, "attachments"), { recursive: true });
     await fs.writeFile(path.join(folder, "task.md"), renderTaskMarkdown(record, buildBody(record, input.details || "", input.outcome || "")), { flag: "wx" });
     await fs.writeFile(path.join(folder, "updates.md"), appendUpdateMarkdown(renderUpdatesMarkdown(), {
@@ -90,7 +90,7 @@ export class DiskTaskStore {
     await fs.writeFile(task.updatesPath, nextUpdates);
     if (target === "archived" !== task.archived) {
       const root = target === "archived" ? this.archiveRoot : this.activeRoot;
-      const destination = this.resolve(root, taskFolderName(next.task_id, next.title));
+      const destination = await this.availableFolder(root, next);
       await fs.mkdir(path.dirname(destination), { recursive: true });
       await fs.rename(task.folderPath, destination);
     }
@@ -138,6 +138,19 @@ export class DiskTaskStore {
       }
     }
     return tasks;
+  }
+
+  private async availableFolder(root: string, record: TaskRecord): Promise<string> {
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const name = numberedTaskFolderName(record.task_id, record.title, copyNumber);
+      const candidate = this.resolve(root, name);
+      try {
+        await fs.access(candidate);
+      } catch {
+        return candidate;
+      }
+    }
+    throw new Error(`Could not create a unique workspace folder for ${record.title}.`);
   }
 
   private resolve(...parts: string[]): string {
