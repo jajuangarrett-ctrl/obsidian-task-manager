@@ -11,6 +11,7 @@ import {
   ProjectSummary,
   summarizeProjects,
   TASK_VIEWS,
+  taskMatchesView,
   TaskViewKey
 } from "./dashboard-model";
 import type { IndexedTask } from "./workspace-service";
@@ -281,8 +282,7 @@ export class TaskDashboardView extends ItemView {
     const tasks = this.taskPlugin.workspaceService.list().filter((task) => {
       if (!taskMatchesSearch(task, query)) return false;
       if (!matchesProject(task.record, this.project)) return false;
-      return TASK_VIEWS.some((definition) => definition.key === this.view)
-        && taskMatchesSelectedView(task, this.view);
+      return taskMatchesView(task.record, this.view);
     });
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No tasks match this view." });
@@ -348,14 +348,6 @@ export class TaskDashboardView extends ItemView {
       }
     });
   }
-}
-
-function taskMatchesSelectedView(task: IndexedTask, view: TaskViewKey): boolean {
-  if (view === "all-open") {
-    return task.record.status !== "completed" && task.record.status !== "archived";
-  }
-  if (view === "due") return isDueOrOverdue(task.record);
-  return task.record.status === view;
 }
 
 function taskMatchesSearch(task: IndexedTask, query: string): boolean {

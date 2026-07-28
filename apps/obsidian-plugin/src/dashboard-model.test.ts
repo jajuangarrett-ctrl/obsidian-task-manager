@@ -51,7 +51,7 @@ describe("dashboard task views", () => {
     expect(isDueOrOverdue(task({ due: "2026-07-20", status: "completed" }), "2026-07-27")).toBe(false);
   });
 
-  it.each<TaskStatus>(["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold", "completed"])(
+  it.each<Exclude<TaskStatus, "archived">>(["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold", "completed"])(
     "matches the %s status view",
     (status) => {
       expect(taskMatchesView(task({ status }), status)).toBe(true);
