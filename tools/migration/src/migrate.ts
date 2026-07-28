@@ -1,10 +1,15 @@
 import {
   appendUpdateMarkdown,
+  createProjectRecord,
   createTaskRecord,
   normalizeStatus,
-  legacyTaskFolderName,
+  normalizeProjectName,
+  numberedTaskFolderName,
   renderTaskMarkdown,
+  renderProjectMarkdown,
   renderUpdatesMarkdown,
+  sanitizeTitleForPath,
+  ProjectRecord,
   TaskRecord,
 } from "@fjg/task-core";
 
@@ -51,6 +56,17 @@ export interface MigrationItem {
   legacyTags: string[];
 }
 
+export interface ProjectMigrationItem {
+  name: string;
+  action: "import" | "skip";
+  reason: string;
+  destination: string;
+  source: "managed-list" | "task-reference";
+  warnings: string[];
+  record?: ProjectRecord;
+  projectMarkdown?: string;
+}
+
 export function planLegacyMigration(
   tasks: LegacyTask[],
   options: { activeRoot?: string; archiveRoot?: string; now?: Date } = {}
@@ -59,6 +75,7 @@ export function planLegacyMigration(
   const archiveRoot = options.archiveRoot || "08 Tasks/Archive";
   const fallbackTimestamp = options.now?.toISOString() || "1970-01-01T00:00:00.000Z";
   const seen = new Set<string>();
+  const folderCounts = new Map<string, number>();
   return tasks.map((legacy, index) => {
     const legacyId = clean(legacy.id) || `legacy_${String(index + 1).padStart(4, "0")}`;
     const title = clean(legacy.title) || extractTitle(legacy.raw) || `Untitled legacy task ${index + 1}`;
@@ -89,7 +106,10 @@ export function planLegacyMigration(
     }, new Date(fallbackTimestamp));
     if (status === "completed" && legacy.doneDate) record.completed_at = validTimestamp(legacy.doneDate) || `${legacy.doneDate}T12:00:00.000Z`;
     const root = status === "archived" ? archiveRoot : activeRoot;
-    const destination = `${root}/${legacyTaskFolderName(record.task_id, record.title)}`;
+    const folderKey = `${root}/${sanitizeTitleForPath(record.title)}`.toLocaleLowerCase();
+    const copyNumber = (folderCounts.get(folderKey) || 0) + 1;
+    folderCounts.set(folderKey, copyNumber);
+    const destination = `${root}/${numberedTaskFolderName(record.task_id, record.title, copyNumber)}`;
     let updates = appendUpdateMarkdown(renderUpdatesMarkdown(), {
       updateId: `upd_migration_${safeId(legacyId)}`,
       actor: "Task Manager migration",
@@ -145,6 +165,86 @@ export function planLegacyMigration(
   });
 }
 
+export function planLegacyProjectMigration(
+  managedProjects: unknown[],
+  tasks: LegacyTask[],
+  options: { projectRoot?: string; createdAt?: string } = {}
+): ProjectMigrationItem[] {
+  const projectRoot = options.projectRoot || "08 Tasks/Projects";
+  const createdAt = validTimestamp(options.createdAt) || "1970-01-01T00:00:00.000Z";
+  const seen = new Set<string>();
+  const folderCounts = new Map<string, number>();
+  const items: ProjectMigrationItem[] = [];
+
+  for (const rawName of managedProjects) {
+    const name = normalizeProjectName(rawName);
+    const key = normalizeProjectKey(name);
+    if (!name) {
+      items.push({
+        name: "",
+        action: "skip",
+        reason: "Managed project name is empty.",
+        destination: "",
+        source: "managed-list",
+        warnings: []
+      });
+      continue;
+    }
+    if (seen.has(key)) {
+      items.push({
+        name,
+        action: "skip",
+        reason: "Duplicate managed project name.",
+        destination: "",
+        source: "managed-list",
+        warnings: []
+      });
+      continue;
+    }
+    seen.add(key);
+    items.push(createProjectMigrationItem(name, "managed-list", projectRoot, createdAt, folderCounts));
+  }
+
+  const referenced = [...new Set(
+    tasks.map((task) => normalizeProjectName(task.project)).filter(Boolean)
+  )].sort((left, right) => left.localeCompare(right));
+  for (const name of referenced) {
+    const key = normalizeProjectKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const item = createProjectMigrationItem(name, "task-reference", projectRoot, createdAt, folderCounts);
+    item.warnings.push("Project is referenced by legacy tasks but absent from the managed project list.");
+    items.push(item);
+  }
+  return items;
+}
+
+function createProjectMigrationItem(
+  name: string,
+  source: "managed-list" | "task-reference",
+  projectRoot: string,
+  createdAt: string,
+  folderCounts: Map<string, number>
+): ProjectMigrationItem {
+  const folderBase = sanitizeTitleForPath(name);
+  const folderKey = `${projectRoot}/${folderBase}`.toLocaleLowerCase();
+  const copyNumber = (folderCounts.get(folderKey) || 0) + 1;
+  folderCounts.set(folderKey, copyNumber);
+  const suffix = copyNumber === 1 ? "" : ` (${copyNumber})`;
+  const folderName = `${folderBase.slice(0, Math.max(1, 120 - suffix.length)).trim()}${suffix}`;
+  const record = createProjectRecord(name, createdAt);
+  return {
+    name,
+    action: "import",
+    reason: "",
+    destination: `${projectRoot}/${folderName}`,
+    source,
+    warnings: [],
+    record,
+    projectMarkdown: renderProjectMarkdown(record)
+  };
+}
+
 function skip(legacyId: string, title: string, reason: string, tags: string[] | undefined): MigrationItem {
   return { legacyId, title, action: "skip", reason, destination: "", warnings: [], legacyTags: tags || [] };
 }
@@ -175,4 +275,8 @@ function compareUpdates(left: LegacyUpdate, right: LegacyUpdate): number {
 
 function safeId(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+function normalizeProjectKey(value: string): string {
+  return normalizeProjectName(value).toLocaleLowerCase();
 }

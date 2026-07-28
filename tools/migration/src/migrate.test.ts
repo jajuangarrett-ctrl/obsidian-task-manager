@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { planLegacyMigration } from "./migrate";
+import { parseProjectMarkdown } from "@fjg/task-core";
+import { planLegacyMigration, planLegacyProjectMigration } from "./migrate";
 
 describe("legacy migration", () => {
   test("maps stable fields and preserves updates", () => {
@@ -31,5 +32,39 @@ describe("legacy migration", () => {
     expect(items[0].record?.status).toBe("archived");
     expect(items[0].destination).toContain("08 Tasks/Archive");
     expect(items[1].action).toBe("skip");
+  });
+
+  test("uses readable collision-safe task folders without exposing task IDs", () => {
+    const items = planLegacyMigration([
+      { id: "legacy-one", title: "Repeated title", bucket: "DoFirst" },
+      { id: "legacy-two", title: "Repeated title", bucket: "DoSoon" }
+    ]);
+    expect(items[0].destination).toBe("08 Tasks/Workspaces/Repeated title");
+    expect(items[1].destination).toBe("08 Tasks/Workspaces/Repeated title (2)");
+    expect(items[0].destination).not.toContain("legacy-one");
+  });
+
+  test("stages managed and task-referenced project workspaces", () => {
+    const items = planLegacyProjectMigration(
+      ["Basic Needs", "Empty Project"],
+      [
+        { id: "one", title: "Managed", project: "Basic Needs" },
+        { id: "two", title: "Derived", project: "Taskboard Diagnostics" }
+      ],
+      { createdAt: "2026-07-27T23:52:03.011Z" }
+    );
+    expect(items.map((item) => [item.name, item.source, item.action])).toEqual([
+      ["Basic Needs", "managed-list", "import"],
+      ["Empty Project", "managed-list", "import"],
+      ["Taskboard Diagnostics", "task-reference", "import"]
+    ]);
+    expect(items[2].warnings).toContain(
+      "Project is referenced by legacy tasks but absent from the managed project list."
+    );
+    expect(parseProjectMarkdown(items[0].projectMarkdown || "")).toMatchObject({
+      name: "Basic Needs",
+      status: "active",
+      created_at: "2026-07-27T23:52:03.011Z"
+    });
   });
 });
