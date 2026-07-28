@@ -7,7 +7,7 @@ import {
 import { statusLabel, TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import {
-  draftTaskFromCapture,
+  draftTasksFromCapture,
   startVoiceRecording,
   transcribeTaskAudio,
   VoiceRecorder
@@ -18,31 +18,37 @@ import {
   TaskCaptureDraft
 } from "./quick-capture-model";
 
+interface DraftFormControls {
+  title: HTMLInputElement;
+  details: HTMLTextAreaElement;
+  status: HTMLSelectElement;
+  project: HTMLSelectElement;
+  due: HTMLInputElement;
+  delegated: HTMLInputElement;
+}
+
 export class QuickCaptureModal extends Modal {
   private rawCapture = "";
-  private value: TaskCaptureDraft = {
+  private drafts: TaskCaptureDraft[] = [{
     title: "",
     details: "",
     status: "do-first",
     project: "",
     due: "",
     delegatedTo: ""
-  };
+  }];
   private rawInput: HTMLTextAreaElement | null = null;
-  private titleInput: HTMLInputElement | null = null;
-  private detailsInput: HTMLTextAreaElement | null = null;
-  private statusInput: HTMLSelectElement | null = null;
-  private projectInput: HTMLSelectElement | null = null;
-  private dueInput: HTMLInputElement | null = null;
-  private delegatedInput: HTMLInputElement | null = null;
+  private formHeading: HTMLHeadingElement | null = null;
+  private formsContainer: HTMLDivElement | null = null;
+  private formControls: DraftFormControls[] = [];
   private recordButton: HTMLButtonElement | null = null;
   private draftButton: HTMLButtonElement | null = null;
   private createButton: HTMLButtonElement | null = null;
-  private detailsSection: HTMLDetailsElement | null = null;
   private recorder: VoiceRecorder | null = null;
   private recording = false;
   private busy = false;
-  private detailsWereEdited = false;
+  private generatedDrafts = false;
+  private detailsWereEdited = new Set<number>();
 
   constructor(
     app: App,
@@ -51,7 +57,7 @@ export class QuickCaptureModal extends Modal {
   ) {
     super(app);
     this.rawCapture = initialText.trim();
-    this.value.details = this.rawCapture;
+    this.drafts[0].details = this.rawCapture;
   }
 
   onOpen(): void {
@@ -61,7 +67,7 @@ export class QuickCaptureModal extends Modal {
 
     const header = this.contentEl.createDiv({ cls: "fjg-capture-header" });
     header.createEl("p", { text: "FJG TASK MANAGER", cls: "fjg-capture-eyebrow" });
-    header.createEl("h2", { text: "Capture Task" });
+    header.createEl("h2", { text: "Capture Tasks" });
 
     const captureSection = this.contentEl.createDiv({ cls: "fjg-capture-section" });
     captureSection.createEl("h3", { text: "Capture" });
@@ -76,76 +82,31 @@ export class QuickCaptureModal extends Modal {
     this.rawInput.value = this.rawCapture;
     this.rawInput.addEventListener("input", () => {
       this.rawCapture = this.rawInput?.value || "";
-      if (!this.detailsWereEdited) {
-        this.value.details = this.rawCapture.trim();
-        if (this.detailsInput) this.detailsInput.value = this.value.details;
+      if (!this.generatedDrafts && this.drafts.length === 1 && !this.detailsWereEdited.has(0)) {
+        this.drafts[0].details = this.rawCapture.trim();
+        if (this.formControls[0]) this.formControls[0].details.value = this.drafts[0].details;
       }
     });
 
     const captureActions = captureCard.createDiv({ cls: "fjg-capture-actions" });
     this.recordButton = this.iconButton(captureActions, "microphone", "Dictate", () => this.toggleRecording());
     this.recordButton.addClass("fjg-dictate-button");
-    this.draftButton = this.iconButton(captureActions, "sparkles", "Draft Task", () => this.draftTask());
+    this.draftButton = this.iconButton(captureActions, "sparkles", "Draft Tasks", () => this.draftTasks());
     this.draftButton.addClass("fjg-draft-button");
 
     const formSection = this.contentEl.createDiv({ cls: "fjg-capture-section" });
-    formSection.createEl("h3", { text: "New Task" });
-    const formCard = formSection.createDiv({ cls: "fjg-task-form-card" });
-    this.titleInput = this.inputRow(formCard, "Task title", "text") as HTMLInputElement;
-    this.titleInput.placeholder = "What needs to be done?";
-    this.titleInput.addEventListener("input", () => this.value.title = this.titleInput?.value || "");
-
-    this.statusInput = this.selectRow(formCard, "Status");
-    for (const status of CAPTURE_STATUSES) {
-      this.statusInput.createEl("option", {
-        value: status,
-        text: statusLabel(status)
-      });
-    }
-    this.statusInput.value = this.value.status;
-    this.statusInput.addEventListener("change", () => {
-      this.value.status = this.statusInput?.value as TaskStatus || "do-first";
-    });
-
-    this.projectInput = this.selectRow(formCard, "Project");
-    this.projectInput.createEl("option", { value: "", text: "No Project" });
-    for (const project of this.taskPlugin.projectNames()) {
-      this.projectInput.createEl("option", { value: project, text: project });
-    }
-    this.projectInput.addEventListener("change", () => this.value.project = this.projectInput?.value || "");
-
-    this.dueInput = this.inputRow(formCard, "Due date", "date") as HTMLInputElement;
-    this.dueInput.addEventListener("input", () => this.value.due = this.dueInput?.value || "");
-
-    this.detailsSection = formCard.createEl("details", { cls: "fjg-capture-more" });
-    const summary = this.detailsSection.createEl("summary");
-    const summaryIcon = summary.createSpan({ cls: "fjg-capture-summary-icon" });
-    setIcon(summaryIcon, "sliders-horizontal");
-    summary.createSpan({ text: "More details" });
-
-    const moreFields = this.detailsSection.createDiv({ cls: "fjg-capture-more-fields" });
-    const detailsLabel = moreFields.createEl("label", { text: "Task details" });
-    this.detailsInput = moreFields.createEl("textarea", {
-      attr: { rows: "4", "aria-label": "Task details" }
-    });
-    detailsLabel.htmlFor = this.assignId(this.detailsInput, "details");
-    this.detailsInput.value = this.value.details;
-    this.detailsInput.addEventListener("input", () => {
-      this.detailsWereEdited = true;
-      this.value.details = this.detailsInput?.value || "";
-    });
-
-    this.delegatedInput = this.inputRow(moreFields, "Delegated to", "text") as HTMLInputElement;
-    this.delegatedInput.placeholder = "Person responsible";
-    this.delegatedInput.addEventListener("input", () => this.value.delegatedTo = this.delegatedInput?.value || "");
+    this.formHeading = formSection.createEl("h3", { text: "New Task" });
+    this.formsContainer = formSection.createDiv({ cls: "fjg-draft-list" });
+    this.renderDraftForms();
 
     this.createButton = this.iconButton(
       this.contentEl,
       "circle-plus",
       "Create Task",
-      () => this.createTask()
+      () => this.createTasks()
     );
     this.createButton.addClass("fjg-create-task-button", "mod-cta");
+    this.updateCreateButton();
 
     setTimeout(() => this.rawInput?.focus(), 0);
   }

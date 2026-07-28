@@ -9,6 +9,8 @@ export const CAPTURE_STATUSES: TaskStatus[] = [
   "on-hold"
 ];
 
+export const MAX_CAPTURE_DRAFTS = 20;
+
 export interface TaskCaptureDraft {
   title: string;
   details: string;
@@ -43,10 +45,14 @@ export function buildTaskDraftRequest(
           {
             type: "input_text",
             text: [
-              "Convert a person's rough task capture into a reviewable task draft.",
+              "Convert a person's rough task capture into one or more reviewable task drafts.",
+              "Identify every distinct action or commitment and return one task for each.",
+              "Do not merge independent actions just because they appear in one sentence, paragraph, or voice capture.",
+              "A repeated action verb, a list, or separately named recipients or programs often indicates separate tasks.",
+              "If the capture contains only one action, return exactly one task.",
               "Preserve every commitment, name, number, and constraint from the capture.",
-              "Write a concise, action-oriented title of at most 12 words.",
-              "Lightly clean the details without adding facts.",
+              "For each task, write a concise, action-oriented title of at most 12 words.",
+              "Lightly clean each task's details without adding facts or details from a different task.",
               "Use do-first unless the wording clearly indicates another allowed status.",
               "Use delegate only when the user intends another person to do the work.",
               "Use waiting only when progress depends on an external response or event.",
@@ -77,53 +83,83 @@ export function buildTaskDraftRequest(
     text: {
       format: {
         type: "json_schema",
-        name: "task_capture_draft",
+        name: "task_capture_drafts",
         strict: true,
         schema: {
           type: "object",
           additionalProperties: false,
           properties: {
-            title: { type: "string" },
-            details: { type: "string" },
-            status: {
-              type: "string",
-              enum: CAPTURE_STATUSES
-            },
-            project: { type: "string" },
-            due: {
-              type: "string",
-              description: "An ISO date in YYYY-MM-DD format, or an empty string."
-            },
-            delegated_to: { type: "string" }
+            tasks: {
+              type: "array",
+              minItems: 1,
+              maxItems: MAX_CAPTURE_DRAFTS,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  title: { type: "string" },
+                  details: { type: "string" },
+                  status: {
+                    type: "string",
+                    enum: CAPTURE_STATUSES
+                  },
+                  project: { type: "string" },
+                  due: {
+                    type: "string",
+                    description: "An ISO date in YYYY-MM-DD format, or an empty string."
+                  },
+                  delegated_to: { type: "string" }
+                },
+                required: [
+                  "title",
+                  "details",
+                  "status",
+                  "project",
+                  "due",
+                  "delegated_to"
+                ]
+              }
+            }
           },
-          required: [
-            "title",
-            "details",
-            "status",
-            "project",
-            "due",
-            "delegated_to"
-          ]
+          required: ["tasks"]
         }
       }
     }
   };
 }
 
-export function parseTaskDraftResponse(
+export function parseTaskDraftsResponse(
   response: unknown,
   rawCapture: string,
   projects: string[]
-): TaskCaptureDraft {
+): TaskCaptureDraft[] {
   const text = responseText(response);
-  if (!text) throw new Error("OpenAI returned an empty task draft.");
+  if (!text) throw new Error("OpenAI returned an empty task draft list.");
   let value: unknown;
   try {
     value = JSON.parse(stripJsonFence(text));
   } catch {
-    throw new Error("OpenAI returned a task draft that could not be read.");
+    throw new Error("OpenAI returned task drafts that could not be read.");
   }
-  return normalizeTaskDraft(value, rawCapture, projects);
+  return normalizeTaskDrafts(value, rawCapture, projects);
+}
+
+export function normalizeTaskDrafts(
+  value: unknown,
+  rawCapture: string,
+  projects: string[]
+): TaskCaptureDraft[] {
+  const candidates = isRecord(value) && Array.isArray(value.tasks)
+    ? value.tasks
+    : isRecord(value)
+      ? [value]
+      : [];
+  const drafts = candidates
+    .slice(0, MAX_CAPTURE_DRAFTS)
+    .map((candidate) => normalizeTaskDraft(candidate, rawCapture, projects));
+  return drafts.length
+    ? drafts
+    : [normalizeTaskDraft({}, rawCapture, projects)];
 }
 
 export function normalizeTaskDraft(

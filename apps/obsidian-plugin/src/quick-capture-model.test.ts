@@ -2,8 +2,10 @@ import { describe, expect, test } from "vitest";
 import {
   buildTaskDraftRequest,
   fallbackTaskTitle,
+  MAX_CAPTURE_DRAFTS,
   normalizeTaskDraft,
-  parseTaskDraftResponse,
+  normalizeTaskDrafts,
+  parseTaskDraftsResponse,
   responseText
 } from "./quick-capture-model";
 
@@ -22,32 +24,54 @@ describe("quick capture model", () => {
     expect(JSON.stringify(request)).toContain("2026-07-27");
     expect(JSON.stringify(request)).toContain("Basic Needs | Budget");
     expect(JSON.stringify(request)).toContain("json_schema");
+    expect(JSON.stringify(request)).toContain("Do not merge independent actions");
+    expect((request.text as any).format.schema.properties.tasks).toMatchObject({
+      type: "array",
+      minItems: 1,
+      maxItems: MAX_CAPTURE_DRAFTS
+    });
   });
 
-  test("parses nested Responses API text and constrains AI-selected values", () => {
+  test("parses multiple nested Responses API task drafts and constrains AI-selected values", () => {
     const response = {
       output: [{
         content: [{
           type: "output_text",
           text: JSON.stringify({
-            title: "Send final budget to Maria",
-            details: "Send the final budget package.",
-            status: "delegate",
-            project: "budget",
-            due: "2026-07-28",
-            delegated_to: "Maria"
+            tasks: [{
+              title: "Create plan for CalWORKs intern",
+              details: "Create a plan for the CalWORKs intern.",
+              status: "do-first",
+              project: "",
+              due: "",
+              delegated_to: ""
+            }, {
+              title: "Create plan for BSSP intern",
+              details: "Create a plan for the BSSP intern.",
+              status: "do-first",
+              project: "basic needs",
+              due: "",
+              delegated_to: ""
+            }]
           })
         }]
       }]
     };
-    expect(parseTaskDraftResponse(response, "raw", ["Budget"])).toEqual({
-      title: "Send final budget to Maria",
-      details: "Send the final budget package.",
-      status: "delegate",
-      project: "Budget",
-      due: "2026-07-28",
-      delegatedTo: "Maria"
-    });
+    expect(parseTaskDraftsResponse(response, "raw", ["Basic Needs"])).toEqual([{
+      title: "Create plan for CalWORKs intern",
+      details: "Create a plan for the CalWORKs intern.",
+      status: "do-first",
+      project: "",
+      due: "",
+      delegatedTo: ""
+    }, {
+      title: "Create plan for BSSP intern",
+      details: "Create a plan for the BSSP intern.",
+      status: "do-first",
+      project: "Basic Needs",
+      due: "",
+      delegatedTo: ""
+    }]);
   });
 
   test("falls back safely when the AI returns unknown project, status, date, or empty fields", () => {
@@ -70,6 +94,24 @@ describe("quick capture model", () => {
 
   test("reads the direct output_text compatibility field", () => {
     expect(responseText({ output_text: "Draft result" })).toBe("Draft result");
+  });
+
+  test("keeps compatibility with a single legacy draft object", () => {
+    expect(normalizeTaskDrafts({
+      title: "Review the contract",
+      details: "Review the contract before signing.",
+      status: "do-first",
+      project: "",
+      due: "",
+      delegated_to: ""
+    }, "Review the contract", [])).toEqual([{
+      title: "Review the contract",
+      details: "Review the contract before signing.",
+      status: "do-first",
+      project: "",
+      due: "",
+      delegatedTo: ""
+    }]);
   });
 
   test("limits a fallback title to twelve words", () => {

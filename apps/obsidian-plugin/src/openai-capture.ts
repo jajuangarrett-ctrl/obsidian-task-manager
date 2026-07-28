@@ -1,7 +1,7 @@
 import { requestUrl } from "obsidian";
 import {
   buildTaskDraftRequest,
-  parseTaskDraftResponse,
+  parseTaskDraftsResponse,
   TaskCaptureDraft
 } from "./quick-capture-model";
 
@@ -103,7 +103,7 @@ export async function transcribeTaskAudio(
   return text;
 }
 
-export async function draftTaskFromCapture(options: DraftTaskOptions): Promise<TaskCaptureDraft> {
+export async function draftTasksFromCapture(options: DraftTaskOptions): Promise<TaskCaptureDraft[]> {
   requireApiKey(options.apiKey);
   const rawCapture = options.rawCapture.trim();
   if (!rawCapture) throw new Error("Add or dictate task details before drafting.");
@@ -127,7 +127,7 @@ export async function draftTaskFromCapture(options: DraftTaskOptions): Promise<T
     throw: false
   });
   if (response.status >= 400) throw openAiError(response.status, response.json);
-  return parseTaskDraftResponse(response.json, rawCapture, options.projects);
+  return parseTaskDraftsResponse(response.json, rawCapture, options.projects);
 }
 
 export async function testOpenAiKey(apiKey: string): Promise<void> {
