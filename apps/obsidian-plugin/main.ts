@@ -9,6 +9,8 @@ import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import { CreateTaskModal, TextEntryModal } from "./src/modals";
+import { QuickCaptureModal } from "./src/quick-capture-modal";
+import type { TaskCaptureDraft } from "./src/quick-capture-model";
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -31,10 +33,15 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
     this.addRibbonIcon("list-checks", "Open FJG Task Manager", () => this.activateDashboard());
+    this.addRibbonIcon("circle-plus", "Quick capture a task", () => this.openQuickCaptureModal());
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
+    this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
+      this.openQuickCaptureModal(String(params.text || ""));
+    });
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
+    this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
     this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
     this.addCommand({ id: "append-task-update", name: "Append Task Update", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
@@ -77,6 +84,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
+    this.app.workspace.onLayoutReady(() => this.recoverMissedAdvancedUriLaunch());
     await this.restartCatalog();
   }
 
@@ -128,6 +136,33 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Task workspace created: ${task.record.title}`);
       this.refreshDashboard();
     }).open();
+  }
+
+  openQuickCaptureModal(initialText = ""): void {
+    new QuickCaptureModal(this.app, this, initialText).open();
+  }
+
+  projectNames(): string[] {
+    return [...new Set(
+      this.workspaceService
+        .list({ includeArchived: true })
+        .map((task) => task.record.project.trim())
+        .filter(Boolean)
+    )].sort((left, right) => left.localeCompare(right));
+  }
+
+  async createCapturedTask(value: TaskCaptureDraft): Promise<void> {
+    const task = await this.workspaceService.createTask({
+      title: value.title,
+      details: value.details,
+      status: value.status,
+      project: value.project,
+      due: value.due,
+      delegatedTo: value.delegatedTo,
+      tags: ["task"]
+    });
+    new Notice(`Task workspace created: ${task.record.title}`);
+    this.refreshDashboard();
   }
 
   openUpdateModal(taskId: string): void {
@@ -188,6 +223,13 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private async recordRequest(requestId: string): Promise<void> {
     this.settings.processedRequestIds = [...this.settings.processedRequestIds, requestId].slice(-500);
     await this.saveSettings();
+  }
+
+  private recoverMissedAdvancedUriLaunch(): void {
+    const advancedUri = (this.app as any).plugins?.getPlugin?.("obsidian-advanced-uri");
+    if (advancedUri?.lastParameters?.commandid === `${this.manifest.id}:quick-capture`) {
+      window.setTimeout(() => this.openQuickCaptureModal(), 250);
+    }
   }
 
   private async validateWorkspaces(): Promise<void> {

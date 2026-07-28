@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { createRequestId, DEFAULT_ACTIVE_ROOT, DEFAULT_ARCHIVE_ROOT, normalizeVaultPath } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
+import { testOpenAiKey } from "./openai-capture";
 
 export interface TaskManagerSettings {
   activeRoot: string;
@@ -10,6 +11,10 @@ export interface TaskManagerSettings {
   catalogPort: number;
   catalogToken: string;
   processedRequestIds: string[];
+  openAiApiKey: string;
+  openAiModel: string;
+  transcriptionModel: string;
+  autoDraftAfterTranscription: boolean;
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -19,7 +24,11 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   catalogEnabled: true,
   catalogPort: 27124,
   catalogToken: "",
-  processedRequestIds: []
+  processedRequestIds: [],
+  openAiApiKey: "",
+  openAiModel: "gpt-4.1-mini",
+  transcriptionModel: "gpt-4o-mini-transcribe",
+  autoDraftAfterTranscription: true
 };
 
 export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskManagerSettings {
@@ -32,7 +41,11 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     catalogEnabled: value.catalogEnabled !== false,
     catalogPort: normalizePort(value.catalogPort),
     catalogToken: value.catalogToken || createCatalogToken(),
-    processedRequestIds: Array.isArray(value.processedRequestIds) ? value.processedRequestIds.slice(-500) : []
+    processedRequestIds: Array.isArray(value.processedRequestIds) ? value.processedRequestIds.slice(-500) : [],
+    openAiApiKey: String(value.openAiApiKey || "").trim(),
+    openAiModel: String(value.openAiModel || DEFAULT_SETTINGS.openAiModel).trim() || DEFAULT_SETTINGS.openAiModel,
+    transcriptionModel: String(value.transcriptionModel || DEFAULT_SETTINGS.transcriptionModel).trim() || DEFAULT_SETTINGS.transcriptionModel,
+    autoDraftAfterTranscription: value.autoDraftAfterTranscription !== false
   };
 }
 
@@ -123,6 +136,65 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       cls: "setting-item-description",
       text: "The task catalog is read-only. All task creation and updates still pass through Obsidian."
     });
+
+    containerEl.createEl("h3", { text: "Quick Capture AI" });
+
+    new Setting(containerEl)
+      .setName("OpenAI API key")
+      .setDesc("Used for voice transcription and AI task drafting. Stored in this plugin's local Obsidian data.")
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text
+          .setPlaceholder("sk-...")
+          .setValue(this.taskPlugin.settings.openAiApiKey)
+          .onChange(async (value) => {
+            this.taskPlugin.settings.openAiApiKey = value.trim();
+            await this.taskPlugin.saveSettings();
+          });
+      })
+      .addButton((button) => button
+        .setButtonText("Test")
+        .onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await testOpenAiKey(this.taskPlugin.settings.openAiApiKey);
+            new Notice("OpenAI API key is active.");
+          } catch (error) {
+            new Notice(`OpenAI connection failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+          } finally {
+            button.setDisabled(false);
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName("Task drafting model")
+      .setDesc("OpenAI model used to turn rough text or a transcript into reviewable task fields.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.openAiModel)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.openAiModel = value.trim() || DEFAULT_SETTINGS.openAiModel;
+          await this.taskPlugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Transcription model")
+      .setDesc("OpenAI speech-to-text model used by Dictate.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.transcriptionModel)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.transcriptionModel = value.trim() || DEFAULT_SETTINGS.transcriptionModel;
+          await this.taskPlugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName("Draft after dictation")
+      .setDesc("After transcription, automatically populate the title, status, project, due date, and optional delegation.")
+      .addToggle((toggle) => toggle
+        .setValue(this.taskPlugin.settings.autoDraftAfterTranscription)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.autoDraftAfterTranscription = value;
+          await this.taskPlugin.saveSettings();
+        }));
   }
 }
 

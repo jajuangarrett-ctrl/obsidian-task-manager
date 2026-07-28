@@ -68,8 +68,8 @@ export class TaskDashboardView extends ItemView {
     titleWrap.createEl("p", { text: "TASK WORKSPACES", cls: "fjg-eyebrow" });
     titleWrap.createEl("h1", { text: "Task Manager" });
     const actions = header.createDiv({ cls: "fjg-header-actions" });
-    const createButton = actions.createEl("button", { text: "Create Task", cls: "mod-cta" });
-    createButton.addEventListener("click", () => this.taskPlugin.openCreateModal());
+    const createButton = actions.createEl("button", { text: "Capture Task", cls: "mod-cta" });
+    createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
     const refreshButton = actions.createEl("button", { text: "Refresh" });
     refreshButton.addEventListener("click", async () => {
       await this.taskPlugin.workspaceService.refresh();
