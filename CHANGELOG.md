@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-07-27
+
+### Fixed
+
+- Load the desktop catalog through Electron's Node runtime while retaining the test-environment fallback.
+- Persist normalized first-run settings and the Chrome pairing token immediately.
+- Log catalog startup failures to the developer console for actionable diagnostics.
+
 ## 0.1.0 — 2026-07-27
 
 Initial private-use release of the folder-based FJG Task Manager system.

@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import * as http from "node:http";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CatalogTask } from "@fjg/task-protocol";
-import { TaskCatalogServer } from "./catalog-server";
+import { loadHttp, TaskCatalogServer } from "./catalog-server";
 
 const task: CatalogTask = {
   task_id: "01JTESTCATALOG000000000000",
@@ -18,6 +19,7 @@ describe("TaskCatalogServer", () => {
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.stop()));
     servers.length = 0;
+    vi.unstubAllGlobals();
   });
 
   async function start(): Promise<{ server: TaskCatalogServer; url: string }> {
@@ -76,5 +78,13 @@ describe("TaskCatalogServer", () => {
     expect(extensionOrigin.status).toBe(200);
     expect(extensionOrigin.headers.get("access-control-allow-origin")).toBe("chrome-extension://abcdefghijklmnop");
     expect(await extensionOrigin.json()).toEqual({ projects: ["Task Manager"] });
+  });
+
+  it("uses Electron's require function when it is available", async () => {
+    const runtimeRequire = vi.fn(() => http);
+    vi.stubGlobal("require", runtimeRequire);
+
+    expect(await loadHttp()).toBe(http);
+    expect(runtimeRequire).toHaveBeenCalledWith("node:http");
   });
 });

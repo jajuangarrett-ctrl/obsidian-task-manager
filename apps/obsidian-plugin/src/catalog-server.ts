@@ -1,5 +1,6 @@
 import type { CatalogTask } from "@fjg/task-protocol";
 
+type HttpModule = typeof import("node:http");
 type HttpServer = import("node:http").Server;
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
@@ -14,7 +15,7 @@ export class TaskCatalogServer {
     getTasks: () => CatalogTask[];
   }): Promise<void> {
     await this.stop();
-    const http = await import("node:http");
+    const http = await loadHttp();
     this.server = http.createServer((request, response) => {
       this.handle(request, response, options).catch((error) => {
         sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
@@ -115,6 +116,12 @@ export class TaskCatalogServer {
     this.requests.set(key, recent);
     return true;
   }
+}
+
+export async function loadHttp(): Promise<HttpModule> {
+  const runtimeRequire = (globalThis as typeof globalThis & { require?: NodeRequire }).require;
+  if (typeof runtimeRequire === "function") return runtimeRequire("node:http") as HttpModule;
+  return import("node:http");
 }
 
 function isAuthorized(request: IncomingMessage, token: string): boolean {

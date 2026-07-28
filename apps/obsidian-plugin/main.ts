@@ -25,6 +25,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async onload(): Promise<void> {
     this.settings = normalizeSettings(await this.loadData() || DEFAULT_SETTINGS);
+    await this.saveData(this.settings);
     this.workspaceService = new TaskWorkspaceService(this.app, () => this.settings);
     await this.workspaceService.initialize();
 
@@ -99,6 +100,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         getTasks: () => this.workspaceService.catalog()
       });
     } catch (error) {
+      console.error("[FJG Task Manager] Catalog failed to start", error);
       new Notice(`Task catalog could not start: ${error instanceof Error ? error.message : String(error)}`, 10000);
     }
   }

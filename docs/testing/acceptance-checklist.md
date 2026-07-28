@@ -34,4 +34,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.1.0](validation-report-0.1.0.md) for the reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.1.1](validation-report-0.1.1.md) for the latest reproducible validation record and remaining manual acceptance.
