@@ -239,7 +239,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async openTaskFolder(taskId: string): Promise<void> {
     const task = this.workspaceService.getById(taskId);
-    const explorerLeaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
+    let explorerLeaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
+    if (!explorerLeaf && Platform.isDesktopApp) {
+      const leftLeaf = this.app.workspace.getLeftLeaf(true);
+      if (leftLeaf) {
+        await leftLeaf.setViewState({ type: "file-explorer", active: true });
+        explorerLeaf = leftLeaf;
+      }
+    }
     const explorer = explorerLeaf?.view as unknown as {
       revealInFolder?: (file: TFile) => void | Promise<void>;
     };
@@ -249,6 +256,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
       return;
     }
     await this.openTask(taskId);
+    const commands = (this.app as unknown as {
+      commands?: { executeCommandById?: (id: string) => boolean };
+    }).commands;
+    if (commands?.executeCommandById?.("file-explorer:reveal-active-file")) return;
     new Notice("Task opened. Its workspace folder is available in Obsidian’s file navigation.");
   }
 
