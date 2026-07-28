@@ -25,6 +25,7 @@ describe("quick capture model", () => {
     expect(JSON.stringify(request)).toContain("Basic Needs | Budget");
     expect(JSON.stringify(request)).toContain("json_schema");
     expect(JSON.stringify(request)).toContain("Do not merge independent actions");
+    expect(JSON.stringify(request)).toContain("Never invent today, tomorrow, or another due date");
     expect((request.text as any).format.schema.properties.tasks).toMatchObject({
       type: "array",
       minItems: 1,

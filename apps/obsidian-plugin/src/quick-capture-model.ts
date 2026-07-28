@@ -57,7 +57,9 @@ export function buildTaskDraftRequest(
               "Use delegate only when the user intends another person to do the work.",
               "Use waiting only when progress depends on an external response or event.",
               "Use on-hold only when the task is deliberately paused.",
-              "Resolve relative due dates using the supplied local date and timezone.",
+              "Return an empty due date unless the capture explicitly states a date, deadline, or relative timing phrase.",
+              "Never invent today, tomorrow, or another due date when timing is not stated.",
+              "Resolve explicitly stated relative due dates using the supplied local date and timezone.",
               projectInstruction,
               "Return only the structured result."
             ].join("\n")
