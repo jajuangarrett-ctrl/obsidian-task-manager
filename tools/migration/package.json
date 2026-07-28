@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node esbuild.config.mjs"
+    "build": "node esbuild.config.mjs",
+    "audit": "node dist/audit.cjs"
   },
   "dependencies": {
     "@fjg/task-core": "0.1.0"
