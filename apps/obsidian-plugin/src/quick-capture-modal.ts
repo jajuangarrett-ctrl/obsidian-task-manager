@@ -143,9 +143,9 @@ export class QuickCaptureModal extends Modal {
       );
       this.rawCapture = mergeText(this.rawCapture, transcript);
       if (this.rawInput) this.rawInput.value = this.rawCapture;
-      if (!this.detailsWereEdited) {
-        this.value.details = this.rawCapture;
-        if (this.detailsInput) this.detailsInput.value = this.value.details;
+      if (!this.generatedDrafts && this.drafts.length === 1 && !this.detailsWereEdited.has(0)) {
+        this.drafts[0].details = this.rawCapture;
+        if (this.formControls[0]) this.formControls[0].details.value = this.drafts[0].details;
       }
       if (this.taskPlugin.settings.autoDraftAfterTranscription) {
         await this.requestDraft(await this.taskPlugin.resolveOpenAiApiKey());
@@ -154,7 +154,7 @@ export class QuickCaptureModal extends Modal {
     this.setButton(this.recordButton, "microphone", "Dictate");
   }
 
-  private async draftTask(showFailure = true): Promise<void> {
+  private async draftTasks(showFailure = true): Promise<void> {
     if (this.busy) return;
     if (!this.rawCapture.trim()) {
       new Notice("Type or dictate the task before drafting.");
@@ -168,48 +168,166 @@ export class QuickCaptureModal extends Modal {
     await this.withBusy(async () => {
       await this.requestDraft(apiKey);
     }, showFailure ? "Task drafting failed" : "Voice capture failed");
-    if (this.draftButton) this.setButton(this.draftButton, "sparkles", "Draft Task");
   }
 
   private async requestDraft(apiKey: string): Promise<void> {
     if (this.draftButton) this.setButton(this.draftButton, "loader-circle", "Drafting…");
-    const draft = await draftTaskFromCapture({
-      apiKey,
-      model: this.taskPlugin.settings.openAiModel,
-      rawCapture: this.rawCapture,
-      projects: this.taskPlugin.projectNames()
+    try {
+      const drafts = await draftTasksFromCapture({
+        apiKey,
+        model: this.taskPlugin.settings.openAiModel,
+        rawCapture: this.rawCapture,
+        projects: this.taskPlugin.projectNames()
+      });
+      this.generatedDrafts = true;
+      this.detailsWereEdited.clear();
+      this.drafts = drafts;
+      this.renderDraftForms();
+      new Notice(
+        drafts.length === 1
+          ? "Drafted 1 task. Review it before creating."
+          : `Drafted ${drafts.length} tasks. Review each task before creating.`
+      );
+    } finally {
+      if (this.draftButton) this.setButton(this.draftButton, "sparkles", "Draft Tasks");
+    }
+  }
+
+  private renderDraftForms(): void {
+    if (!this.formsContainer) return;
+    this.formsContainer.empty();
+    this.formsContainer.classList.toggle("is-multiple", this.drafts.length > 1);
+    this.formControls = [];
+    if (this.formHeading) {
+      this.formHeading.setText(this.drafts.length === 1 ? "New Task" : `New Tasks (${this.drafts.length})`);
+    }
+
+    this.drafts.forEach((draft, index) => {
+      const formCard = this.formsContainer!.createDiv({ cls: "fjg-task-form-card" });
+      if (this.drafts.length > 1) {
+        const taskHeader = formCard.createDiv({ cls: "fjg-draft-item-header" });
+        taskHeader.createEl("h4", { text: `Task ${index + 1}` });
+        const removeButton = this.iconButton(taskHeader, "trash-2", "Remove", () => this.removeDraft(index));
+        removeButton.addClass("fjg-remove-draft-button");
+        removeButton.setAttribute("aria-label", `Remove task ${index + 1}`);
+      }
+
+      const title = this.inputRow(formCard, "Task title", "text");
+      title.placeholder = "What needs to be done?";
+      title.value = draft.title;
+      title.addEventListener("input", () => this.drafts[index].title = title.value);
+
+      const status = this.selectRow(formCard, "Status");
+      for (const option of CAPTURE_STATUSES) {
+        status.createEl("option", {
+          value: option,
+          text: statusLabel(option)
+        });
+      }
+      status.value = draft.status;
+      status.addEventListener("change", () => {
+        this.drafts[index].status = status.value as TaskStatus || "do-first";
+      });
+
+      const project = this.selectRow(formCard, "Project");
+      project.createEl("option", { value: "", text: "No Project" });
+      for (const projectName of this.taskPlugin.projectNames()) {
+        project.createEl("option", { value: projectName, text: projectName });
+      }
+      project.value = draft.project;
+      project.addEventListener("change", () => this.drafts[index].project = project.value);
+
+      const due = this.inputRow(formCard, "Due date", "date");
+      due.value = draft.due;
+      due.addEventListener("input", () => this.drafts[index].due = due.value);
+
+      const detailsSection = formCard.createEl("details", { cls: "fjg-capture-more" });
+      detailsSection.open = Boolean(draft.delegatedTo);
+      const summary = detailsSection.createEl("summary");
+      const summaryIcon = summary.createSpan({ cls: "fjg-capture-summary-icon" });
+      setIcon(summaryIcon, "sliders-horizontal");
+      summary.createSpan({ text: "More details" });
+
+      const moreFields = detailsSection.createDiv({ cls: "fjg-capture-more-fields" });
+      const detailsLabel = moreFields.createEl("label", { text: "Task details" });
+      const details = moreFields.createEl("textarea", {
+        attr: { rows: "4", "aria-label": `Task ${index + 1} details` }
+      });
+      detailsLabel.htmlFor = this.assignId(details, `details-${index + 1}`);
+      details.value = draft.details;
+      details.addEventListener("input", () => {
+        this.detailsWereEdited.add(index);
+        this.drafts[index].details = details.value;
+      });
+
+      const delegated = this.inputRow(moreFields, "Delegated to", "text");
+      delegated.placeholder = "Person responsible";
+      delegated.value = draft.delegatedTo;
+      delegated.addEventListener("input", () => this.drafts[index].delegatedTo = delegated.value);
+
+      this.formControls.push({ title, details, status, project, due, delegated });
     });
-    this.applyDraft(draft);
+    this.updateCreateButton();
+    if (this.busy) this.setControlsDisabled(true);
   }
 
-  private applyDraft(draft: TaskCaptureDraft): void {
-    this.value = draft;
-    if (this.titleInput) this.titleInput.value = draft.title;
-    if (this.detailsInput) this.detailsInput.value = draft.details;
-    if (this.statusInput) this.statusInput.value = draft.status;
-    if (this.projectInput) this.projectInput.value = draft.project;
-    if (this.dueInput) this.dueInput.value = draft.due;
-    if (this.delegatedInput) this.delegatedInput.value = draft.delegatedTo;
-    if (draft.delegatedTo && this.detailsSection) this.detailsSection.open = true;
+  private removeDraft(index: number): void {
+    if (this.busy || this.drafts.length <= 1) return;
+    this.syncDraftsFromForms();
+    this.drafts.splice(index, 1);
+    this.detailsWereEdited.clear();
+    this.generatedDrafts = true;
+    this.renderDraftForms();
   }
 
-  private async createTask(): Promise<void> {
+  private syncDraftsFromForms(): void {
+    this.drafts = this.drafts.map((draft, index) => {
+      const controls = this.formControls[index];
+      if (!controls) return draft;
+      return {
+        title: controls.title.value.trim(),
+        details: controls.details.value.trim(),
+        status: controls.status.value as TaskStatus || "do-first",
+        project: controls.project.value,
+        due: controls.due.value,
+        delegatedTo: controls.delegated.value.trim()
+      };
+    });
+  }
+
+  private async createTasks(): Promise<void> {
     if (this.busy) return;
-    this.value.title = this.titleInput?.value.trim() || fallbackTaskTitle(this.rawCapture);
-    this.value.details = this.detailsInput?.value.trim() || this.rawCapture.trim();
-    this.value.project = this.projectInput?.value || "";
-    this.value.due = this.dueInput?.value || "";
-    this.value.delegatedTo = this.delegatedInput?.value.trim() || "";
-    this.value.status = this.statusInput?.value as TaskStatus || "do-first";
-    if (!this.value.title) {
-      new Notice("Add a task title before creating the task.");
-      this.titleInput?.focus();
+    this.syncDraftsFromForms();
+    const drafts = this.drafts.map((draft) => ({
+      ...draft,
+      title: draft.title.trim(),
+      details: draft.details.trim(),
+      delegatedTo: draft.delegatedTo.trim()
+    }));
+    if (drafts.length === 1 && !drafts[0].title) {
+      drafts[0].title = fallbackTaskTitle(this.rawCapture);
+      if (this.formControls[0]) this.formControls[0].title.value = drafts[0].title;
+    }
+    const missingTitle = drafts.findIndex((draft) => !draft.title);
+    if (missingTitle >= 0) {
+      new Notice(`Add a title for task ${missingTitle + 1} before creating the tasks.`);
+      this.formControls[missingTitle]?.title.focus();
       return;
     }
     await this.withBusy(async () => {
-      await this.taskPlugin.createCapturedTask(this.value);
+      await this.taskPlugin.createCapturedTasks(drafts);
       this.close();
-    }, "Task creation failed");
+    }, drafts.length === 1 ? "Task creation failed" : "Task creation failed; no tasks were kept");
+  }
+
+  private updateCreateButton(): void {
+    if (!this.createButton) return;
+    const count = this.drafts.length;
+    this.setButton(
+      this.createButton,
+      count === 1 ? "circle-plus" : "list-plus",
+      count === 1 ? "Create Task" : `Create ${count} Tasks`
+    );
   }
 
   private async withBusy(work: () => Promise<void>, failurePrefix: string): Promise<void> {
@@ -227,12 +345,15 @@ export class QuickCaptureModal extends Modal {
   }
 
   private setControlsDisabled(disabled: boolean): void {
-    for (const control of [
-      this.recordButton,
-      this.draftButton,
-      this.createButton
-    ]) {
-      if (control) control.disabled = disabled;
+    for (const control of this.contentEl.querySelectorAll("button, input, textarea, select")) {
+      if (
+        control instanceof HTMLButtonElement
+        || control instanceof HTMLInputElement
+        || control instanceof HTMLTextAreaElement
+        || control instanceof HTMLSelectElement
+      ) {
+        control.disabled = disabled;
+      }
     }
   }
 

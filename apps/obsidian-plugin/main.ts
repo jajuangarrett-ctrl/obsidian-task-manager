@@ -219,7 +219,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async createCapturedTask(value: TaskCaptureDraft): Promise<void> {
-    const task = await this.workspaceService.createTask({
+    await this.createCapturedTasks([value]);
+  }
+
+  async createCapturedTasks(values: TaskCaptureDraft[]): Promise<void> {
+    const tasks = await this.workspaceService.createTasks(values.map((value) => ({
       title: value.title,
       details: value.details,
       status: value.status,
@@ -227,8 +231,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
       due: value.due,
       delegatedTo: value.delegatedTo,
       tags: ["task"]
-    });
-    new Notice(`Task workspace created: ${task.record.title}`);
+    })), { actor: "Franklin" });
+    new Notice(
+      tasks.length === 1
+        ? `Task workspace created: ${tasks[0].record.title}`
+        : `${tasks.length} task workspaces created.`
+    );
     this.refreshDashboard();
   }
 

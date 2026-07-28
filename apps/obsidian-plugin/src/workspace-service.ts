@@ -397,6 +397,44 @@ export class TaskWorkspaceService {
     return this.getById(record.task_id);
   }
 
+  async createTasks(
+    inputs: NewTaskInput[],
+    audit: { requestId?: string; actor?: string } = {}
+  ): Promise<IndexedTask[]> {
+    if (!inputs.length) throw new Error("Add at least one task.");
+    const planned = inputs.map((input) => {
+      const record = createTaskRecord(input);
+      return {
+        ...input,
+        taskId: record.task_id,
+        createdAt: record.created_at,
+        updatedAt: record.updated_at
+      };
+    });
+    const plannedIds = new Set<string>();
+    for (const input of planned) {
+      if (!input.taskId || this.index.has(input.taskId) || plannedIds.has(input.taskId)) {
+        throw new Error(`Task ID ${input.taskId || "unknown"} already exists.`);
+      }
+      plannedIds.add(input.taskId);
+    }
+
+    const created: IndexedTask[] = [];
+    try {
+      for (const input of planned) {
+        created.push(await this.createTask(input, audit));
+      }
+      return created;
+    } catch (error) {
+      for (const task of [...created].reverse()) {
+        const folder = this.app.vault.getAbstractFileByPath(task.folderPath);
+        if (folder instanceof TFolder) await this.app.vault.delete(folder, true);
+      }
+      await this.refresh();
+      throw new Error(`Batch creation was rolled back: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async appendUpdate(taskId: string, input: TaskUpdateInput): Promise<IndexedTask> {
     const task = this.getById(taskId);
     const updatesFile = await this.ensureUpdatesFile(task);
