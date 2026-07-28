@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1 — 2026-07-27
+
+### Fixed
+
+- Make **Open folder** use the plugin's deterministic task-folder browser on every device.
+- Avoid false-success navigation when a customized Obsidian sidebar intercepts the standard file-explorer view.
+- Keep the dashboard visible behind the folder browser and provide direct access to `task.md`, `updates.md`, attachments, and all related documents.
+
+### Validation
+
+- Reloaded the installed plugin in Obsidian and visually confirmed the final folder browser on the live dashboard without creating or changing task data.
+
 ## 0.4.0 — 2026-07-27
 
 ### Added

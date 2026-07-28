@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FJG Obsidian Task Clipper",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Create Obsidian task workspaces or add selected text as an update.",
   "homepage_url": "https://github.com/jajuangarrett-ctrl/obsidian-task-manager",
   "permissions": [
