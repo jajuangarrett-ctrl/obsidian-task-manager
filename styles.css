@@ -248,11 +248,28 @@
 }
 
 .fjg-project-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 16px 0;
 }
 
 .fjg-project-tools input {
   width: min(100%, 460px);
+}
+
+.fjg-create-project-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.fjg-create-project-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .fjg-project-grid {
@@ -723,6 +740,15 @@
   .fjg-project-tools input {
     width: 100%;
     min-width: 0;
+  }
+
+  .fjg-project-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fjg-create-project-button {
+    width: 100%;
   }
 
   .fjg-project-heading {

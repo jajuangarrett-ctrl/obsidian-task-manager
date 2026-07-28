@@ -24,6 +24,8 @@ The dashboard keeps **Do First** as the opening view and adds two clear sections
 
 Tasks without a project appear in a separate **No project** group. Archived work remains outside the active dashboard because archiving physically moves its workspace to the configured archive root.
 
+Select **New Project** on the Projects screen to create a project before it has tasks. Project definitions are stored as synchronized vault workspaces at `08 Tasks/Projects/<Project Name>/project.md`; they remain visible with zero tasks and become immediately selectable in Quick Capture and the Chrome clipper.
+
 Each task row shows its two newest task updates. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
 
 Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Open folder** reveals the workspace in Obsidian's file explorer.

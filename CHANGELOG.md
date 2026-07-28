@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 — 2026-07-28
+
+### Added
+
+- Add a touch-friendly **New Project** action directly to the dashboard Projects screen.
+- Persist projects as synchronized vault workspaces under `08 Tasks/Projects/<Project Name>/project.md`.
+- Keep newly created projects visible with zero tasks and make them immediately available in dashboard filters, Quick Capture, AI drafting, and the Chrome clipper.
+- Add the **FJG Task Manager: Create Project** command and a configurable project-workspace root.
+
+### Validation
+
+- Add project-definition parsing tests and verify that registered empty projects remain visible in project summaries.
+
 ## 0.4.1 — 2026-07-27
 
 ### Fixed
