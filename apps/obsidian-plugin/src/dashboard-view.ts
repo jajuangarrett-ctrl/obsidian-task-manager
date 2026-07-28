@@ -112,7 +112,7 @@ export class TaskDashboardView extends ItemView {
 
   private renderTasks(root: HTMLElement, tasks: IndexedTask[], projects: ProjectSummary[]): void {
     const activeProject = projects.find((project) => project.key === this.project);
-    if (activeProject) this.renderActiveProject(root, activeProject);
+    if (activeProject) this.renderActiveProject(root);
 
     const heading = root.createDiv({ cls: "fjg-section-heading" });
     const headingCopy = heading.createDiv();
@@ -127,7 +127,9 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-view-grid",
       attr: { "aria-label": "Task views" }
     });
-    const records = tasks.map((task) => task.record);
+    const records = tasks
+      .filter((task) => matchesProject(task.record, this.project))
+      .map((task) => task.record);
     for (const definition of TASK_VIEWS) {
       const button = viewNav.createEl("button", {
         cls: `fjg-view-card${this.view === definition.key ? " is-active" : ""}`,
@@ -185,7 +187,7 @@ export class TaskDashboardView extends ItemView {
     this.renderRows(root);
   }
 
-  private renderActiveProject(root: HTMLElement, project: ProjectSummary): void {
+  private renderActiveProject(root: HTMLElement): void {
     const banner = root.createDiv({ cls: "fjg-active-project" });
     const back = banner.createEl("button", {
       cls: "fjg-back-button",
@@ -198,11 +200,6 @@ export class TaskDashboardView extends ItemView {
       this.mode = "projects";
       this.render();
     });
-    const counts = banner.createSpan({
-      text: `${project.openCount} open · ${project.totalCount} total`,
-      cls: "fjg-active-project-count"
-    });
-    counts.setAttr("aria-label", `${project.openCount} open tasks, ${project.totalCount} total tasks`);
   }
 
   private renderProjects(root: HTMLElement, projects: ProjectSummary[]): void {

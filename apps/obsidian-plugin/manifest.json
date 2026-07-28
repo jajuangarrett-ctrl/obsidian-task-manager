@@ -1,7 +1,7 @@
 {
   "id": "fjg-task-manager",
   "name": "FJG Task Manager",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "minAppVersion": "1.5.0",
   "description": "Folder-based task workspaces, native dashboard, browser capture, and safe Markdown updates.",
   "author": "Franklin Garrett",
