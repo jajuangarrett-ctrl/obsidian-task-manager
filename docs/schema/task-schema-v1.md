@@ -36,3 +36,5 @@ Canonical statuses:
 - `archived`
 
 `task` is the sole default tag. Status tags are forbidden.
+
+The stable `task_id` is internal metadata and is not part of the live workspace folder title. Live folders use the sanitized task title, with a numeric suffix such as `(2)` only when needed to avoid a collision.

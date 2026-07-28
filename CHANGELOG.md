@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.1 — 2026-07-27
+
+### Changed
+
+- Hide internal task IDs from dashboard task cards.
+- Name live task workspace folders from the readable task title instead of prefixing the title with `tsk_…`.
+- Preserve `task_id` in `task.md` as the stable internal identity for linking, browser updates, CLI operations, and duplicate-title handling.
+- Add unobtrusive numeric folder suffixes such as `(2)` only when two tasks have the same sanitized title.
+- Normalize existing live and archived workspace folder names when the updated plugin loads.
+- Keep the protected legacy migration staging layout unchanged until Franklin approves a new cutover review.
+
 ## 0.3.0 — 2026-07-27
 
 ### Added

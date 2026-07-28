@@ -415,11 +415,6 @@
   font-weight: 700;
 }
 
-.fjg-task-id {
-  color: var(--text-faint);
-  font-size: 0.72rem;
-}
-
 .fjg-task-controls {
   flex-wrap: wrap;
   justify-content: flex-end;

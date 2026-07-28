@@ -13,6 +13,8 @@ Folder-based task workspaces for Obsidian with a native dashboard, live update c
 
 Markdown task workspaces are authoritative. The dashboard and Chrome search catalog are derived.
 
+Live workspace folders use the readable task title. The stable `task_id` remains inside `task.md` and is hidden from ordinary dashboard and folder-title views. Duplicate titles receive a numeric folder suffix such as `(2)`.
+
 ## Dashboard navigation
 
 The dashboard keeps **Do First** as the opening view and adds two clear sections:
