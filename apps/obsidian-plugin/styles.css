@@ -468,6 +468,10 @@
   --fjg-status-color: #45865c;
 }
 
+.fjg-task-row[data-status="archived"] {
+  --fjg-status-color: #6d7480;
+}
+
 .fjg-task-main {
   min-width: 0;
   flex: 1;

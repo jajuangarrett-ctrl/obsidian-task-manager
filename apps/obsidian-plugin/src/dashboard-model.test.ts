@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 import {
   ALL_PROJECTS,
+  canArchiveProject,
   countTasksForView,
   isDueOrOverdue,
   matchesProject,
@@ -43,6 +44,7 @@ describe("dashboard task views", () => {
     ];
     expect(countTasksForView(records, "all-open")).toBe(1);
     expect(taskMatchesView(records[1], "completed")).toBe(true);
+    expect(countTasksForView(records, "archived")).toBe(1);
   });
 
   it("counts only open tasks due today or earlier", () => {
@@ -90,5 +92,11 @@ describe("dashboard project summaries", () => {
       { key: "New Project", name: "New Project", openCount: 0, totalCount: 0 },
       { key: NO_PROJECT, name: "No project", openCount: 1, totalCount: 1 }
     ]);
+  });
+
+  it("only permits named projects with zero open tasks to be archived", () => {
+    expect(canArchiveProject({ key: "Finished", name: "Finished", openCount: 0, totalCount: 3 })).toBe(true);
+    expect(canArchiveProject({ key: "Active", name: "Active", openCount: 1, totalCount: 3 })).toBe(false);
+    expect(canArchiveProject({ key: NO_PROJECT, name: "No project", openCount: 0, totalCount: 3 })).toBe(false);
   });
 });
