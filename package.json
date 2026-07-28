@@ -1,6 +1,6 @@
 {
   "name": "obsidian-task-manager",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "FJG Task Manager monorepo for Obsidian task workspaces and browser capture.",
   "workspaces": [

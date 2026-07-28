@@ -1,6 +1,6 @@
 {
   "name": "@fjg/obsidian-task-manager-plugin",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Native Obsidian task workspace manager.",
   "main": "main.js",

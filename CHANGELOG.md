@@ -10,6 +10,22 @@
 - Add a source-to-staging audit that verifies every task record, complete update history, attachments folder, and project record.
 - Share the project workspace contract between the plugin and migration tool so staged projects use the same lifecycle schema as live projects.
 
+## 0.6.1 — 2026-07-28
+
+### Fixed
+
+- Recover an OpenAI key saved in the older Task Capture plugin when FJG Task
+  Manager has no key of its own.
+- Reload the current plugin's saved credential before reporting that the key is
+  missing, which protects mobile capture from stale in-memory settings.
+- Add a mobile-friendly **Save & Test** action that persists the value visible
+  in the password field before testing it.
+
+### Validation
+
+- Add settings-migration coverage and pass all 53 automated tests, TypeScript
+  validation, and production builds.
+
 ## 0.6.0 — 2026-07-28
 
 ### Added
