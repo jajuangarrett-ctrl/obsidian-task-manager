@@ -30,7 +30,7 @@ When a registered project has zero open tasks, its card offers **Archive**. Afte
 
 Each task row shows its two newest task updates. The dashboard's Recent Updates section identifies the associated task on every update card, and selecting a card opens that task. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
 
-Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Open folder** reveals the workspace in Obsidian's file explorer.
+Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Copy path** copies the absolute task-folder path on desktop or the vault-relative path on mobile; **Open folder** reveals the workspace in Obsidian's file explorer.
 
 ## Quick capture
 

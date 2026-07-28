@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 — 2026-07-28
+
+### Added
+
+- Add **Copy path** between **Add file** and **Open folder** on every task card.
+- Copy the task workspace's absolute system folder path on desktop and its
+  vault-relative folder path on mobile.
+- Add **FJG Task Manager: Copy Task Folder Path** for an active task note or
+  related task document.
+
+### Validation
+
+- Add macOS, Windows, trailing-separator, and mobile path tests.
+- Confirm the live dashboard renders **Copy path** in the requested Related
+  files action row.
+- Confirm the screenshot task copies its complete absolute folder path.
+
 ## 0.7.0 — 2026-07-28
 
 ### Added
