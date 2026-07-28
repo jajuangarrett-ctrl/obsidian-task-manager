@@ -4,11 +4,13 @@ import type FjgTaskManagerPlugin from "../main";
 import { testOpenAiKey } from "./openai-capture";
 
 export const DEFAULT_PROJECT_ROOT = "08 Tasks/Projects";
+export const DEFAULT_PROJECT_ARCHIVE_ROOT = "08 Tasks/Project Archive";
 
 export interface TaskManagerSettings {
   activeRoot: string;
   archiveRoot: string;
   projectRoot: string;
+  projectArchiveRoot: string;
   dashboardDefault: "do-first";
   catalogEnabled: boolean;
   catalogPort: number;
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   activeRoot: DEFAULT_ACTIVE_ROOT,
   archiveRoot: DEFAULT_ARCHIVE_ROOT,
   projectRoot: DEFAULT_PROJECT_ROOT,
+  projectArchiveRoot: DEFAULT_PROJECT_ARCHIVE_ROOT,
   dashboardDefault: "do-first",
   catalogEnabled: true,
   catalogPort: 27124,
@@ -42,6 +45,7 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     activeRoot: normalizeVaultPath(value.activeRoot || DEFAULT_ACTIVE_ROOT),
     archiveRoot: normalizeVaultPath(value.archiveRoot || DEFAULT_ARCHIVE_ROOT),
     projectRoot: normalizeVaultPath(value.projectRoot || DEFAULT_PROJECT_ROOT),
+    projectArchiveRoot: normalizeVaultPath(value.projectArchiveRoot || DEFAULT_PROJECT_ARCHIVE_ROOT),
     dashboardDefault: "do-first",
     catalogEnabled: value.catalogEnabled !== false,
     catalogPort: normalizePort(value.catalogPort),
@@ -97,6 +101,17 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         .setValue(this.taskPlugin.settings.projectRoot)
         .onChange(async (value) => {
           this.taskPlugin.settings.projectRoot = normalizeVaultPath(value || DEFAULT_PROJECT_ROOT);
+          await this.taskPlugin.saveSettings();
+          await this.taskPlugin.workspaceService.refresh();
+        }));
+
+    new Setting(containerEl)
+      .setName("Project archive root")
+      .setDesc("Completed project folders move here and can be reopened from the dashboard.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.projectArchiveRoot)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.projectArchiveRoot = normalizeVaultPath(value || DEFAULT_PROJECT_ARCHIVE_ROOT);
           await this.taskPlugin.saveSettings();
           await this.taskPlugin.workspaceService.refresh();
         }));
