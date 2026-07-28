@@ -185,6 +185,15 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.app.workspace.getLeaf("tab").openFile(task.taskFile);
   }
 
+  async openTaskUpdates(taskId: string): Promise<void> {
+    const task = this.workspaceService.getById(taskId);
+    if (!task.updatesFile) {
+      new Notice(`No update log exists for ${task.record.title}.`);
+      return;
+    }
+    await this.app.workspace.getLeaf("tab").openFile(task.updatesFile);
+  }
+
   private async handleClipperPayload(encoded: string): Promise<void> {
     try {
       if (!encoded) throw new Error("Missing task clipper payload.");

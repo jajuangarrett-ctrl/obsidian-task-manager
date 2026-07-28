@@ -12,7 +12,7 @@
 .fjg-task-header,
 .fjg-header-actions,
 .fjg-task-filters,
-.fjg-task-row,
+.fjg-task-overview,
 .fjg-task-controls,
 .fjg-section-heading,
 .fjg-active-project,
@@ -329,12 +329,15 @@
 
 .fjg-task-row {
   --fjg-status-color: var(--text-faint);
-  justify-content: space-between;
   padding: 14px;
   border: 1px solid var(--background-modifier-border);
   border-inline-start: 4px solid var(--fjg-status-color);
   border-radius: 12px;
   background: var(--background-primary);
+}
+
+.fjg-task-overview {
+  justify-content: space-between;
 }
 
 .fjg-task-row[data-status="inbox"] {
@@ -422,6 +425,74 @@
   justify-content: flex-end;
 }
 
+.fjg-recent-updates {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.fjg-recent-updates-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.fjg-recent-updates-heading h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fjg-recent-updates-heading button {
+  padding: 3px 7px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--fjg-teal);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.fjg-update-preview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fjg-update-preview {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.fjg-update-preview-meta,
+.fjg-update-preview-text,
+.fjg-no-updates {
+  margin: 0;
+}
+
+.fjg-update-preview-meta {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.fjg-update-preview-text {
+  color: var(--text-normal);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.fjg-no-updates {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+}
+
 .fjg-task-controls select {
   min-width: 126px;
 }
@@ -448,7 +519,7 @@
   }
 
   .fjg-task-header,
-  .fjg-task-row,
+  .fjg-task-overview,
   .fjg-section-heading {
     align-items: stretch;
     flex-direction: column;

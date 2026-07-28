@@ -18,12 +18,14 @@ import {
 } from "@fjg/task-core";
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
+import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
 
 export interface IndexedTask {
   record: TaskRecord;
   folderPath: string;
   taskFile: TFile;
   updatesFile: TFile | null;
+  updates: TaskUpdatePreview[];
   archived: boolean;
 }
 
@@ -55,11 +57,15 @@ export class TaskWorkspaceService {
         if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
         const folderPath = file.parent?.path || "";
         const updateFile = this.app.vault.getAbstractFileByPath(updatesFilePath(folderPath));
+        const updates = updateFile instanceof TFile
+          ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
+          : [];
         next.set(document.record.task_id, {
           record: document.record,
           folderPath,
           taskFile: file,
           updatesFile: updateFile instanceof TFile ? updateFile : null,
+          updates,
           archived: file.path.startsWith(archivePrefix)
         });
       } catch (error) {
@@ -291,7 +297,15 @@ export class TaskWorkspaceService {
       current = current ? `${current}/${part}` : part;
       const existing = this.app.vault.getAbstractFileByPath(current);
       if (!existing) {
-        await this.app.vault.createFolder(current);
+        const diskEntry = await this.app.vault.adapter.stat(current);
+        if (diskEntry?.type === "folder") continue;
+        if (diskEntry) throw new Error(`A file blocks the folder path ${current}.`);
+        try {
+          await this.app.vault.createFolder(current);
+        } catch (error) {
+          const afterCreate = await this.app.vault.adapter.stat(current);
+          if (afterCreate?.type !== "folder") throw error;
+        }
       } else if (!(existing instanceof TFolder)) {
         throw new Error(`A file blocks the folder path ${current}.`);
       }

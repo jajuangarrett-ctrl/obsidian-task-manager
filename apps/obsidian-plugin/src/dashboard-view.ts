@@ -294,7 +294,8 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-task-row",
       attr: { "data-status": task.record.status }
     });
-    const main = row.createDiv({ cls: "fjg-task-main" });
+    const overview = row.createDiv({ cls: "fjg-task-overview" });
+    const main = overview.createDiv({ cls: "fjg-task-main" });
     const title = main.createEl("button", { text: task.record.title, cls: "fjg-task-title" });
     title.addEventListener("click", () => this.taskPlugin.openTask(task.record.task_id));
     const meta = main.createDiv({ cls: "fjg-task-meta" });
@@ -312,7 +313,7 @@ export class TaskDashboardView extends ItemView {
     if (task.record.delegated_to) meta.createSpan({ text: `Delegated to ${task.record.delegated_to}` });
     meta.createSpan({ text: `ID ${task.record.task_id}`, cls: "fjg-task-id" });
 
-    const controls = row.createDiv({ cls: "fjg-task-controls" });
+    const controls = overview.createDiv({ cls: "fjg-task-controls" });
     const status = controls.createEl("select", {
       attr: { "aria-label": `Status for ${task.record.title}` }
     });
@@ -345,6 +346,48 @@ export class TaskDashboardView extends ItemView {
         new Notice(error instanceof Error ? error.message : String(error));
       }
     });
+    this.renderRecentUpdates(row, task);
+  }
+
+  private renderRecentUpdates(parent: HTMLElement, task: IndexedTask): void {
+    const updates = task.updates
+      .filter((update) => update.type !== "created")
+      .slice(0, 2);
+    const section = parent.createDiv({
+      cls: "fjg-recent-updates",
+      attr: { "aria-live": "polite" }
+    });
+    const heading = section.createDiv({ cls: "fjg-recent-updates-heading" });
+    heading.createEl("h3", { text: "Recent updates" });
+    const openLog = heading.createEl("button", {
+      text: task.updatesFile ? "View all" : "No update log",
+      attr: {
+        type: "button",
+        "aria-label": `Open all updates for ${task.record.title}`
+      }
+    });
+    openLog.disabled = !task.updatesFile;
+    openLog.addEventListener("click", () => this.taskPlugin.openTaskUpdates(task.record.task_id));
+
+    if (!updates.length) {
+      section.createEl("p", {
+        text: "No task updates yet.",
+        cls: "fjg-no-updates"
+      });
+      return;
+    }
+    const list = section.createDiv({ cls: "fjg-update-preview-list" });
+    for (const update of updates) {
+      const card = list.createEl("article", { cls: "fjg-update-preview" });
+      card.createEl("p", {
+        text: updateMeta(update.timestamp, update.actor),
+        cls: "fjg-update-preview-meta"
+      });
+      card.createEl("p", {
+        text: update.text,
+        cls: "fjg-update-preview-text"
+      });
+    }
   }
 }
 
@@ -369,4 +412,19 @@ function taskCountLabel(count: number): string {
 
 function countLabel(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function updateMeta(timestamp: string, actor: string): string {
+  const dateMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = dateMatch
+    ? new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]))
+    : null;
+  const formatted = date && !Number.isNaN(date.getTime())
+    ? new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    }).format(date)
+    : timestamp;
+  return actor ? `${formatted} · ${actor}` : formatted;
 }
