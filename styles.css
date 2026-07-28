@@ -188,11 +188,10 @@
 }
 
 .fjg-view-label {
-  overflow: hidden;
   font-size: 0.88rem;
   font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.15;
+  white-space: normal;
 }
 
 .fjg-view-count {
@@ -218,17 +217,14 @@
 }
 
 .fjg-active-project {
-  justify-content: space-between;
   margin-bottom: 14px;
-  padding: 9px 12px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 11px;
-  background: var(--background-secondary);
 }
 
 .fjg-back-button {
-  border: 0;
-  background: transparent;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
   box-shadow: none;
   color: var(--text-muted);
   font-weight: 700;
@@ -236,12 +232,6 @@
 
 .fjg-back-button:hover {
   color: var(--fjg-teal);
-}
-
-.fjg-active-project-count {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 650;
 }
 
 .fjg-project-heading {
@@ -509,8 +499,4 @@
     grid-template-columns: 1fr;
   }
 
-  .fjg-active-project {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }

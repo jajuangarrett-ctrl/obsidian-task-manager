@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-07-27
+
+### Added
+
+- Add a simple Tasks/Projects dashboard switcher modeled on the iOS Taskboard's separation between working views and project organization.
+- Add navigable task views for Do First, Do Soon, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, and Completed.
+- Add a searchable project overview with per-project open and total task counts.
+- Add project drill-down that opens the project's All Open view and scopes every view count to that project.
+- Add an explicit No project group so unassigned work remains visible without becoming a named project.
+- Add status labels, status accents, accessible control labels, keyboard focus styling, and responsive layouts.
+- Add unit tests for dashboard view rules, due-date behavior, project filtering, and project summaries.
+
 ## 0.1.1 — 2026-07-27
 
 ### Fixed

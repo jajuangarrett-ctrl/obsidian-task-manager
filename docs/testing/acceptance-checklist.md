@@ -12,8 +12,11 @@
 
 ## Dashboard
 
-- [ ] Confirm the dashboard opens to Do First.
-- [ ] Search and filter by status and project.
+- [x] Confirm the dashboard opens to Do First.
+- [x] Switch among the nine task views and confirm counts follow canonical status and due-date rules.
+- [x] Search and filter active tasks by project.
+- [x] Review the Projects overview and open a project-scoped All Open view.
+- [x] Confirm project cards distinguish open counts from total non-archived counts.
 - [ ] Create, update, complete, archive, and open tasks.
 - [ ] Test desktop and Obsidian Mobile.
 
@@ -34,4 +37,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.1.1](validation-report-0.1.1.md) for the latest reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.2.0](validation-report-0.2.0.md) for the latest reproducible validation record and remaining manual acceptance.

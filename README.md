@@ -13,6 +13,15 @@ Folder-based task workspaces for Obsidian with a native dashboard, Chrome clippi
 
 Markdown task workspaces are authoritative. The dashboard and Chrome search catalog are derived.
 
+## Dashboard navigation
+
+The dashboard keeps **Do First** as the opening view and adds two clear sections:
+
+- **Tasks** — switch among Do First, Do Soon, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, and Completed without leaving the dashboard.
+- **Projects** — scan every named project by open and total task counts, search the project list, and select a project to open its scoped task views.
+
+Tasks without a project appear in a separate **No project** group. Archived work remains outside the active dashboard because archiving physically moves its workspace to the configured archive root.
+
 ## Build and test
 
 ```bash
