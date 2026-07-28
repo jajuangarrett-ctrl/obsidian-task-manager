@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Notice, Setting } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
 
 export interface CreateTaskFormValue {
@@ -164,6 +164,7 @@ export class TaskFileModal extends Modal {
       placeholder: "Meeting notes, draft, research…",
       attr: { "aria-label": "Related note title" }
     });
+    title.id = "fjg-task-related-note-title";
     title.value = this.noteTitle;
     title.addEventListener("input", () => this.noteTitle = title.value);
     const bodyLabel = panel.createEl("label", { text: "Starting notes (optional)" });
@@ -171,6 +172,7 @@ export class TaskFileModal extends Modal {
       placeholder: "Add context now, or leave this blank and write in the new note.",
       attr: { "aria-label": "Starting note content", rows: "7" }
     });
+    body.id = "fjg-task-related-note-body";
     body.value = this.noteBody;
     body.addEventListener("input", () => this.noteBody = body.value);
     const submit = panel.createEl("button", { text: "Create and open note", cls: "mod-cta" });
@@ -183,6 +185,8 @@ export class TaskFileModal extends Modal {
       try {
         await this.createNote(this.noteTitle.trim(), this.noteBody.trim());
         this.close();
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : String(error), 8000);
       } finally {
         submit.disabled = false;
       }
@@ -223,6 +227,8 @@ export class TaskFileModal extends Modal {
       try {
         await this.attachFiles(this.attachments);
         this.close();
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : String(error), 8000);
       } finally {
         submit.disabled = false;
       }

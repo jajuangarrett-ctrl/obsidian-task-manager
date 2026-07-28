@@ -41,7 +41,7 @@ Follow up with [[Franklin Garrett|Franklin]] about the [quote](https://example.c
   });
 
   it("sanitizes user-provided file names", () => {
-    expect(safeRelatedFileName(`  Quote: RM/116?.pdf  `)).toBe("Quote RM 116 .pdf");
+    expect(safeRelatedFileName(`  Quote: RM/116?.pdf  `)).toBe("Quote RM 116.pdf");
     expect(safeRelatedFileName("...")).toBe("Untitled");
   });
 });

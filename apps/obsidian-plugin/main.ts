@@ -96,7 +96,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
-    this.app.workspace.onLayoutReady(() => this.recoverMissedAdvancedUriLaunch());
+    this.app.workspace.onLayoutReady(() => {
+      void this.finishStartupAfterLayoutReady();
+    });
     await this.restartCatalog();
   }
 
@@ -294,6 +296,21 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const advancedUri = (this.app as any).plugins?.getPlugin?.("obsidian-advanced-uri");
     if (advancedUri?.lastParameters?.commandid === `${this.manifest.id}:quick-capture`) {
       window.setTimeout(() => this.openQuickCaptureModal(), 250);
+    }
+  }
+
+  private async finishStartupAfterLayoutReady(): Promise<void> {
+    try {
+      // Obsidian may call plugin onload before its vault file cache is complete.
+      // Refreshing again here ensures existing task workspaces can be renamed
+      // without losing them from the dashboard during startup.
+      await this.workspaceService.refresh();
+      await this.workspaceService.normalizeVisibleFolderNames();
+      this.refreshDashboard();
+      this.recoverMissedAdvancedUriLaunch();
+    } catch (error) {
+      console.error("[FJG Task Manager] Post-layout startup failed", error);
+      new Notice(`Task workspaces could not finish loading: ${error instanceof Error ? error.message : String(error)}`, 10000);
     }
   }
 

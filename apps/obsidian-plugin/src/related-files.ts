@@ -58,6 +58,7 @@ export function safeRelatedFileName(name: string, fallback = "Untitled"): string
   const clean = name
     .replace(/[\\/:*?"<>|]/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/\s+\./g, ".")
     .replace(/^\.+|\.+$/g, "")
     .trim();
   return clean || fallback;

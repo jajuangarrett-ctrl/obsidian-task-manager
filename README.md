@@ -26,6 +26,8 @@ Tasks without a project appear in a separate **No project** group. Archived work
 
 Each task row shows its two newest task updates. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
 
+Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Open folder** reveals the workspace in Obsidian's file explorer.
+
 ## Quick capture
 
 Use **FJG Task Manager: Quick Capture Task**, the circle-plus ribbon icon, or **Capture Task** on the dashboard.

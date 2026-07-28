@@ -349,7 +349,7 @@ export class TaskWorkspaceService {
     await this.app.vault.rename(folder, destination);
   }
 
-  private async normalizeVisibleFolderNames(): Promise<void> {
+  async normalizeVisibleFolderNames(): Promise<void> {
     let changed = false;
     for (const task of this.list({ includeArchived: true })) {
       const root = task.archived ? this.getSettings().archiveRoot : this.getSettings().activeRoot;
