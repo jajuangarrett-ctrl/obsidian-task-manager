@@ -21,9 +21,13 @@ import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
 import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
 import {
+  archiveProjectRecord,
   createProjectRecord,
+  parseProjectDocument,
   parseProjectMarkdown,
   ProjectRecord,
+  renderProjectDocument,
+  reopenProjectRecord,
   renderProjectMarkdown
 } from "./project-workspace";
 import {
@@ -54,6 +58,7 @@ export interface IndexedProject {
   record: ProjectRecord;
   folderPath: string;
   projectFile: TFile;
+  archived: boolean;
 }
 
 export class TaskWorkspaceService {
@@ -70,6 +75,7 @@ export class TaskWorkspaceService {
     await this.ensureFolder(settings.activeRoot);
     await this.ensureFolder(settings.archiveRoot);
     await this.ensureFolder(settings.projectRoot);
+    await this.ensureFolder(settings.projectArchiveRoot);
     await this.refresh();
     await this.normalizeVisibleFolderNames();
   }
@@ -79,6 +85,7 @@ export class TaskWorkspaceService {
     const activePrefix = `${normalizePath(settings.activeRoot)}/`;
     const archivePrefix = `${normalizePath(settings.archiveRoot)}/`;
     const projectPrefix = `${normalizePath(settings.projectRoot)}/`;
+    const projectArchivePrefix = `${normalizePath(settings.projectArchiveRoot)}/`;
     const next = new Map<string, IndexedTask>();
     const nextProjects = new Map<string, IndexedProject>();
     for (const file of this.app.vault.getMarkdownFiles()) {
@@ -103,15 +110,24 @@ export class TaskWorkspaceService {
         } catch (error) {
           console.error("[FJG Task Manager] Invalid task workspace", file.path, error);
         }
-      } else if (file.name === "project.md" && file.path.startsWith(projectPrefix)) {
+      } else if (
+        file.name === "project.md"
+        && (file.path.startsWith(projectPrefix) || file.path.startsWith(projectArchivePrefix))
+      ) {
         try {
           const record = parseProjectMarkdown(await this.app.vault.cachedRead(file));
-          const key = normalizeSearch(record.name);
+          const archived = file.path.startsWith(projectArchivePrefix);
+          const key = projectIndexKey(record.name, archived);
           if (nextProjects.has(key)) throw new Error(`Duplicate project name ${record.name}`);
           nextProjects.set(key, {
-            record,
+            record: {
+              ...record,
+              status: archived ? "archived" : "active",
+              archived_at: archived ? record.archived_at : ""
+            },
             folderPath: file.parent?.path || "",
-            projectFile: file
+            projectFile: file,
+            archived
           });
         } catch (error) {
           console.error("[FJG Task Manager] Invalid project workspace", file.path, error);
@@ -151,8 +167,9 @@ export class TaskWorkspaceService {
       });
   }
 
-  listProjects(): IndexedProject[] {
+  listProjects(options: { includeArchived?: boolean } = {}): IndexedProject[] {
     return [...this.projectIndex.values()]
+      .filter((project) => options.includeArchived || !project.archived)
       .sort((left, right) => left.record.name.localeCompare(right.record.name));
   }
 
@@ -161,7 +178,7 @@ export class TaskWorkspaceService {
     for (const project of this.listProjects()) {
       projects.set(normalizeSearch(project.record.name), project.record.name);
     }
-    for (const task of this.list({ includeArchived: true })) {
+    for (const task of this.list()) {
       const name = task.record.project.trim();
       const key = normalizeSearch(name);
       if (name && !projects.has(key)) projects.set(key, name);
@@ -172,7 +189,12 @@ export class TaskWorkspaceService {
   async createProject(name: string, description = ""): Promise<IndexedProject> {
     const record = createProjectRecord(name);
     const key = normalizeSearch(record.name);
-    if (this.projectNames().some((project) => normalizeSearch(project) === key)) {
+    const registered = this.listProjects({ includeArchived: true })
+      .find((project) => normalizeSearch(project.record.name) === key);
+    if (registered?.archived) {
+      throw new Error(`Archived project already exists: ${record.name}. Reopen it instead.`);
+    }
+    if (registered || this.projectNames().some((project) => normalizeSearch(project) === key)) {
       throw new Error(`Project already exists: ${record.name}`);
     }
     const folderPath = await this.availableProjectPath(this.getSettings().projectRoot, record.name);
@@ -188,9 +210,79 @@ export class TaskWorkspaceService {
       throw error;
     }
     await this.refresh();
-    const project = this.projectIndex.get(key);
+    const project = this.projectIndex.get(projectIndexKey(record.name, false));
     if (!project) throw new Error(`Project was created but could not be indexed: ${record.name}`);
     return project;
+  }
+
+  getProjectByName(name: string, options: { archived?: boolean } = {}): IndexedProject {
+    const archived = options.archived === true;
+    const project = this.projectIndex.get(projectIndexKey(name, archived));
+    if (!project) {
+      throw new Error(`${archived ? "Archived project" : "Project"} not found: ${name}`);
+    }
+    return project;
+  }
+
+  async archiveProject(name: string): Promise<{ project: IndexedProject; archivedTaskCount: number }> {
+    let project = this.getProjectByName(name);
+    const projectKey = normalizeSearch(project.record.name);
+    const assignedTasks = this.list().filter((task) => normalizeSearch(task.record.project) === projectKey);
+    const openTasks = assignedTasks.filter((task) => task.record.status !== "completed");
+    if (openTasks.length) {
+      throw new Error(
+        `${project.record.name} still has ${openTasks.length} open ${openTasks.length === 1 ? "task" : "tasks"}. `
+        + "Complete or archive them before archiving the project."
+      );
+    }
+
+    const completedTasks = assignedTasks.filter((task) => task.record.status === "completed");
+    for (const task of completedTasks) {
+      await this.changeStatus(
+        task.record.task_id,
+        "archived",
+        "Franklin",
+        `Archived with completed project ${project.record.name}.`
+      );
+    }
+
+    project = this.getProjectByName(name);
+    const oldContent = await this.app.vault.read(project.projectFile);
+    const document = parseProjectDocument(oldContent);
+    const nextRecord = archiveProjectRecord(document.record);
+    try {
+      await this.app.vault.modify(project.projectFile, renderProjectDocument(nextRecord, document.body));
+      await this.moveProjectWorkspace(project.folderPath, this.getSettings().projectArchiveRoot, nextRecord.name);
+    } catch (error) {
+      const currentFile = this.app.vault.getAbstractFileByPath(project.projectFile.path);
+      if (currentFile instanceof TFile) await this.app.vault.modify(currentFile, oldContent);
+      throw error;
+    }
+    await this.refresh();
+    return {
+      project: this.getProjectByName(name, { archived: true }),
+      archivedTaskCount: completedTasks.length
+    };
+  }
+
+  async reopenProject(name: string): Promise<IndexedProject> {
+    const project = this.getProjectByName(name, { archived: true });
+    const active = this.projectIndex.get(projectIndexKey(project.record.name, false));
+    if (active) throw new Error(`An active project already exists: ${project.record.name}`);
+
+    const oldContent = await this.app.vault.read(project.projectFile);
+    const document = parseProjectDocument(oldContent);
+    const nextRecord = reopenProjectRecord(document.record);
+    try {
+      await this.app.vault.modify(project.projectFile, renderProjectDocument(nextRecord, document.body));
+      await this.moveProjectWorkspace(project.folderPath, this.getSettings().projectRoot, nextRecord.name);
+    } catch (error) {
+      const currentFile = this.app.vault.getAbstractFileByPath(project.projectFile.path);
+      if (currentFile instanceof TFile) await this.app.vault.modify(currentFile, oldContent);
+      throw error;
+    }
+    await this.refresh();
+    return this.getProjectByName(name);
   }
 
   catalog(): CatalogTask[] {
@@ -423,6 +515,14 @@ export class TaskWorkspaceService {
     await this.app.vault.rename(folder, destination);
   }
 
+  private async moveProjectWorkspace(currentPath: string, targetRoot: string, name: string): Promise<void> {
+    await this.ensureFolder(targetRoot);
+    const folder = this.app.vault.getAbstractFileByPath(currentPath);
+    if (!(folder instanceof TFolder)) throw new Error(`Project folder not found: ${currentPath}`);
+    const destination = await this.availableProjectPath(targetRoot, name);
+    await this.app.vault.rename(folder, destination);
+  }
+
   async normalizeVisibleFolderNames(): Promise<void> {
     let changed = false;
     for (const task of this.list({ includeArchived: true })) {
@@ -536,4 +636,8 @@ function normalizeSearch(value: string): string {
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function projectIndexKey(name: string, archived: boolean): string {
+  return `${archived ? "archived" : "active"}:${normalizeSearch(name)}`;
 }

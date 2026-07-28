@@ -8,6 +8,7 @@ import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import {
+  ArchiveProjectModal,
   CreateProjectModal,
   CreateTaskModal,
   TaskFileModal,
@@ -166,6 +167,23 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Project created: ${project.record.name}`);
       this.refreshDashboard();
     }).open();
+  }
+
+  openArchiveProjectModal(projectName: string, completedTaskCount: number): void {
+    new ArchiveProjectModal(this.app, projectName, completedTaskCount, async () => {
+      const result = await this.workspaceService.archiveProject(projectName);
+      new Notice(
+        `Project archived: ${result.project.record.name}. `
+        + `${result.archivedTaskCount} completed ${result.archivedTaskCount === 1 ? "task" : "tasks"} archived.`
+      );
+      this.refreshDashboard();
+    }).open();
+  }
+
+  async reopenProject(projectName: string): Promise<void> {
+    const project = await this.workspaceService.reopenProject(projectName);
+    new Notice(`Project reopened: ${project.record.name}. Archived tasks were left unchanged.`);
+    this.refreshDashboard();
   }
 
   openQuickCaptureModal(initialText = ""): void {

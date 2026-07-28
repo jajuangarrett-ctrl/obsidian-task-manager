@@ -15,6 +15,60 @@ export interface CreateProjectFormValue {
   description: string;
 }
 
+export class ArchiveProjectModal extends Modal {
+  constructor(
+    app: App,
+    private readonly projectName: string,
+    private readonly completedTaskCount: number,
+    private readonly submit: () => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.setTitle(`Archive ${this.projectName}?`);
+    this.contentEl.createEl("p", {
+      text: "This removes the project from your active dashboard without deleting anything."
+    });
+    const list = this.contentEl.createEl("ul");
+    list.createEl("li", {
+      text: `Move the project folder to Project Archive.`
+    });
+    list.createEl("li", {
+      text: `Move ${this.completedTaskCount} completed ${this.completedTaskCount === 1 ? "task" : "tasks"} to the task Archive.`
+    });
+    list.createEl("li", {
+      text: "Keep every task update, related file, attachment, and project note."
+    });
+    this.contentEl.createEl("p", {
+      text: "You can reopen the project later from Archived Projects. Its tasks stay archived until you reopen them individually.",
+      cls: "setting-item-description"
+    });
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText("Cancel")
+        .onClick(() => this.close()))
+      .addButton((button) => button
+        .setButtonText("Archive Project")
+        .setWarning()
+        .onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await this.submit();
+            this.close();
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : String(error), 8000);
+          } finally {
+            button.setDisabled(false);
+          }
+        }));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export class CreateProjectModal extends Modal {
   private value: CreateProjectFormValue = {
     name: "",

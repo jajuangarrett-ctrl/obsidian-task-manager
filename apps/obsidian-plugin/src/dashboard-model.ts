@@ -1,7 +1,7 @@
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "tasks" | "projects";
-export type TaskViewKey = "all-open" | "due" | Exclude<TaskStatus, "archived">;
+export type TaskViewKey = "all-open" | "due" | TaskStatus;
 
 export const ALL_PROJECTS = "__all_projects__";
 export const NO_PROJECT = "__no_project__";
@@ -28,7 +28,8 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
-  { key: "completed", label: "Completed", icon: "circle-check-big" }
+  { key: "completed", label: "Completed", icon: "circle-check-big" },
+  { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
 
 export function isOpenTask(record: TaskRecord): boolean {
@@ -89,6 +90,10 @@ export function matchesProject(record: TaskRecord, projectKey: string): boolean 
   if (projectKey === ALL_PROJECTS) return true;
   if (projectKey === NO_PROJECT) return !record.project.trim();
   return record.project === projectKey;
+}
+
+export function canArchiveProject(summary: ProjectSummary): boolean {
+  return summary.key !== NO_PROJECT && summary.openCount === 0;
 }
 
 function todayKey(): string {
