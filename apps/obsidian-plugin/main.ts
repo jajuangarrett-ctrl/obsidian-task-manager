@@ -2,7 +2,6 @@ import {
   Notice,
   Platform,
   Plugin,
-  TFile,
   WorkspaceLeaf
 } from "obsidian";
 import { decodeProtocolPayload } from "@fjg/task-protocol";
@@ -245,22 +244,6 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async openTaskFolder(taskId: string): Promise<void> {
     const task = this.workspaceService.getById(taskId);
-    let explorerLeaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
-    if (!explorerLeaf && Platform.isDesktopApp) {
-      const leftLeaf = this.app.workspace.getLeftLeaf(true);
-      if (leftLeaf) {
-        await leftLeaf.setViewState({ type: "file-explorer", active: true });
-        explorerLeaf = leftLeaf;
-      }
-    }
-    const explorer = explorerLeaf?.view as unknown as {
-      revealInFolder?: (file: TFile) => void | Promise<void>;
-    };
-    if (explorerLeaf && typeof explorer.revealInFolder === "function") {
-      await explorer.revealInFolder(task.taskFile);
-      this.app.workspace.revealLeaf(explorerLeaf);
-      return;
-    }
     const entries: TaskFolderEntry[] = [
       { file: task.taskFile, description: "Canonical task record", icon: "list-checks" }
     ];
