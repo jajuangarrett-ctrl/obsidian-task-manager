@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parseProjectDocument, parseTaskMarkdown } from "@fjg/task-core";
 import { LegacyTask, planLegacyMigration, planLegacyProjectMigration } from "./migrate";
 
 const args = parseArgs(process.argv.slice(2));
@@ -28,9 +29,9 @@ async function main(): Promise<void> {
 
   for (const item of expectedTasks) {
     const folder = resolveWithin(stagingPath, item.destination);
-    if (await exactFile(path.join(folder, "task.md"), item.taskMarkdown || "")) exactTaskFiles += 1;
+    if (await taskFileMatches(path.join(folder, "task.md"), item.taskMarkdown || "")) exactTaskFiles += 1;
     else issues.push(`Task record differs or is missing: ${item.destination}`);
-    if (await exactFile(path.join(folder, "updates.md"), item.updatesMarkdown || "")) exactUpdatesFiles += 1;
+    if (await updatesFileMatches(path.join(folder, "updates.md"), item.updatesMarkdown || "")) exactUpdatesFiles += 1;
     else issues.push(`Update log differs or is missing: ${item.destination}`);
     if (await isDirectory(path.join(folder, "attachments"))) attachmentFolders += 1;
     else issues.push(`Attachments folder is missing: ${item.destination}`);
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
 
   for (const item of expectedProjects) {
     const folder = resolveWithin(stagingPath, item.destination);
-    if (await exactFile(path.join(folder, "project.md"), item.projectMarkdown || "")) exactProjectFiles += 1;
+    if (await projectFileMatches(path.join(folder, "project.md"), item.projectMarkdown || "")) exactProjectFiles += 1;
     else issues.push(`Project record differs or is missing: ${item.destination}`);
   }
 
@@ -60,14 +61,14 @@ async function main(): Promise<void> {
     source_tasks: tasks.length,
     expected_tasks: expectedTasks.length,
     actual_task_files: actualTaskFiles,
-    exact_task_files: exactTaskFiles,
+    verified_task_files: exactTaskFiles,
     actual_update_files: actualUpdatesFiles,
-    exact_update_files: exactUpdatesFiles,
+    verified_update_files: exactUpdatesFiles,
     attachment_folders: attachmentFolders,
     source_managed_projects: projects.length,
     expected_projects: expectedProjects.length,
     actual_project_files: actualProjectFiles,
-    exact_project_files: exactProjectFiles,
+    verified_project_files: exactProjectFiles,
     issues
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -115,12 +116,41 @@ function resolveWithin(root: string, relative: string): string {
   return resolved;
 }
 
-async function exactFile(filePath: string, expected: string): Promise<boolean> {
+async function taskFileMatches(filePath: string, expected: string): Promise<boolean> {
   try {
-    return await fs.readFile(filePath, "utf8") === expected;
+    const actualDocument = parseTaskMarkdown(await fs.readFile(filePath, "utf8"));
+    const expectedDocument = parseTaskMarkdown(expected);
+    return JSON.stringify(actualDocument) === JSON.stringify(expectedDocument);
   } catch {
     return false;
   }
+}
+
+async function projectFileMatches(filePath: string, expected: string): Promise<boolean> {
+  try {
+    const actualDocument = parseProjectDocument(await fs.readFile(filePath, "utf8"));
+    const expectedDocument = parseProjectDocument(expected);
+    return JSON.stringify(actualDocument) === JSON.stringify(expectedDocument);
+  } catch {
+    return false;
+  }
+}
+
+async function updatesFileMatches(filePath: string, expected: string): Promise<boolean> {
+  try {
+    const actual = stripVaultFrontmatter(await fs.readFile(filePath, "utf8"));
+    return normalizeMarkdown(actual) === normalizeMarkdown(expected);
+  } catch {
+    return false;
+  }
+}
+
+function stripVaultFrontmatter(markdown: string): string {
+  return markdown.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+}
+
+function normalizeMarkdown(markdown: string): string {
+  return String(markdown || "").replace(/\r\n/g, "\n").trimEnd();
 }
 
 async function isDirectory(folderPath: string): Promise<boolean> {
