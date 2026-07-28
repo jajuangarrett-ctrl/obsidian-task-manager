@@ -2,6 +2,7 @@ import { createCreatePayload, createUpdatePayload, encodeProtocolPayload, Catalo
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
 import { fetchProjects, searchCatalog } from "./catalog-client";
 import { firstMeaningfulLine, sourceForPage, splitSelectedLines } from "./capture";
+import { responseOutputText } from "./openai-response";
 import {
   ClipperSettings,
   loadRecentTasks,
@@ -292,7 +293,7 @@ async function generateTitle(): Promise<void> {
     });
     const body = await response.json() as { output_text?: string; error?: { message?: string } };
     if (!response.ok) throw new Error(body.error?.message || `OpenAI HTTP ${response.status}`);
-    const title = String(body.output_text || "").trim().replace(/^["']|["']$/g, "");
+    const title = responseOutputText(body).replace(/^["']|["']$/g, "");
     if (!title) throw new Error("No title was returned.");
     elements.title.value = title;
     renderPreview();
