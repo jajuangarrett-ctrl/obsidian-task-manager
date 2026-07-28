@@ -19,6 +19,19 @@ import {
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
 import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
+import {
+  isCanonicalTaskFile,
+  markdownPreview,
+  RelatedFileKind,
+  relatedFileKind,
+  safeRelatedFileName
+} from "./related-files";
+
+export interface TaskRelatedFile {
+  file: TFile;
+  kind: RelatedFileKind;
+  preview: string;
+}
 
 export interface IndexedTask {
   record: TaskRecord;
@@ -26,6 +39,7 @@ export interface IndexedTask {
   taskFile: TFile;
   updatesFile: TFile | null;
   updates: TaskUpdatePreview[];
+  relatedFiles: TaskRelatedFile[];
   archived: boolean;
 }
 
@@ -67,10 +81,29 @@ export class TaskWorkspaceService {
           taskFile: file,
           updatesFile: updateFile instanceof TFile ? updateFile : null,
           updates,
+          relatedFiles: [],
           archived: file.path.startsWith(archivePrefix)
         });
       } catch (error) {
         console.error("[FJG Task Manager] Invalid task workspace", file.path, error);
+      }
+    }
+    const vaultFiles = this.app.vault.getFiles();
+    for (const task of next.values()) {
+      const related = vaultFiles
+        .filter((file) => file.path.startsWith(`${task.folderPath}/`) && !isCanonicalTaskFile(file.name))
+        .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
+      for (const file of related) {
+        const kind = relatedFileKind(file.extension);
+        let preview = "";
+        if (kind === "note" && file.stat.size <= 256 * 1024) {
+          try {
+            preview = markdownPreview(await this.app.vault.cachedRead(file));
+          } catch (error) {
+            console.warn("[FJG Task Manager] Could not preview related note", file.path, error);
+          }
+        }
+        task.relatedFiles.push({ file, kind, preview });
       }
     }
     this.index.clear();
@@ -211,6 +244,34 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
+  async createRelatedNote(taskId: string, title: string, content = ""): Promise<TFile> {
+    const task = this.getById(taskId);
+    const cleanTitle = safeRelatedFileName(title, "Untitled note").replace(/\.md$/i, "").trim();
+    if (!cleanTitle) throw new Error("Enter a note title.");
+    if (isCanonicalTaskFile(`${cleanTitle}.md`)) {
+      throw new Error("That name is reserved for the task workspace.");
+    }
+    const path = await this.availableFilePath(task.folderPath, `${cleanTitle}.md`);
+    const body = [`# ${cleanTitle}`, "", content.trim(), ""].join("\n").replace(/\n{3,}/g, "\n\n");
+    const file = await this.app.vault.create(path, body);
+    await this.refresh();
+    return file;
+  }
+
+  async importRelatedFiles(taskId: string, files: File[]): Promise<TFile[]> {
+    const task = this.getById(taskId);
+    const attachmentsPath = `${task.folderPath}/attachments`;
+    await this.ensureFolder(attachmentsPath);
+    const created: TFile[] = [];
+    for (const source of files) {
+      const name = safeRelatedFileName(source.name, "Attachment");
+      const path = await this.availableFilePath(attachmentsPath, name);
+      created.push(await this.app.vault.createBinary(path, await source.arrayBuffer()));
+    }
+    await this.refresh();
+    return created;
+  }
+
   async changeStatus(
     taskId: string,
     target: string,
@@ -315,6 +376,20 @@ export class TaskWorkspaceService {
       if (!cached && !diskEntry) return candidate;
     }
     throw new Error(`Could not create a unique workspace folder for ${record.title}.`);
+  }
+
+  private async availableFilePath(folderPath: string, fileName: string): Promise<string> {
+    const dot = fileName.lastIndexOf(".");
+    const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+    const extension = dot > 0 ? fileName.slice(dot) : "";
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const suffix = copyNumber === 1 ? "" : ` (${copyNumber})`;
+      const candidate = normalizePath(`${folderPath}/${stem}${suffix}${extension}`);
+      const cached = this.app.vault.getAbstractFileByPath(candidate);
+      const diskEntry = cached ? null : await this.app.vault.adapter.stat(candidate);
+      if (!cached && !diskEntry) return candidate;
+    }
+    throw new Error(`Could not create a unique file named ${fileName}.`);
   }
 
   private async ensureFolder(path: string): Promise<void> {

@@ -96,3 +96,147 @@ export class TextEntryModal extends Modal {
     this.contentEl.empty();
   }
 }
+
+export class TaskFileModal extends Modal {
+  private mode: "note" | "attachment" = "note";
+  private noteTitle = "";
+  private noteBody = "";
+  private attachments: File[] = [];
+
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    private readonly createNote: (title: string, body: string) => Promise<void>,
+    private readonly attachFiles: (files: File[]) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-file-modal-shell");
+    this.setTitle(`Add file to ${this.taskTitle}`);
+    const intro = this.contentEl.createEl("p", {
+      text: "Create a working note or attach an existing document. It will stay inside this task workspace.",
+      cls: "fjg-task-file-intro"
+    });
+    intro.setAttr("data-mode", this.mode);
+    this.render();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private render(): void {
+    this.contentEl.querySelectorAll(".fjg-task-file-content").forEach((element) => element.remove());
+    const shell = this.contentEl.createDiv({ cls: "fjg-task-file-content" });
+    const tabs = shell.createDiv({
+      cls: "fjg-task-file-tabs",
+      attr: { role: "tablist", "aria-label": "File type" }
+    });
+    this.createTab(tabs, "note", "New note");
+    this.createTab(tabs, "attachment", "Attach files");
+    if (this.mode === "note") this.renderNoteForm(shell);
+    else this.renderAttachmentForm(shell);
+  }
+
+  private createTab(parent: HTMLElement, mode: "note" | "attachment", label: string): void {
+    const button = parent.createEl("button", {
+      text: label,
+      cls: this.mode === mode ? "is-active" : "",
+      attr: {
+        type: "button",
+        role: "tab",
+        "aria-selected": String(this.mode === mode)
+      }
+    });
+    button.addEventListener("click", () => {
+      this.mode = mode;
+      this.render();
+    });
+  }
+
+  private renderNoteForm(parent: HTMLElement): void {
+    const panel = parent.createDiv({ cls: "fjg-task-file-panel" });
+    const titleLabel = panel.createEl("label", { text: "Note title" });
+    const title = panel.createEl("input", {
+      type: "text",
+      placeholder: "Meeting notes, draft, research…",
+      attr: { "aria-label": "Related note title" }
+    });
+    title.value = this.noteTitle;
+    title.addEventListener("input", () => this.noteTitle = title.value);
+    const bodyLabel = panel.createEl("label", { text: "Starting notes (optional)" });
+    const body = panel.createEl("textarea", {
+      placeholder: "Add context now, or leave this blank and write in the new note.",
+      attr: { "aria-label": "Starting note content", rows: "7" }
+    });
+    body.value = this.noteBody;
+    body.addEventListener("input", () => this.noteBody = body.value);
+    const submit = panel.createEl("button", { text: "Create and open note", cls: "mod-cta" });
+    submit.addEventListener("click", async () => {
+      if (!this.noteTitle.trim()) {
+        title.focus();
+        return;
+      }
+      submit.disabled = true;
+      try {
+        await this.createNote(this.noteTitle.trim(), this.noteBody.trim());
+        this.close();
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    window.setTimeout(() => title.focus(), 0);
+    titleLabel.htmlFor = title.id;
+    bodyLabel.htmlFor = body.id;
+  }
+
+  private renderAttachmentForm(parent: HTMLElement): void {
+    const panel = parent.createDiv({ cls: "fjg-task-file-panel" });
+    const drop = panel.createEl("label", { cls: "fjg-task-file-picker" });
+    drop.createEl("span", { text: "Choose one or more files", cls: "fjg-task-file-picker-title" });
+    drop.createEl("span", {
+      text: "Documents, PDFs, images, spreadsheets, and other supporting files are accepted.",
+      cls: "fjg-task-file-picker-copy"
+    });
+    const input = drop.createEl("input", {
+      type: "file",
+      attr: { multiple: "true", "aria-label": "Choose related files" }
+    });
+    input.addEventListener("change", () => {
+      this.attachments = Array.from(input.files || []);
+      this.renderAttachmentSelection(panel, submit);
+    });
+    const selection = panel.createDiv({ cls: "fjg-task-file-selection" });
+    if (this.attachments.length) {
+      selection.setText(fileSelectionLabel(this.attachments));
+    }
+    const submit = panel.createEl("button", {
+      text: "Add to task",
+      cls: "mod-cta"
+    });
+    submit.disabled = !this.attachments.length;
+    submit.addEventListener("click", async () => {
+      if (!this.attachments.length) return;
+      submit.disabled = true;
+      try {
+        await this.attachFiles(this.attachments);
+        this.close();
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
+
+  private renderAttachmentSelection(panel: HTMLElement, submit: HTMLButtonElement): void {
+    const selection = panel.querySelector<HTMLElement>(".fjg-task-file-selection");
+    if (selection) selection.setText(fileSelectionLabel(this.attachments));
+    submit.disabled = !this.attachments.length;
+  }
+}
+
+function fileSelectionLabel(files: File[]): string {
+  if (files.length === 1) return files[0].name;
+  return files.length ? `${files.length} files selected` : "";
+}
