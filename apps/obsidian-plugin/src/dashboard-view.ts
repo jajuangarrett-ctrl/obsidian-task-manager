@@ -15,6 +15,7 @@ import {
   TaskViewKey
 } from "./dashboard-model";
 import type { IndexedTask } from "./workspace-service";
+import { formatFileSize, RelatedFileKind } from "./related-files";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
 
@@ -24,6 +25,7 @@ export class TaskDashboardView extends ItemView {
   private projectQuery = "";
   private view: TaskViewKey = "do-first";
   private project = ALL_PROJECTS;
+  private readonly expandedFileTasks = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private readonly taskPlugin: FjgTaskManagerPlugin) {
     super(leaf);
@@ -344,7 +346,96 @@ export class TaskDashboardView extends ItemView {
         new Notice(error instanceof Error ? error.message : String(error));
       }
     });
+    this.renderRelatedFiles(row, task);
     this.renderRecentUpdates(row, task);
+  }
+
+  private renderRelatedFiles(parent: HTMLElement, task: IndexedTask): void {
+    const section = parent.createDiv({ cls: "fjg-related-files" });
+    const heading = section.createDiv({ cls: "fjg-related-files-heading" });
+    const title = heading.createDiv({ cls: "fjg-related-files-title" });
+    title.createEl("h3", { text: "Related files" });
+    title.createSpan({
+      text: String(task.relatedFiles.length),
+      cls: "fjg-related-files-count",
+      attr: { "aria-label": `${task.relatedFiles.length} related ${task.relatedFiles.length === 1 ? "file" : "files"}` }
+    });
+    const actions = heading.createDiv({ cls: "fjg-related-file-actions" });
+    const add = this.iconButton(actions, "paperclip", "Add file", `Add a file to ${task.record.title}`);
+    add.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
+    const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task folder for ${task.record.title}`);
+    folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
+
+    if (!task.relatedFiles.length) {
+      section.createEl("p", {
+        text: "No related files yet. Add a note, document, PDF, image, or other supporting file.",
+        cls: "fjg-no-related-files"
+      });
+      return;
+    }
+
+    const expanded = this.expandedFileTasks.has(task.record.task_id);
+    const visible = expanded ? task.relatedFiles : task.relatedFiles.slice(0, 3);
+    const grid = section.createDiv({ cls: "fjg-related-file-grid" });
+    for (const related of visible) {
+      const button = grid.createEl("button", {
+        cls: "fjg-related-file-card",
+        attr: {
+          type: "button",
+          "aria-label": `Open ${related.file.name}`
+        }
+      });
+      if (related.kind === "image") {
+        button.createEl("img", {
+          cls: "fjg-related-file-thumbnail",
+          attr: {
+            src: this.app.vault.getResourcePath(related.file),
+            alt: ""
+          }
+        });
+      } else {
+        const icon = button.createSpan({ cls: `fjg-related-file-icon is-${related.kind}` });
+        setIcon(icon, relatedFileIcon(related.kind));
+      }
+      const copy = button.createSpan({ cls: "fjg-related-file-copy" });
+      copy.createSpan({ text: related.file.basename, cls: "fjg-related-file-name" });
+      if (related.preview) {
+        copy.createSpan({ text: related.preview, cls: "fjg-related-file-preview" });
+      }
+      copy.createSpan({
+        text: relatedFileMeta(task.folderPath, related.file.path, related.file.extension, related.file.stat.size),
+        cls: "fjg-related-file-meta"
+      });
+      button.addEventListener("click", () => void this.taskPlugin.openRelatedFile(task.record.task_id, related.file.path));
+    }
+    if (task.relatedFiles.length > 3) {
+      const toggle = section.createEl("button", {
+        text: expanded ? "Show fewer files" : `Show all ${task.relatedFiles.length} files`,
+        cls: "fjg-related-files-toggle",
+        attr: { type: "button" }
+      });
+      toggle.addEventListener("click", () => {
+        if (expanded) this.expandedFileTasks.delete(task.record.task_id);
+        else this.expandedFileTasks.add(task.record.task_id);
+        this.render();
+      });
+    }
+  }
+
+  private iconButton(
+    parent: HTMLElement,
+    iconName: string,
+    text: string,
+    ariaLabel: string
+  ): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: "fjg-related-file-action",
+      attr: { type: "button", "aria-label": ariaLabel }
+    });
+    const icon = button.createSpan();
+    setIcon(icon, iconName);
+    button.createSpan({ text });
+    return button;
   }
 
   private renderRecentUpdates(parent: HTMLElement, task: IndexedTask): void {
@@ -425,4 +516,20 @@ function updateMeta(timestamp: string, actor: string): string {
     }).format(date)
     : timestamp;
   return actor ? `${formatted} · ${actor}` : formatted;
+}
+
+function relatedFileIcon(kind: RelatedFileKind): string {
+  if (kind === "note") return "notebook-pen";
+  if (kind === "pdf") return "file-text";
+  if (kind === "document") return "files";
+  return "file";
+}
+
+function relatedFileMeta(folderPath: string, filePath: string, extension: string, bytes: number): string {
+  const relative = filePath.startsWith(`${folderPath}/`)
+    ? filePath.slice(folderPath.length + 1)
+    : filePath;
+  const folder = relative.includes("/") ? `${relative.slice(0, relative.lastIndexOf("/"))} · ` : "";
+  const type = extension ? extension.toUpperCase() : "FILE";
+  return `${folder}${type} · ${formatFileSize(bytes)}`;
 }

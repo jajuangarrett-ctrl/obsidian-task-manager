@@ -8,7 +8,7 @@ import {
 import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
-import { CreateTaskModal, TextEntryModal } from "./src/modals";
+import { CreateTaskModal, TaskFileModal, TextEntryModal } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
 import {
@@ -47,6 +47,18 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) this.openUpdateModal(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "add-task-file", name: "Add File to Task Workspace", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) this.openTaskFileModal(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "open-task-folder", name: "Open Task Folder", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) void this.openTaskFolder(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "mark-task-completed", name: "Mark Task Completed", checkCallback: (checking) => {
@@ -192,6 +204,50 @@ export default class FjgTaskManagerPlugin extends Plugin {
       return;
     }
     await this.app.workspace.getLeaf("tab").openFile(task.updatesFile);
+  }
+
+  openTaskFileModal(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    new TaskFileModal(
+      this.app,
+      task.record.title,
+      async (title, body) => {
+        const file = await this.workspaceService.createRelatedNote(taskId, title, body);
+        await this.app.workspace.getLeaf("tab").openFile(file);
+        new Notice(`Note added to ${task.record.title}.`);
+        this.refreshDashboard();
+      },
+      async (files) => {
+        const created = await this.workspaceService.importRelatedFiles(taskId, files);
+        new Notice(`${created.length} ${created.length === 1 ? "file" : "files"} added to ${task.record.title}.`);
+        this.refreshDashboard();
+      }
+    ).open();
+  }
+
+  async openRelatedFile(taskId: string, path: string): Promise<void> {
+    const task = this.workspaceService.getById(taskId);
+    const file = task.relatedFiles.find((related) => related.file.path === path)?.file;
+    if (!file) {
+      new Notice("That related file is no longer available.");
+      return;
+    }
+    await this.app.workspace.getLeaf("tab").openFile(file);
+  }
+
+  async openTaskFolder(taskId: string): Promise<void> {
+    const task = this.workspaceService.getById(taskId);
+    const explorerLeaf = this.app.workspace.getLeavesOfType("file-explorer")[0];
+    const explorer = explorerLeaf?.view as unknown as {
+      revealInFolder?: (file: TFile) => void | Promise<void>;
+    };
+    if (explorerLeaf && typeof explorer.revealInFolder === "function") {
+      await explorer.revealInFolder(task.taskFile);
+      this.app.workspace.revealLeaf(explorerLeaf);
+      return;
+    }
+    await this.openTask(taskId);
+    new Notice("Task opened. Its workspace folder is available in Obsidian’s file navigation.");
   }
 
   private async handleClipperPayload(encoded: string): Promise<void> {
