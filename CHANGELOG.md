@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0 — 2026-07-28
+
+### Added
+
+- Add an **Archived** task view that lists task workspaces from the task archive and provides **Reopen to Do First**.
+- Add Active Projects and Archived Projects lists without adding another top-level dashboard section.
+- Add a guarded **Archive Project** action only for registered projects with zero open tasks.
+- Move a finished project's completed tasks to `08 Tasks/Archive/` and its project workspace to `08 Tasks/Project Archive/` after explicit confirmation.
+- Add **Reopen** for archived projects while intentionally leaving their tasks archived for separate review.
+- Add a configurable project archive root and synchronized project lifecycle properties.
+
+### Safety
+
+- Project archiving is rejected by the workspace service whenever an open task remains, even if invoked outside the dashboard.
+- Project and task files are moved, never deleted; updates, related documents, attachments, and project notes remain intact.
+- Existing project files without lifecycle properties continue to load as active projects.
+
+### Validation
+
+- Add archive-view, project-eligibility, legacy-project, body-preservation, archive-transition, and reopen-transition tests.
+
 ## 0.5.0 — 2026-07-28
 
 ### Added

@@ -13,12 +13,15 @@
 ## Dashboard
 
 - [x] Confirm the dashboard opens to Do First.
-- [x] Switch among the nine task views and confirm counts follow canonical status and due-date rules.
+- [x] Switch among the ten task views and confirm counts follow canonical status and due-date rules.
 - [x] Search and filter active tasks by project.
 - [x] Review the Projects overview and open a project-scoped All Open view.
 - [x] Confirm project cards distinguish open counts from total non-archived counts.
 - [x] Confirm the two newest task updates render below the task and View all opens `updates.md`.
 - [x] Confirm manual Refresh reloads recent update cards.
+- [x] Confirm archived task workspaces appear in Archived and expose Reopen to Do First.
+- [x] Confirm only registered projects with zero open tasks expose Archive Project.
+- [x] Confirm Archived Projects lists archived project definitions and exposes Reopen.
 - [ ] Create, update, complete, archive, and open tasks.
 - [ ] Test desktop and Obsidian Mobile.
 

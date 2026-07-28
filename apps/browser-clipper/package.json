@@ -1,6 +1,6 @@
 {
   "name": "@fjg/obsidian-task-clipper",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Chrome clipper for FJG Task Manager task workspaces.",
   "scripts": {
