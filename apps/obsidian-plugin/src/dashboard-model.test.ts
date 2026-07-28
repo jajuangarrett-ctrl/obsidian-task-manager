@@ -82,4 +82,13 @@ describe("dashboard project summaries", () => {
     expect(matchesProject(records[0], "Basic Needs")).toBe(true);
     expect(matchesProject(records[0], "CalWORKs")).toBe(false);
   });
+
+  it("keeps registered projects visible before they have tasks", () => {
+    expect(summarizeProjects(records, ["Basic Needs", "New Project"])).toEqual([
+      { key: "Basic Needs", name: "Basic Needs", openCount: 1, totalCount: 2 },
+      { key: "CalWORKs", name: "CalWORKs", openCount: 1, totalCount: 1 },
+      { key: "New Project", name: "New Project", openCount: 0, totalCount: 0 },
+      { key: NO_PROJECT, name: "No project", openCount: 1, totalCount: 1 }
+    ]);
+  });
 });

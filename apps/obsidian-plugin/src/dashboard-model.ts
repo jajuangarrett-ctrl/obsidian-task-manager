@@ -49,8 +49,21 @@ export function countTasksForView(records: readonly TaskRecord[], view: TaskView
   return records.filter((record) => taskMatchesView(record, view, today)).length;
 }
 
-export function summarizeProjects(records: readonly TaskRecord[]): ProjectSummary[] {
+export function summarizeProjects(
+  records: readonly TaskRecord[],
+  registeredProjects: readonly string[] = []
+): ProjectSummary[] {
   const summaries = new Map<string, ProjectSummary>();
+  for (const project of registeredProjects) {
+    const name = project.trim();
+    if (!name || summaries.has(name)) continue;
+    summaries.set(name, {
+      key: name,
+      name,
+      openCount: 0,
+      totalCount: 0
+    });
+  }
   for (const record of records) {
     if (record.status === "archived") continue;
     const project = record.project.trim();
