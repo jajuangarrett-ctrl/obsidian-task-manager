@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FJG Obsidian Task Clipper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="popup-page">
+  <main class="clipper-shell">
+    <header class="clipper-header">
+      <div><p class="eyebrow">FJG OBSIDIAN</p><h1>Task Clipper</h1></div>
+      <button id="open-settings" class="secondary">Settings</button>
+    </header>
+
+    <nav class="mode-tabs" aria-label="Clipper mode">
+      <button id="create-tab" class="is-active">Create Task</button>
+      <button id="update-tab">Add Update</button>
+    </nav>
+
+    <section id="create-panel">
+      <label>Task title</label>
+      <div class="inline-field">
+        <input id="task-title" type="text">
+        <button id="generate-title" class="secondary">Generate</button>
+      </div>
+
+      <label for="task-text">Task text</label>
+      <textarea id="task-text" rows="7" placeholder="Selected text will appear here."></textarea>
+
+      <label class="checkbox-row"><input id="split-lines" type="checkbox"> Split selected lines into separate tasks</label>
+
+      <label for="status">Status</label>
+      <select id="status"></select>
+
+      <label for="project">Project</label>
+      <select id="project"><option value="">No project</option></select>
+
+      <label for="tags">Tags</label>
+      <input id="tags" type="text" value="task">
+
+      <label class="checkbox-row"><input id="create-source" type="checkbox" checked> Include page source</label>
+    </section>
+
+    <section id="update-panel" hidden>
+      <label for="task-query">Task to update</label>
+      <input id="task-query" type="search" placeholder="Search title, ID, project, status, or person" autocomplete="off">
+      <div id="task-results" class="task-results"></div>
+
+      <label for="update-text">Update text</label>
+      <textarea id="update-text" rows="7"></textarea>
+
+      <label class="checkbox-row"><input id="update-source" type="checkbox" checked> Include page source</label>
+    </section>
+
+    <section class="preview">
+      <header><strong>Preview</strong><span id="preview-state"></span></header>
+      <pre id="preview-body"></pre>
+    </section>
+
+    <p id="notice" class="notice" hidden></p>
+    <button id="submit" class="submit">Create Task</button>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

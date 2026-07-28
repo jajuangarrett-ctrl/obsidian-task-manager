@@ -1,0 +1,156 @@
+.fjg-task-dashboard {
+  --fjg-navy: #142b4a;
+  --fjg-orange: #e36f1e;
+  --fjg-teal: #0f766e;
+  --fjg-soft: color-mix(in srgb, var(--background-secondary) 86%, var(--fjg-navy));
+  padding: 28px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.fjg-task-header,
+.fjg-task-filters,
+.fjg-task-row,
+.fjg-task-controls,
+.fjg-header-actions,
+.fjg-task-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fjg-task-header {
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.fjg-task-header h1 {
+  margin: 0;
+  color: var(--fjg-navy);
+}
+
+.theme-dark .fjg-task-header h1 {
+  color: var(--text-normal);
+}
+
+.fjg-eyebrow {
+  color: var(--fjg-teal);
+  font-weight: 800;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px;
+}
+
+.fjg-task-filters {
+  flex-wrap: wrap;
+  background: var(--background-secondary);
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.fjg-task-filters input {
+  min-width: 260px;
+  flex: 1;
+}
+
+.fjg-task-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  margin: 16px 0;
+}
+
+.fjg-metric {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.fjg-metric strong {
+  color: var(--fjg-orange);
+  font-size: 1.8rem;
+}
+
+.fjg-task-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.fjg-task-row {
+  justify-content: space-between;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-primary);
+}
+
+.fjg-task-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.fjg-task-title {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--text-normal);
+  font-weight: 750;
+  font-size: 1rem;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.fjg-task-title:hover {
+  color: var(--fjg-teal);
+}
+
+.fjg-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 6px;
+}
+
+.fjg-task-meta .is-overdue {
+  color: var(--text-error);
+  font-weight: 700;
+}
+
+.fjg-task-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fjg-empty {
+  padding: 44px;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 12px;
+}
+
+@media (max-width: 760px) {
+  .fjg-task-dashboard {
+    padding: 16px;
+  }
+
+  .fjg-task-header,
+  .fjg-task-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fjg-task-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .fjg-task-controls {
+    justify-content: flex-start;
+  }
+}

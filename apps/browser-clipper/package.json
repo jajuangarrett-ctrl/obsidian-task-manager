@@ -1,0 +1,13 @@
+{
+  "name": "@fjg/obsidian-task-clipper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome clipper for FJG Task Manager task workspaces.",
+  "scripts": {
+    "build": "node esbuild.config.mjs"
+  },
+  "dependencies": {
+    "@fjg/task-core": "0.1.0",
+    "@fjg/task-protocol": "0.1.0"
+  }
+}

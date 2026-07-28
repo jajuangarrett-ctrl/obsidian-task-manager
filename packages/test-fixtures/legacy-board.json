@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "FJG-DEMO01",
+      "title": "Review the sample budget packet",
+      "bucket": "DoFirst",
+      "urgent": false,
+      "project": "Sample Program",
+      "assignee": null,
+      "dueDate": "2026-08-15",
+      "tags": ["task", "DoFirst"],
+      "updates": [
+        {
+          "id": "demo-update-1",
+          "text": "The sample packet was received.",
+          "createdAt": "2026-07-20T16:00:00.000Z",
+          "source": "migration fixture"
+        }
+      ],
+      "createdAt": "2026-07-19T16:00:00.000Z",
+      "updatedAt": "2026-07-20T16:00:00.000Z"
+    },
+    {
+      "id": "FJG-DEMO02",
+      "title": "Retired sample task",
+      "bucket": "Cancelled",
+      "tags": ["task", "Cancelled"],
+      "updates": [],
+      "createdAt": "2026-06-01T16:00:00.000Z",
+      "updatedAt": "2026-06-15T16:00:00.000Z"
+    }
+  ]
+}

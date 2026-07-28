@@ -1,0 +1,12 @@
+{
+  "name": "@fjg/task-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fjg/task-core": "0.1.0"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "FJG Obsidian Task Clipper",
+  "version": "0.1.0",
+  "description": "Create Obsidian task workspaces or add selected text as an update.",
+  "homepage_url": "https://github.com/jajuangarrett-ctrl/obsidian-task-manager",
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "contextMenus",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://api.openai.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Open FJG Obsidian Task Clipper"
+    }
+  }
+}

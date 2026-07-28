@@ -1,0 +1,11 @@
+{
+  "name": "@fjg/task-migration",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs"
+  },
+  "dependencies": {
+    "@fjg/task-core": "0.1.0"
+  }
+}

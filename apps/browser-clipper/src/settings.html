@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FJG Task Clipper Settings</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="settings-page">
+  <main class="settings-shell">
+    <p class="eyebrow">FJG OBSIDIAN</p>
+    <h1>Task Clipper Settings</h1>
+    <p>Connect live task search to the FJG Task Manager plugin running in Obsidian Desktop.</p>
+
+    <label for="catalog-port">Catalog port</label>
+    <input id="catalog-port" type="number" min="1024" max="65535">
+
+    <label for="catalog-token">Pairing token</label>
+    <input id="catalog-token" type="password" autocomplete="off">
+
+    <button id="test-catalog" class="secondary">Test connection</button>
+
+    <label for="projects">Fallback projects, one per line</label>
+    <textarea id="projects" rows="6"></textarea>
+
+    <label for="openai-model">OpenAI model for Generate</label>
+    <input id="openai-model" type="text">
+
+    <label for="openai-key">OpenAI API key</label>
+    <input id="openai-key" type="password" autocomplete="off">
+    <p class="hint">The key stays in Chrome local extension storage and is used only when Generate is clicked.</p>
+
+    <p id="settings-notice" class="notice"></p>
+    <button id="save-settings" class="submit">Save settings</button>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

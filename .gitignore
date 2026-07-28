@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+release/
+*.zip
+apps/browser-clipper/dist/
+apps/obsidian-plugin/main.js
+tools/*/dist/

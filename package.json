@@ -1,0 +1,36 @@
+{
+  "name": "obsidian-task-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FJG Task Manager monorepo for Obsidian task workspaces and browser capture.",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @fjg/obsidian-task-manager-plugin && npm run build --workspace @fjg/obsidian-task-clipper && npm run build --workspace @fjg/taskctl && npm run build --workspace @fjg/task-migration && node scripts/sync-plugin-root.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "npm run typecheck && npm test && npm run build",
+    "install:vault": "node scripts/install-vault.mjs",
+    "package:release": "node scripts/package-release.mjs"
+  },
+  "dependencies": {
+    "ulid": "^3.0.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.33",
+    "@types/node": "^24.10.0",
+    "builtin-modules": "^5.0.0",
+    "esbuild": "^0.27.0",
+    "obsidian": "^1.10.3",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
