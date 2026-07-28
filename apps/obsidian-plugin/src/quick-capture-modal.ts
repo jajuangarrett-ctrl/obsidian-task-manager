@@ -345,7 +345,7 @@ export class QuickCaptureModal extends Modal {
   }
 
   private setControlsDisabled(disabled: boolean): void {
-    for (const control of this.contentEl.querySelectorAll("button, input, textarea, select")) {
+    for (const control of Array.from(this.contentEl.querySelectorAll("button, input, textarea, select"))) {
       if (
         control instanceof HTMLButtonElement
         || control instanceof HTMLInputElement

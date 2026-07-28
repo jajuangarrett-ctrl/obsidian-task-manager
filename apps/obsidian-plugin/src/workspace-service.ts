@@ -426,9 +426,14 @@ export class TaskWorkspaceService {
       }
       return created;
     } catch (error) {
-      for (const task of [...created].reverse()) {
-        const folder = this.app.vault.getAbstractFileByPath(task.folderPath);
-        if (folder instanceof TFolder) await this.app.vault.delete(folder, true);
+      try {
+        await this.rollbackTaskWorkspaces(plannedIds);
+      } catch (rollbackError) {
+        await this.refresh();
+        throw new Error(
+          `Batch creation failed and rollback needs attention: `
+          + `${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`
+        );
       }
       await this.refresh();
       throw new Error(`Batch creation was rolled back: ${error instanceof Error ? error.message : String(error)}`);
@@ -636,6 +641,29 @@ export class TaskWorkspaceService {
       } else if (!(existing instanceof TFolder)) {
         throw new Error(`A file blocks the folder path ${current}.`);
       }
+    }
+  }
+
+  private async rollbackTaskWorkspaces(taskIds: Set<string>): Promise<void> {
+    const settings = this.getSettings();
+    const roots = [
+      `${normalizePath(settings.activeRoot)}/`,
+      `${normalizePath(settings.archiveRoot)}/`
+    ];
+    const folders = new Map<string, TFolder>();
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (file.name !== "task.md" || !roots.some((root) => file.path.startsWith(root))) continue;
+      try {
+        const document = parseTaskMarkdown(await this.app.vault.read(file));
+        if (taskIds.has(document.record.task_id) && file.parent) {
+          folders.set(file.parent.path, file.parent);
+        }
+      } catch {
+        // An unrelated invalid task file must not prevent rollback of this batch.
+      }
+    }
+    for (const folder of [...folders.values()].reverse()) {
+      await this.app.vault.delete(folder, true);
     }
   }
 }

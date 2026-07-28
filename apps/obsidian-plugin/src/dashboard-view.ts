@@ -658,7 +658,17 @@ export class TaskDashboardView extends ItemView {
     }
     const list = section.createDiv({ cls: "fjg-update-preview-list" });
     for (const update of updates) {
-      const card = list.createEl("article", { cls: "fjg-update-preview" });
+      const card = list.createEl("button", {
+        cls: "fjg-update-preview",
+        attr: {
+          type: "button",
+          "aria-label": `Open task ${task.record.title}`
+        }
+      });
+      const taskName = card.createSpan({ cls: "fjg-update-preview-task" });
+      const taskIcon = taskName.createSpan({ cls: "fjg-update-preview-task-icon" });
+      setIcon(taskIcon, "list-checks");
+      taskName.createSpan({ text: task.record.title });
       card.createEl("p", {
         text: updateMeta(update.timestamp, update.actor),
         cls: "fjg-update-preview-meta"
@@ -667,6 +677,7 @@ export class TaskDashboardView extends ItemView {
         text: update.text,
         cls: "fjg-update-preview-text"
       });
+      card.addEventListener("click", () => void this.taskPlugin.openTask(task.record.task_id));
     }
   }
 }
