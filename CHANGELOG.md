@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Migration safety
+
+- Stage legacy tasks in readable title-based folders with deterministic numeric suffixes instead of exposing internal IDs.
+- Stage project workspaces for both the managed project list and project names referenced only by tasks.
+- Use an explicit unknown-date sentinel for missing creation dates and keep excluded legacy tags visible in the manifest.
+- Add a source-to-staging audit that verifies every task record, complete update history, attachments folder, and project record.
+- Share the project workspace contract between the plugin and migration tool so staged projects use the same lifecycle schema as live projects.
+
 ## 0.6.0 — 2026-07-28
 
 ### Added

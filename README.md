@@ -104,6 +104,16 @@ node tools/migration/dist/migrate.cjs \
 
 Review `migration-manifest.json`, then repeat with `--apply`. The importer never connects to or modifies the legacy Taskboard.
 
+After applying into an isolated staging directory, reconcile every task, update history, attachments folder, and project workspace:
+
+```bash
+node tools/migration/dist/audit.cjs \
+  --input /path/to/tasks.json \
+  --staging /path/to/staging
+```
+
+The importer uses readable task-title folders, adds quiet numeric suffixes for duplicate titles, imports only the approved `task` tag, uses an explicit unknown-date sentinel when the source creation date is missing, and stages both managed and task-referenced project workspaces.
+
 ## Release
 
 ```bash
