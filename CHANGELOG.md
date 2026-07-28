@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.0 — 2026-07-27
+
+### Added
+
+- Add a touch-friendly Quick Capture modal modeled on the iOS Taskboard capture flow.
+- Add typed capture, in-plugin microphone recording, OpenAI speech-to-text, and structured AI task drafting.
+- Populate reviewable title, details, status, project, due date, and optional delegation fields before creation.
+- Add a Quick Capture command, circle-plus ribbon action, dashboard Capture Task action, Advanced URI command, and prefilled custom URI.
+- Add plugin settings for the OpenAI API key, task drafting model, transcription model, automatic drafting after dictation, and a safe connection test.
+- Show the two newest non-creation updates directly below every task, with a View all link to the complete update log.
+- Add update-log parsing and automatic dashboard refresh support for update-file changes.
+- Add current-run visual validation against the iOS capture and update references.
+
+### Fixed
+
+- Fix Chrome Generate Title by parsing the nested text shape returned by the OpenAI Responses REST API.
+- Make task-root initialization resilient when the vault folders exist on disk before Obsidian's file cache is fully ready.
+- Make the dashboard Refresh action visibly reload recent task updates.
+
+### Validation
+
+- 37 automated tests pass across nine test files.
+- TypeScript validation and all production builds pass.
+- A live API smoke test returned a valid strict structured task draft.
+- The installed plugin loads without FJG Task Manager console errors and renders both update cards and the Quick Capture modal.
+
 ## 0.2.0 — 2026-07-27
 
 ### Added

@@ -1,6 +1,6 @@
 # FJG Task Manager
 
-Folder-based task workspaces for Obsidian with a native dashboard, Chrome clipping, safe agent updates, archive moves, and migration tooling.
+Folder-based task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
 ## Architecture
 
@@ -22,6 +22,33 @@ The dashboard keeps **Do First** as the opening view and adds two clear sections
 
 Tasks without a project appear in a separate **No project** group. Archived work remains outside the active dashboard because archiving physically moves its workspace to the configured archive root.
 
+Each task row shows its two newest task updates. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
+
+## Quick capture
+
+Use **FJG Task Manager: Quick Capture Task**, the circle-plus ribbon icon, or **Capture Task** on the dashboard.
+
+1. Type a rough task description or select **Dictate** and record it.
+2. Select **Draft Task**, or let drafting run automatically after transcription.
+3. Review the title, status, project, due date, details, and optional delegation.
+4. Select **Create Task**.
+
+The AI draft never creates a task automatically. The user always reviews the structured fields first. Status remains a property, and `task` remains the only automatic tag.
+
+The Advanced URI command is:
+
+```text
+obsidian://advanced-uri?vault=FJG%20Vault&commandid=fjg-task-manager%3Aquick-capture
+```
+
+An iOS Shortcut can also URL-encode dictated text and open:
+
+```text
+obsidian://fjg-task-manager?text=<URL-encoded dictated text>
+```
+
+Configure the OpenAI key, drafting model, transcription model, and automatic drafting behavior in FJG Task Manager settings.
+
 ## Build and test
 
 ```bash
@@ -35,7 +62,7 @@ npm run check
 npm run install:vault -- --vault "/path/to/your/vault"
 ```
 
-Enable **FJG Task Manager** in Obsidian Community Plugins, then use **Open Task Dashboard**.
+Enable **FJG Task Manager** in Obsidian Community Plugins, then use **Open Task Dashboard** or **Quick Capture Task**.
 
 ## Load the Chrome extension
 

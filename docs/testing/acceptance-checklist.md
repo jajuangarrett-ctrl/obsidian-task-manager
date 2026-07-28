@@ -17,8 +17,20 @@
 - [x] Search and filter active tasks by project.
 - [x] Review the Projects overview and open a project-scoped All Open view.
 - [x] Confirm project cards distinguish open counts from total non-archived counts.
+- [x] Confirm the two newest task updates render below the task and View all opens `updates.md`.
+- [x] Confirm manual Refresh reloads recent update cards.
 - [ ] Create, update, complete, archive, and open tasks.
 - [ ] Test desktop and Obsidian Mobile.
+
+## Quick Capture
+
+- [x] Open Quick Capture from the dashboard and confirm the touch-friendly review form renders.
+- [x] Validate strict AI task drafting with an active key without exposing the credential.
+- [x] Confirm AI-selected status, project, and due date are constrained by local validation.
+- [x] Confirm the capture command and custom protocol handlers are registered.
+- [ ] Confirm microphone permission and speech transcription on Obsidian Desktop.
+- [ ] Confirm microphone permission and speech transcription on Obsidian Mobile.
+- [ ] Install and run both iOS Shortcut variants on Franklin's iPhone.
 
 ## Chrome
 
@@ -37,4 +49,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.2.0](validation-report-0.2.0.md) for the latest reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.3.0](validation-report-0.3.0.md) for the latest reproducible validation record and remaining manual acceptance.
