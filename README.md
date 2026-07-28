@@ -28,7 +28,7 @@ Select **New Project** on the Projects screen to create a project before it has 
 
 When a registered project has zero open tasks, its card offers **Archive**. After confirmation, all completed tasks in that project move to `08 Tasks/Archive/` and the project workspace moves to `08 Tasks/Project Archive/`. Nothing is deleted. **Archived Projects** lists the finished project and provides **Reopen**; reopening returns only the project definition to the active list, while its tasks remain archived until explicitly reopened.
 
-Each task row shows its two newest task updates. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
+Each task row shows its two newest task updates. The dashboard's Recent Updates section identifies the associated task on every update card, and selecting a card opens that task. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
 
 Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Open folder** reveals the workspace in Obsidian's file explorer.
 
@@ -37,11 +37,11 @@ Each task also includes a compact **Related files** section. Markdown notes show
 Use **FJG Task Manager: Quick Capture Task**, the circle-plus ribbon icon, or **Capture Task** on the dashboard.
 
 1. Type a rough task description or select **Dictate** and record it.
-2. Select **Draft Task**, or let drafting run automatically after transcription.
-3. Review the title, status, project, due date, details, and optional delegation.
-4. Select **Create Task**.
+2. Select **Draft Tasks**, or let drafting run automatically after transcription.
+3. Review each distinct action as its own editable task card. Remove any draft you do not want.
+4. Select **Create Task** or **Create N Tasks**.
 
-The AI draft never creates a task automatically. The user always reviews the structured fields first. Status remains a property, and `task` remains the only automatic tag.
+AI drafting can return up to 20 task cards from one capture. It never creates a task automatically, never merges independent actions, and leaves due dates blank unless timing was explicitly stated. The user always reviews the structured fields first. Status remains a property, and `task` remains the only automatic tag.
 
 The Advanced URI command is:
 

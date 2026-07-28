@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-07-28
+
+### Added
+
+- Draft up to 20 distinct tasks from one typed or dictated capture.
+- Show every AI draft as a separate editable review card with its own title,
+  status, project, due date, details, delegation, and remove action.
+- Create all approved drafts together with rollback protection if any workspace
+  write fails.
+- Show the associated task title on every Recent Updates card and open that task
+  when the card is selected.
+
+### Fixed
+
+- Prevent AI drafting from merging independent actions into one task.
+- Keep the due date empty unless the capture explicitly states a date, deadline,
+  or relative time.
+
+### Validation
+
+- Pass all 54 automated tests, TypeScript validation, and production builds.
+- Confirm the exact two-action CalWORKs/BSSP capture produces two review cards
+  with empty due dates and creates no task before approval.
+- Confirm Recent Updates cards display their task title and navigate to the
+  corresponding `task.md`.
 
 ### Migration safety
 
