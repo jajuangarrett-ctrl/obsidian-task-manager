@@ -483,6 +483,9 @@
   display: block;
   width: fit-content;
   max-width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: none;
   margin: 0;
   padding: 3px 6px;
   border: 1px solid var(--background-modifier-border);
