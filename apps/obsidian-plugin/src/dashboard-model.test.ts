@@ -8,6 +8,7 @@ import {
   matchesProject,
   NO_PROJECT,
   summarizeProjects,
+  TASK_VIEWS,
   taskMatchesView
 } from "./dashboard-model";
 
@@ -45,6 +46,14 @@ describe("dashboard task views", () => {
     expect(countTasksForView(records, "all-open")).toBe(1);
     expect(taskMatchesView(records[1], "completed")).toBe(true);
     expect(countTasksForView(records, "archived")).toBe(1);
+  });
+
+  it("uses one Unassigned view for tasks whose status normalized to Inbox", () => {
+    expect(taskMatchesView(task({ status: "inbox" }), "unassigned")).toBe(true);
+    expect(taskMatchesView(task({ status: "do-first" }), "unassigned")).toBe(false);
+    expect(TASK_VIEWS.map((view) => view.key)).toContain("unassigned");
+    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("inbox");
+    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
   });
 
   it("counts only open tasks due today or earlier", () => {

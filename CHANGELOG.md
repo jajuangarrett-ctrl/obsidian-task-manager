@@ -9,6 +9,10 @@
 - Keep only the update date, actor, and update text in the per-task preview,
   since the parent task header already supplies the task context.
 - Preserve the full-card click target and its accessible task label.
+- Replace the Completed dashboard view with Unassigned, which collects tasks
+  whose missing or unrecognized source status was normalized to Inbox.
+- Remove the separate Inbox view so Unassigned is the single, non-duplicative
+  place for tasks that still need a workflow status.
 
 ### Validation
 
@@ -16,6 +20,8 @@
   without repeated task-name rows.
 - Confirm the date, actor, and complete update text remain visible and the
   update cards remain clickable.
+- Confirm Unassigned lists the three current Inbox/default-status tasks and
+  that Completed and Inbox no longer appear as task-view tiles.
 - Pass all automated tests, TypeScript validation, and production builds.
 
 ## 0.8.2 — 2026-07-28

@@ -19,7 +19,7 @@ Live workspace folders use the readable task title. The stable `task_id` remains
 
 The dashboard keeps **Do First** as the opening view and adds two clear sections:
 
-- **Tasks** — switch among Do First, Do Soon, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, Completed, and Archived without leaving the dashboard.
+- **Tasks** — switch among Do First, Do Soon, Waiting, Delegated, On Hold, Due or Overdue, All Open, Unassigned, and Archived without leaving the dashboard. Unassigned collects tasks whose missing or unrecognized source status was normalized to Inbox.
 - **Projects** — scan every active project by open and total task counts, search the project list, archive finished projects, and switch to Archived Projects when older work is needed.
 
 Tasks without a project appear in a separate **No project** group. The Archived task view reads workspaces from the configured task archive root and provides **Reopen to Do First**.

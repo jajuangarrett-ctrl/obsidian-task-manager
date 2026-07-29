@@ -1,7 +1,7 @@
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "tasks" | "projects";
-export type TaskViewKey = "all-open" | "due" | TaskStatus;
+export type TaskViewKey = "all-open" | "due" | "unassigned" | TaskStatus;
 
 export const ALL_PROJECTS = "__all_projects__";
 export const NO_PROJECT = "__no_project__";
@@ -24,11 +24,10 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "do-soon", label: "Do Soon", icon: "arrow-right-circle" },
   { key: "waiting", label: "Waiting", icon: "clock-3" },
   { key: "delegate", label: "Delegated", icon: "user-round-check" },
-  { key: "inbox", label: "Inbox", icon: "inbox" },
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
-  { key: "completed", label: "Completed", icon: "circle-check-big" },
+  { key: "unassigned", label: "Unassigned", icon: "circle-help" },
   { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
 
@@ -43,6 +42,8 @@ export function isDueOrOverdue(record: TaskRecord, today = todayKey()): boolean 
 export function taskMatchesView(record: TaskRecord, view: TaskViewKey, today = todayKey()): boolean {
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
+  // Blank and unrecognized source statuses normalize to Inbox when a task is indexed.
+  if (view === "unassigned") return record.status === "inbox";
   return record.status === view;
 }
 
