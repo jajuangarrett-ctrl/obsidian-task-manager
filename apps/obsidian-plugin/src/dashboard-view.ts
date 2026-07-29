@@ -672,10 +672,6 @@ export class TaskDashboardView extends ItemView {
           "aria-label": `Open task ${task.record.title}`
         }
       });
-      const taskName = card.createSpan({ cls: "fjg-update-preview-task" });
-      const taskIcon = taskName.createSpan({ cls: "fjg-update-preview-task-icon" });
-      setIcon(taskIcon, "list-checks");
-      taskName.createSpan({ text: task.record.title });
       card.createEl("p", {
         text: updateMeta(update.timestamp, update.actor),
         cls: "fjg-update-preview-meta"

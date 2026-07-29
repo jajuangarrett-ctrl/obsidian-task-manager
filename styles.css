@@ -782,26 +782,6 @@
   background: var(--background-modifier-hover);
 }
 
-.fjg-update-preview-task {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-bottom: 4px;
-  color: var(--fjg-teal);
-  font-size: 0.78rem;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.fjg-update-preview-task-icon {
-  display: inline-flex;
-}
-
-.fjg-update-preview-task-icon svg {
-  width: 15px;
-  height: 15px;
-}
-
 .fjg-update-preview-meta,
 .fjg-update-preview-text,
 .fjg-no-updates {
