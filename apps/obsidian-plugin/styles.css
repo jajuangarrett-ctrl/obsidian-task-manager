@@ -437,6 +437,7 @@
 }
 
 .fjg-task-overview {
+  align-items: flex-start;
   justify-content: space-between;
 }
 
@@ -477,20 +478,29 @@
   flex: 1;
 }
 
-.fjg-task-title {
+.fjg-task-dashboard button.fjg-task-title {
   appearance: none;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
   box-shadow: none;
   color: var(--text-normal);
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 750;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
   text-align: left;
   white-space: normal;
 }
 
-.fjg-task-title:hover {
+.fjg-task-dashboard button.fjg-task-title:hover {
+  border-color: color-mix(in srgb, var(--fjg-teal) 45%, var(--background-modifier-border));
+  background: var(--background-modifier-hover);
   color: var(--fjg-teal);
 }
 
@@ -520,8 +530,10 @@
 }
 
 .fjg-task-controls {
+  flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
+  padding-top: 1px;
 }
 
 .fjg-related-files {
@@ -897,6 +909,7 @@
 
   .fjg-task-controls {
     justify-content: flex-start;
+    padding-top: 0;
   }
 
   .fjg-related-files-heading {
