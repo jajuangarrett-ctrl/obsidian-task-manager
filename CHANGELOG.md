@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.2 — 2026-07-28
+
+### Fixed
+
+- Let Recent Updates cards grow to their natural content height instead of
+  allowing the date and update text to spill beneath the task workspace card.
+- Keep update titles, metadata, and multiline update text contained inside the
+  clickable update surface.
+- Preserve clean separation between a task with updates and the task card that
+  follows it.
+
+### Validation
+
+- Reproduce the issue with `Immediate CalWORKs Termination of Work Study
+  student` in the live Delegated view.
+- Confirm the title, date, actor, and full status-change text remain inside the
+  task card with the following Onboarding task visible below.
+- Pass all automated tests, TypeScript validation, and production builds.
+
 ## 0.8.1 — 2026-07-28
 
 ### Fixed
