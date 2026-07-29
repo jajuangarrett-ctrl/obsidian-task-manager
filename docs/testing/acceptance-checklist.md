@@ -25,6 +25,9 @@
 - [x] Confirm multiline task titles stay inside an auto-height callout without overlapping status metadata.
 - [x] Confirm long-title action controls remain top-aligned on the live desktop dashboard.
 - [x] Confirm Recent Updates cards contain their metadata and full update text.
+- [x] Confirm the task-view grid shows Unassigned instead of Completed.
+- [x] Confirm Unassigned lists tasks whose missing or unrecognized source status normalized to Inbox.
+- [x] Confirm the duplicate Inbox task-view tile is removed while Archived remains available.
 - [x] Confirm the task title appears once in the parent task header rather than inside every update card.
 - [x] Confirm a task with updates does not overlap or obscure the following task card.
 - [x] Confirm manual Refresh reloads recent update cards.

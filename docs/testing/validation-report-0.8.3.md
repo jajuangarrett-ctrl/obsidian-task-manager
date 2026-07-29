@@ -5,13 +5,14 @@ Date: 2026-07-29
 ## Scope
 
 Validated compact per-task Recent Updates cards without redundant task-name
-rows.
+rows and the replacement of Completed/Inbox dashboard tiles with one
+Unassigned view.
 
 ## Automated validation
 
 - TypeScript type checking passed.
 - Thirteen test files passed.
-- Fifty-eight tests passed.
+- Fifty-nine tests passed.
 - Production builds succeeded for the Obsidian plugin, Chrome clipper, task
   CLI, and migration tool.
 - Release packaging completed with BRAT-compatible root files and both ZIP
@@ -28,8 +29,13 @@ rows.
 - Confirmed both full update messages remain visible.
 - Confirmed the cards retain their full clickable area and accessible task
   label.
+- Confirmed the task-view grid contains Unassigned and Archived but no
+  Completed or duplicate Inbox tile.
+- Confirmed Unassigned reports three tasks and selecting it renders all three
+  current Inbox/default-status task workspaces.
 
 ## Result
 
 Pass. FJG Task Manager v0.8.3 removes redundant task-name rows while preserving
-the context and function of per-task Recent Updates.
+the context and function of per-task Recent Updates, and it provides one
+Unassigned view for tasks that still need a workflow status.

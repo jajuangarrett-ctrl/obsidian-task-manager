@@ -1,6 +1,57 @@
-# Design QA — Dashboard Recent Updates
+# Design QA — Dashboard Task Views
 
-## Current QA target: Remove redundant task names
+## Current QA target: Replace Completed with Unassigned
+
+- Source visual truth:
+  - `docs/testing/visual/reference-completed-task-view.jpg` (589 × 1280)
+- Implementation screenshot:
+  - `docs/testing/visual/implementation-unassigned-task-view.png` (1198 × 711)
+- Side-by-side comparison:
+  - `docs/testing/visual/comparison-unassigned-task-view.jpg` (1526 × 711)
+- Environment: Obsidian 1.12.7 desktop, FJG Vault, light theme, live task data.
+- State: Tasks tab with Unassigned selected and the three current
+  default-status tasks visible.
+- Viewport normalization: the mobile reference was scaled to the height of the
+  desktop implementation capture before horizontal comparison. The dashboard
+  retains its existing responsive two-column mobile grid and auto-fit desktop
+  grid.
+
+## Current required surfaces
+
+- Unassigned task-view tile and count.
+- Archived task-view tile and count.
+- Absence of Completed and duplicate Inbox task-view tiles.
+- Search and project filters.
+- All three tasks whose stored canonical status is Inbox.
+
+## Current comparison history
+
+### Pass 1
+
+- Finding (P2): the original dashboard exposed both Inbox and Completed even
+  though Inbox is the normalized destination for missing or unrecognized
+  source statuses and completed tasks are archived in Franklin's workflow.
+- Fix: removed both obsolete tiles and added one Unassigned tile mapped to the
+  normalized Inbox status.
+
+### Final comparison
+
+- Full-view evidence: Unassigned is selected, shows `3 tasks`, and renders all
+  three current default-status task cards.
+- Navigation: Completed and Inbox no longer appear; Archived remains a
+  separate view with its existing count.
+- Typography: the existing task-view label and count hierarchy is preserved.
+- Spacing and layout: the new tile uses the existing responsive card grid,
+  padding, and alignment without introducing a new visual pattern.
+- Colors and tokens: the selected state continues to use the dashboard's
+  established teal border, teal icon surface, and soft teal background.
+- Image and icon quality: the Lucide `circle-help` icon clearly distinguishes
+  work that still needs a workflow status.
+- Copy and content: `Unassigned` replaces `Completed`; the count matches the
+  three task files whose normalized status is Inbox.
+- No P0, P1, or P2 findings remain.
+
+## Prior QA target: Remove redundant task names
 
 - Source visual truth:
   - `docs/testing/visual/reference-recent-update-redundant-title.jpg` (1280 × 473)
@@ -16,7 +67,7 @@
   were cropped and each resized to 900 × 300 with contain scaling before the
   focused comparison.
 
-## Current required surfaces
+## Prior required surfaces
 
 - Recent Updates heading and View all action.
 - Date and actor metadata for both updates.
@@ -24,7 +75,7 @@
 - Clickable update surfaces and spacing.
 - Task title retained once in the parent task header.
 
-## Current comparison history
+## Prior comparison history
 
 ### Pass 1
 
