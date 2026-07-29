@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.1 — 2026-07-28
+
+### Fixed
+
+- Let long task-title callouts grow to their natural wrapped height instead of
+  clipping text or overlapping the status row.
+- Slightly reduce task-title text size and line spacing for easier scanning.
+- Top-align task actions with the title so long and short cards share a clean,
+  consistent header.
+
+### Validation
+
+- Compare the requested furniture and A2MEND examples against the corrected
+  live Obsidian dashboard.
+- Confirm both titles remain inside their callout, status metadata stays below
+  the title, and action controls remain aligned.
+- Pass all automated tests, TypeScript validation, and production builds.
+
 ## 0.8.0 — 2026-07-28
 
 ### Added

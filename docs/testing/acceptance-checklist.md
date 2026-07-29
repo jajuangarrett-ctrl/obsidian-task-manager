@@ -22,6 +22,8 @@
 - [x] Confirm Copy path appears between Add file and Open folder on live task cards.
 - [x] Confirm Copy path writes the complete desktop task-workspace path to the clipboard.
 - [x] Confirm the path helper falls back to a vault-relative path on mobile.
+- [x] Confirm multiline task titles stay inside an auto-height callout without overlapping status metadata.
+- [x] Confirm long-title action controls remain top-aligned on the live desktop dashboard.
 - [x] Confirm manual Refresh reloads recent update cards.
 - [x] Confirm archived task workspaces appear in Archived and expose Reopen to Do First.
 - [x] Confirm only registered projects with zero open tasks expose Archive Project.
@@ -59,4 +61,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.8.0](validation-report-0.8.0.md) for the latest reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.8.1](validation-report-0.8.1.md) for the latest reproducible validation record and remaining manual acceptance.
