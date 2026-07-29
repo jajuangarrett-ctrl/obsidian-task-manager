@@ -1,6 +1,58 @@
-# Design QA — Dashboard Card Overflow
+# Design QA — Dashboard Recent Updates
 
-## Current QA target: Recent update auto height
+## Current QA target: Remove redundant task names
+
+- Source visual truth:
+  - `docs/testing/visual/reference-recent-update-redundant-title.jpg` (1280 × 473)
+- Implementation screenshot:
+  - `docs/testing/visual/implementation-recent-update-compact.jpg` (1198 × 711)
+- Focused side-by-side comparison:
+  - `docs/testing/visual/comparison-recent-update-compact.jpg` (1800 × 300)
+- Environment: Obsidian 1.12.7 desktop, FJG Vault, light theme, live task data.
+- Viewport: 1198 × 711 captured application pixels.
+- State: Tasks tab, Do First view, filtered to `Manage Leyla's Out of Class
+  arrangements`, with its two newest updates visible.
+- Density normalization: the source and implementation Recent Updates regions
+  were cropped and each resized to 900 × 300 with contain scaling before the
+  focused comparison.
+
+## Current required surfaces
+
+- Recent Updates heading and View all action.
+- Date and actor metadata for both updates.
+- Full text for both updates.
+- Clickable update surfaces and spacing.
+- Task title retained once in the parent task header.
+
+## Current comparison history
+
+### Pass 1
+
+- Finding (P2): both update cards repeated the parent task title and list icon,
+  adding an unnecessary line to every update and making the section taller.
+- Fix: removed the task-title/icon row from per-task update previews while
+  keeping the task title in the task header and preserving the update button's
+  accessible task label.
+
+### Final comparison
+
+- Full-view evidence: the live task card shows the task name once in its header
+  and two compact update cards below it.
+- Focused evidence: the side-by-side comparison shows the repeated task-title
+  rows on the left and date-plus-update cards on the right.
+- Typography: metadata and update text retain their existing hierarchy and
+  remain fully legible.
+- Spacing and layout: each update is one row shorter, internal padding remains
+  even, and the section no longer feels top-heavy.
+- Colors and tokens: existing update surfaces, borders, and text colors are
+  unchanged.
+- Image and icon quality: the redundant list icon was removed; no replacement
+  asset was needed.
+- Copy and content: both update messages and their date/actor metadata remain
+  complete; only duplicate task-name text was removed.
+- No P0, P1, or P2 findings remain.
+
+## Prior QA target: Recent update auto height
 
 - Source visual truth:
   - `docs/testing/visual/reference-recent-update-overflow.jpg` (1016 × 1280)
@@ -17,7 +69,7 @@
   comparison. Browser and application chrome were excluded from the focused
   judgment.
 
-## Current required surfaces
+## Prior required surfaces
 
 - Recent Updates title row.
 - Update date and actor.
@@ -26,7 +78,7 @@
 - Separation between the current task and the following task card.
 - Existing task title, status, Related files, and actions.
 
-## Current comparison history
+## Prior comparison history
 
 ### Pass 1
 

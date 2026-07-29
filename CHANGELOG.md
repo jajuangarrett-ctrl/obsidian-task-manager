@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.3 — 2026-07-29
+
+### Changed
+
+- Remove the repeated task title and list icon from each task's own Recent
+  Updates cards.
+- Keep only the update date, actor, and update text in the per-task preview,
+  since the parent task header already supplies the task context.
+- Preserve the full-card click target and its accessible task label.
+
+### Validation
+
+- Confirm both updates for `Manage Leyla's Out of Class arrangements` render
+  without repeated task-name rows.
+- Confirm the date, actor, and complete update text remain visible and the
+  update cards remain clickable.
+- Pass all automated tests, TypeScript validation, and production builds.
+
 ## 0.8.2 — 2026-07-28
 
 ### Fixed

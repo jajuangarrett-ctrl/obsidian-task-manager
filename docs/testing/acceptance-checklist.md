@@ -18,13 +18,14 @@
 - [x] Review the Projects overview and open a project-scoped All Open view.
 - [x] Confirm project cards distinguish open counts from total non-archived counts.
 - [x] Confirm the two newest task updates render below the task and View all opens `updates.md`.
-- [x] Confirm each Recent Updates card names its associated task and opens that task.
+- [x] Confirm each per-task Recent Updates card opens its parent task without repeating the parent task title.
 - [x] Confirm Copy path appears between Add file and Open folder on live task cards.
 - [x] Confirm Copy path writes the complete desktop task-workspace path to the clipboard.
 - [x] Confirm the path helper falls back to a vault-relative path on mobile.
 - [x] Confirm multiline task titles stay inside an auto-height callout without overlapping status metadata.
 - [x] Confirm long-title action controls remain top-aligned on the live desktop dashboard.
-- [x] Confirm Recent Updates cards contain their task title, metadata, and full update text.
+- [x] Confirm Recent Updates cards contain their metadata and full update text.
+- [x] Confirm the task title appears once in the parent task header rather than inside every update card.
 - [x] Confirm a task with updates does not overlap or obscure the following task card.
 - [x] Confirm manual Refresh reloads recent update cards.
 - [x] Confirm archived task workspaces appear in Archived and expose Reopen to Do First.
@@ -63,4 +64,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.8.2](validation-report-0.8.2.md) for the latest reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.8.3](validation-report-0.8.3.md) for the latest reproducible validation record and remaining manual acceptance.
