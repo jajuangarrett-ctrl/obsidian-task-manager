@@ -18,6 +18,7 @@ describe("project workspaces", () => {
     expect(record.name).toBe("Basic Needs Expansion");
     expect(record.status).toBe("active");
     expect(parseProjectMarkdown(markdown)).toEqual(record);
+    expect(markdown).toContain("project: Basic Needs Expansion");
     expect(markdown).toContain("# Basic Needs Expansion");
     expect(markdown).toContain("Coordinate the expansion work.");
   });

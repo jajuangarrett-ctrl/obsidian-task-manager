@@ -48,7 +48,10 @@ export function renderProjectMarkdown(record: ProjectRecord, description = ""): 
 }
 
 export function renderProjectDocument(record: ProjectRecord, body: string): string {
-  const frontmatter = stringify(record, { lineWidth: 0 }).trimEnd();
+  const frontmatter = stringify({
+    ...record,
+    project: record.name
+  }, { lineWidth: 0 }).trimEnd();
   return `---\n${frontmatter}\n---\n${body.trim()}\n`;
 }
 

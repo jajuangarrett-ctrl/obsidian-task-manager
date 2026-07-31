@@ -14,6 +14,7 @@ import {
   taskFilePath,
   taskFolderPath,
   transitionTaskRecord,
+  updateTaskFields,
   updatesFilePath,
   validateTaskRecord
 } from "@fjg/task-core";
@@ -77,6 +78,7 @@ export class TaskWorkspaceService {
     await this.ensureFolder(settings.projectRoot);
     await this.ensureFolder(settings.projectArchiveRoot);
     await this.refresh();
+    await this.normalizeProjectPropertySuggestions();
     await this.normalizeVisibleFolderNames();
   }
 
@@ -523,6 +525,45 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
+  async changeProject(
+    taskId: string,
+    projectName: string,
+    actor = "Franklin"
+  ): Promise<IndexedTask> {
+    const task = this.getById(taskId);
+    const nextProject = String(projectName || "").trim();
+    if (task.record.project.trim() === nextProject) return task;
+
+    const at = new Date();
+    const oldTaskContent = await this.app.vault.read(task.taskFile);
+    const taskDocument = parseTaskMarkdown(oldTaskContent);
+    const nextRecord = updateTaskFields(taskDocument.record, { project: nextProject }, at);
+    const updatesFile = await this.ensureUpdatesFile(task);
+    const oldUpdates = await this.app.vault.read(updatesFile);
+    const previous = task.record.project.trim() || "No project";
+    const next = nextProject || "No project";
+    const nextUpdates = appendUpdateMarkdown(oldUpdates, {
+      actor,
+      type: "fields-changed",
+      text: `Project changed from ${previous} to ${next}.`,
+      createdAt: at.toISOString()
+    });
+
+    try {
+      await this.app.vault.modify(updatesFile, nextUpdates);
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+    } catch (error) {
+      const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
+      if (currentTask instanceof TFile) await this.app.vault.modify(currentTask, oldTaskContent);
+      const currentUpdates = this.app.vault.getAbstractFileByPath(updatesFile.path);
+      if (currentUpdates instanceof TFile) await this.app.vault.modify(currentUpdates, oldUpdates);
+      throw error;
+    }
+
+    await this.refresh();
+    return this.getById(taskId);
+  }
+
   async validateAll(): Promise<Array<{ path: string; issues: string[] }>> {
     const results: Array<{ path: string; issues: string[] }> = [];
     for (const task of this.list({ includeArchived: true })) {
@@ -575,6 +616,19 @@ export class TaskWorkspaceService {
       const folder = this.app.vault.getAbstractFileByPath(task.folderPath);
       if (!(folder instanceof TFolder)) continue;
       await this.app.vault.rename(folder, destination);
+      changed = true;
+    }
+    if (changed) await this.refresh();
+  }
+
+  private async normalizeProjectPropertySuggestions(): Promise<void> {
+    let changed = false;
+    for (const project of this.listProjects({ includeArchived: true })) {
+      const current = await this.app.vault.read(project.projectFile);
+      const document = parseProjectDocument(current);
+      const next = renderProjectDocument(document.record, document.body);
+      if (next === current) continue;
+      await this.app.vault.modify(project.projectFile, next);
       changed = true;
     }
     if (changed) await this.refresh();

@@ -178,7 +178,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   openCreateModal(): void {
-    new CreateTaskModal(this.app, async (value) => {
+    new CreateTaskModal(this.app, this.projectNames(), async (value) => {
       const task = await this.workspaceService.createTask({
         title: value.title,
         details: value.details,
@@ -260,6 +260,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
   async changeStatus(taskId: string, status: string): Promise<void> {
     const task = await this.workspaceService.changeStatus(taskId, status);
     new Notice(`Task moved to ${task.record.status}: ${task.record.title}`);
+    this.refreshDashboard();
+  }
+
+  async changeProject(taskId: string, projectName: string): Promise<void> {
+    const task = await this.workspaceService.changeProject(taskId, projectName);
+    new Notice(
+      task.record.project
+        ? `Task project set to ${task.record.project}: ${task.record.title}`
+        : `Task moved to No project: ${task.record.title}`
+    );
     this.refreshDashboard();
   }
 

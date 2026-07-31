@@ -131,7 +131,11 @@ export class CreateTaskModal extends Modal {
     delegatedTo: ""
   };
 
-  constructor(app: App, private readonly submit: (value: CreateTaskFormValue) => Promise<void>) {
+  constructor(
+    app: App,
+    private readonly projectNames: string[],
+    private readonly submit: (value: CreateTaskFormValue) => Promise<void>
+  ) {
     super(app);
   }
 
@@ -148,7 +152,13 @@ export class CreateTaskModal extends Modal {
       }
       dropdown.onChange((value) => this.value.status = value as TaskStatus);
     });
-    new Setting(this.contentEl).setName("Project").addText((text) => text.onChange((value) => this.value.project = value));
+    new Setting(this.contentEl).setName("Project").addDropdown((dropdown) => {
+      dropdown.addOption("", "No Project");
+      for (const projectName of this.projectNames) {
+        dropdown.addOption(projectName, projectName);
+      }
+      dropdown.onChange((value) => this.value.project = value);
+    });
     new Setting(this.contentEl).setName("Due date").setDesc("YYYY-MM-DD").addText((text) => text.onChange((value) => this.value.due = value));
     new Setting(this.contentEl).setName("Delegated to").addText((text) => text.onChange((value) => this.value.delegatedTo = value));
     new Setting(this.contentEl).addButton((button) => button
