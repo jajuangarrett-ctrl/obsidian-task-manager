@@ -1,6 +1,6 @@
 import YAML from "yaml";
 import { createTaskId, createUpdateId } from "./ids";
-import { assertTransition, normalizeStatus } from "./status";
+import { assertTransition, isRecognizedTaskStatus, normalizeStatus } from "./status";
 import {
   NewTaskInput,
   TASK_SCHEMA_VERSION,
@@ -86,7 +86,8 @@ export function parseTaskMarkdown(markdown: string): TaskDocument {
   }
   return {
     record,
-    body: normalizeBody(markdown.slice(match[0].length))
+    body: normalizeBody(markdown.slice(match[0].length)),
+    statusRecognized: isRecognizedTaskStatus(raw.status)
   };
 }
 

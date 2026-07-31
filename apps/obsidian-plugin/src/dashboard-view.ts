@@ -4,7 +4,6 @@ import type FjgTaskManagerPlugin from "../main";
 import {
   ALL_PROJECTS,
   canArchiveProject,
-  countTasksForView,
   DashboardMode,
   isDueOrOverdue,
   matchesProject,
@@ -139,9 +138,7 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-view-grid",
       attr: { "aria-label": "Task views" }
     });
-    const records = tasks
-      .filter((task) => matchesProject(task.record, this.project))
-      .map((task) => task.record);
+    const scopedTasks = tasks.filter((task) => matchesProject(task.record, this.project));
     for (const definition of TASK_VIEWS) {
       const button = viewNav.createEl("button", {
         cls: `fjg-view-card${this.view === definition.key ? " is-active" : ""}`,
@@ -155,7 +152,9 @@ export class TaskDashboardView extends ItemView {
       const copy = button.createSpan({ cls: "fjg-view-copy" });
       copy.createSpan({ text: definition.label, cls: "fjg-view-label" });
       copy.createSpan({
-        text: taskCountLabel(countTasksForView(records, definition.key)),
+        text: taskCountLabel(scopedTasks.filter((task) => {
+          return taskMatchesView(task.record, definition.key, undefined, task.statusAssigned);
+        }).length),
         cls: "fjg-view-count"
       });
       button.addEventListener("click", () => {
@@ -455,7 +454,7 @@ export class TaskDashboardView extends ItemView {
     const tasks = this.taskPlugin.workspaceService.list({ includeArchived: true }).filter((task) => {
       if (!taskMatchesSearch(task, query)) return false;
       if (!matchesProject(task.record, this.project)) return false;
-      return taskMatchesView(task.record, this.view);
+      return taskMatchesView(task.record, this.view, undefined, task.statusAssigned);
     });
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No tasks match this view." });

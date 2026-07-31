@@ -47,6 +47,7 @@ export interface TaskRelatedFile {
 
 export interface IndexedTask {
   record: TaskRecord;
+  statusAssigned: boolean;
   folderPath: string;
   taskFile: TFile;
   updatesFile: TFile | null;
@@ -102,6 +103,7 @@ export class TaskWorkspaceService {
             : [];
           next.set(document.record.task_id, {
             record: document.record,
+            statusAssigned: document.statusRecognized,
             folderPath,
             taskFile: file,
             updatesFile: updateFile instanceof TFile ? updateFile : null,

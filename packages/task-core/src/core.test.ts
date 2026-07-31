@@ -3,6 +3,7 @@ import {
   appendUpdateMarkdown,
   canTransition,
   createTaskRecord,
+  isRecognizedTaskStatus,
   normalizeStatus,
   normalizeTags,
   legacyTaskFolderName,
@@ -21,6 +22,9 @@ describe("task core", () => {
     expect(normalizeStatus("DoFirst")).toBe("do-first");
     expect(normalizeStatus("do soon")).toBe("do-soon");
     expect(normalizeStatus("Cancelled")).toBe("archived");
+    expect(isRecognizedTaskStatus("Do First")).toBe(true);
+    expect(isRecognizedTaskStatus("")).toBe(false);
+    expect(isRecognizedTaskStatus("triage-later")).toBe(false);
     expect(canTransition("archived", "do-first")).toBe(true);
   });
 
@@ -48,9 +52,23 @@ describe("task core", () => {
     const markdown = renderTaskMarkdown(record);
     const parsed = parseTaskMarkdown(markdown);
     expect(parsed.record.status).toBe("do-first");
+    expect(parsed.statusRecognized).toBe(true);
     expect(parsed.record.tags).toEqual(["task"]);
     expect(parsed.body).toContain("# Review budget packet");
     expect(validateTaskRecord(parsed.record)).toEqual([]);
+  });
+
+  test("marks missing or unrecognized source statuses as unassigned", () => {
+    const record = createTaskRecord({
+      taskId: "tsk_unassigned",
+      title: "Needs a status",
+      status: "do-first",
+      createdAt: "2026-07-27T16:00:00.000Z"
+    });
+    const markdown = renderTaskMarkdown(record).replace("status: do-first", "status: triage-later");
+    const parsed = parseTaskMarkdown(markdown);
+    expect(parsed.record.status).toBe("inbox");
+    expect(parsed.statusRecognized).toBe(false);
   });
 
   test("transitions completion and reopening timestamps", () => {

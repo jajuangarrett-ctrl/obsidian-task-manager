@@ -39,6 +39,7 @@ export interface TaskRecord {
 export interface TaskDocument {
   record: TaskRecord;
   body: string;
+  statusRecognized: boolean;
 }
 
 export interface TaskSource {

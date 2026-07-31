@@ -48,11 +48,13 @@ describe("dashboard task views", () => {
     expect(countTasksForView(records, "archived")).toBe(1);
   });
 
-  it("uses one Unassigned view for tasks whose status normalized to Inbox", () => {
-    expect(taskMatchesView(task({ status: "inbox" }), "unassigned")).toBe(true);
-    expect(taskMatchesView(task({ status: "do-first" }), "unassigned")).toBe(false);
+  it("keeps explicitly assigned Inbox tasks separate from Unassigned tasks", () => {
+    expect(taskMatchesView(task({ status: "inbox" }), "inbox")).toBe(true);
+    expect(taskMatchesView(task({ status: "inbox" }), "unassigned")).toBe(false);
+    expect(taskMatchesView(task({ status: "inbox" }), "unassigned", "2026-07-27", false)).toBe(true);
+    expect(taskMatchesView(task({ status: "inbox" }), "inbox", "2026-07-27", false)).toBe(false);
     expect(TASK_VIEWS.map((view) => view.key)).toContain("unassigned");
-    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("inbox");
+    expect(TASK_VIEWS.map((view) => view.key)).toContain("inbox");
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
   });
 

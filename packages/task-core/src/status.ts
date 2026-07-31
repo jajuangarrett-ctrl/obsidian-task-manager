@@ -40,12 +40,20 @@ const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
 };
 
 export function normalizeStatus(value: unknown, fallback: TaskStatus = "inbox"): TaskStatus {
+  return recognizedStatus(value) ?? fallback;
+}
+
+export function isRecognizedTaskStatus(value: unknown): boolean {
+  return recognizedStatus(value) !== null;
+}
+
+function recognizedStatus(value: unknown): TaskStatus | null {
   const key = String(value ?? "")
     .trim()
     .toLowerCase()
     .replace(/[_\s]+/g, "-")
     .replace(/[^a-z0-9-]/g, "");
-  return STATUS_ALIASES[key] ?? STATUS_ALIASES[key.replace(/-/g, "")] ?? fallback;
+  return STATUS_ALIASES[key] ?? STATUS_ALIASES[key.replace(/-/g, "")] ?? null;
 }
 
 export function isTaskStatus(value: unknown): value is TaskStatus {
