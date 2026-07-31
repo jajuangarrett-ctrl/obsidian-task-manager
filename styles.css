@@ -810,6 +810,10 @@
   min-width: 126px;
 }
 
+.fjg-task-controls .fjg-task-project-select {
+  min-width: 180px;
+}
+
 .fjg-empty {
   grid-column: 1 / -1;
   padding: 44px;
