@@ -1,6 +1,58 @@
-# Design QA — Dashboard Task Views
+# Design QA — Inbox and Unassigned Task Views
 
-## Current QA target: Replace Completed with Unassigned
+## Current QA target: Restore Inbox without duplicating Unassigned
+
+- Source visual truth:
+  - `docs/testing/visual/reference-inbox-missing.jpg` (1280 × 255)
+- Implementation screenshot:
+  - `docs/testing/visual/implementation-inbox-restored.png` (1198 × 711)
+- Stacked comparison:
+  - `docs/testing/visual/comparison-inbox-restored.jpg` (1280 × 1016)
+- Environment: Obsidian 1.12.7 desktop, FJG Vault, light theme, live task data.
+- State: Tasks tab with Inbox selected and its three current task cards visible.
+- Viewport normalization: both images were resized to 1280 pixels wide and
+  stacked vertically. The source is a task-view crop; the implementation is
+  the complete live Obsidian window.
+
+## Current required surfaces
+
+- Inbox tile, selected state, icon, and count.
+- Unassigned tile and distinct count.
+- Archived tile and count.
+- Absence of the Completed tile.
+- Search and project filters.
+- Inbox task results.
+
+## Current comparison history
+
+### Pass 1
+
+- Finding (P1): v0.8.3 removed Inbox while adding Unassigned, leaving no direct
+  navigation for tasks Franklin explicitly placed in Inbox.
+- Fix: restored Inbox in its original dashboard position and retained
+  Unassigned as a separate validation view.
+
+### Final comparison
+
+- Full-view evidence: Inbox is selected, reports `3 tasks`, and renders the
+  three current explicit Inbox workspaces.
+- Navigation: Inbox, Unassigned, and Archived are all present; Completed
+  remains removed as requested.
+- Distinction: Unassigned reports `0 tasks` because every current task file has
+  a recognized source status. Automated coverage confirms malformed or missing
+  source statuses appear only in Unassigned.
+- Typography: the existing label and count hierarchy remains unchanged.
+- Spacing and layout: the restored tile uses the established responsive task
+  view grid with no new layout pattern.
+- Colors and tokens: Inbox uses the existing teal selected treatment and
+  established secondary-card surfaces.
+- Image and icon quality: the existing Obsidian Inbox icon is restored; no
+  custom asset was introduced.
+- Copy and content: Inbox and Unassigned now describe different states and do
+  not duplicate task results.
+- No P0, P1, or P2 findings remain.
+
+## Prior QA target: Replace Completed with Unassigned
 
 - Source visual truth:
   - `docs/testing/visual/reference-completed-task-view.jpg` (589 × 1280)
@@ -16,7 +68,7 @@
   retains its existing responsive two-column mobile grid and auto-fit desktop
   grid.
 
-## Current required surfaces
+## Prior required surfaces
 
 - Unassigned task-view tile and count.
 - Archived task-view tile and count.
@@ -24,7 +76,7 @@
 - Search and project filters.
 - All three tasks whose stored canonical status is Inbox.
 
-## Current comparison history
+## Prior comparison history
 
 ### Pass 1
 
