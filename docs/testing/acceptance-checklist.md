@@ -26,8 +26,10 @@
 - [x] Confirm long-title action controls remain top-aligned on the live desktop dashboard.
 - [x] Confirm Recent Updates cards contain their metadata and full update text.
 - [x] Confirm the task-view grid shows Unassigned instead of Completed.
-- [x] Confirm Unassigned lists tasks whose missing or unrecognized source status normalized to Inbox.
-- [x] Confirm the duplicate Inbox task-view tile is removed while Archived remains available.
+- [x] Confirm Inbox lists tasks explicitly assigned the Inbox status.
+- [x] Confirm Unassigned separately lists task files whose source status is missing or unrecognized.
+- [x] Confirm a task appears in Inbox or Unassigned, never both.
+- [x] Confirm Completed remains removed while Inbox, Unassigned, and Archived remain available.
 - [x] Confirm the task title appears once in the parent task header rather than inside every update card.
 - [x] Confirm a task with updates does not overlap or obscure the following task card.
 - [x] Confirm manual Refresh reloads recent update cards.
@@ -67,4 +69,4 @@
 - [x] Compare fixture source and imported counts and stable IDs.
 - [ ] Test Obsidian Sync on another Mac or mobile device.
 
-See [Validation Report — 0.8.3](validation-report-0.8.3.md) for the latest reproducible validation record and remaining manual acceptance.
+See [Validation Report — 0.8.4](validation-report-0.8.4.md) for the latest reproducible validation record and remaining manual acceptance.

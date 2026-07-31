@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.4 — 2026-07-30
+
+### Fixed
+
+- Restore the Inbox task view after it was mistakenly removed in v0.8.3.
+- Keep Inbox for tasks explicitly assigned the `inbox` status.
+- Keep Unassigned as a separate validation view for task files whose source
+  status is missing or unrecognized.
+- Prevent an unassigned task that normalized to Inbox internally from appearing
+  in both views.
+
+### Validation
+
+- Confirm the dashboard shows both Inbox and Unassigned while Completed remains
+  removed.
+- Confirm the three current explicit Inbox tasks appear only in Inbox.
+- Confirm a test task with an unrecognized source status appears only in
+  Unassigned.
+- Pass all automated tests, TypeScript validation, production builds, live
+  Obsidian verification, and release packaging.
+
 ## 0.8.3 — 2026-07-29
 
 ### Changed
