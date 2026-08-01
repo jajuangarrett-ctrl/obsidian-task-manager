@@ -2,6 +2,7 @@ import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { createRequestId, DEFAULT_ACTIVE_ROOT, DEFAULT_ARCHIVE_ROOT, normalizeVaultPath } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import { testOpenAiKey } from "./openai-capture";
+import { DEFAULT_GMAIL_TASK_INTAKE_ROOT } from "./gmail-task-intake";
 
 export const DEFAULT_PROJECT_ROOT = "08 Tasks/Projects";
 export const DEFAULT_PROJECT_ARCHIVE_ROOT = "08 Tasks/Project Archive";
@@ -20,6 +21,8 @@ export interface TaskManagerSettings {
   openAiModel: string;
   transcriptionModel: string;
   autoDraftAfterTranscription: boolean;
+  gmailTaskIntakeEnabled: boolean;
+  gmailTaskIntakeRoot: string;
 }
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
@@ -35,7 +38,9 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   openAiApiKey: "",
   openAiModel: "gpt-4.1-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
-  autoDraftAfterTranscription: true
+  autoDraftAfterTranscription: true,
+  gmailTaskIntakeEnabled: true,
+  gmailTaskIntakeRoot: DEFAULT_GMAIL_TASK_INTAKE_ROOT
 };
 
 export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskManagerSettings {
@@ -54,7 +59,9 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     openAiApiKey: String(value.openAiApiKey || "").trim(),
     openAiModel: String(value.openAiModel || DEFAULT_SETTINGS.openAiModel).trim() || DEFAULT_SETTINGS.openAiModel,
     transcriptionModel: String(value.transcriptionModel || DEFAULT_SETTINGS.transcriptionModel).trim() || DEFAULT_SETTINGS.transcriptionModel,
-    autoDraftAfterTranscription: value.autoDraftAfterTranscription !== false
+    autoDraftAfterTranscription: value.autoDraftAfterTranscription !== false,
+    gmailTaskIntakeEnabled: value.gmailTaskIntakeEnabled !== false,
+    gmailTaskIntakeRoot: normalizeVaultPath(value.gmailTaskIntakeRoot || DEFAULT_GMAIL_TASK_INTAKE_ROOT)
   };
 }
 
@@ -167,6 +174,29 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       cls: "setting-item-description",
       text: "The task catalog is read-only. All task creation and updates still pass through Obsidian."
     });
+
+    containerEl.createEl("h3", { text: "Gmail task intake" });
+
+    new Setting(containerEl)
+      .setName("Import status-prefixed Gmail captures")
+      .setDesc("Create FJG Task Manager workspaces from marked Gmail captures after they synchronize into the vault.")
+      .addToggle((toggle) => toggle
+        .setValue(this.taskPlugin.settings.gmailTaskIntakeEnabled)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.gmailTaskIntakeEnabled = value;
+          await this.taskPlugin.saveSettings();
+          if (value) await this.taskPlugin.processGmailTaskIntake();
+        }));
+
+    new Setting(containerEl)
+      .setName("Gmail intake folder")
+      .setDesc("Vault-relative folder where the FJG Task Manager Apps Script saves captured email notes.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.gmailTaskIntakeRoot)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.gmailTaskIntakeRoot = normalizeVaultPath(value || DEFAULT_GMAIL_TASK_INTAKE_ROOT);
+          await this.taskPlugin.saveSettings();
+        }));
 
     containerEl.createEl("h3", { text: "Quick Capture AI" });
 

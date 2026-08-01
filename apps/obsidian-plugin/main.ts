@@ -4,6 +4,8 @@ import {
   normalizePath,
   Platform,
   Plugin,
+  TAbstractFile,
+  TFile,
   WorkspaceLeaf
 } from "obsidian";
 import { decodeProtocolPayload } from "@fjg/task-protocol";
@@ -29,12 +31,19 @@ import {
 import { legacyOpenAiApiKey } from "./src/settings-migration";
 import { taskFolderClipboardPath } from "./src/task-folder-path";
 import { TaskWorkspaceService } from "./src/workspace-service";
+import {
+  markGmailTaskIntakeImported,
+  parseGmailTaskIntake
+} from "./src/gmail-task-intake";
 
 export default class FjgTaskManagerPlugin extends Plugin {
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
   private readonly catalogServer = new TaskCatalogServer();
   private refreshTimer: number | null = null;
+  private gmailIntakeTimer: number | null = null;
+  private gmailIntakeRunning = false;
+  private gmailIntakePending = false;
 
   async onload(): Promise<void> {
     this.settings = normalizeSettings(await this.loadData() || DEFAULT_SETTINGS);
@@ -110,8 +119,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Task index rebuilt: ${this.workspaceService.list({ includeArchived: true }).length} tasks.`);
     }});
 
-    this.registerEvent(this.app.vault.on("create", () => this.scheduleRefresh()));
-    this.registerEvent(this.app.vault.on("modify", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("create", (file) => {
+      this.scheduleRefresh();
+      this.scheduleGmailTaskIntake(file);
+    }));
+    this.registerEvent(this.app.vault.on("modify", (file) => {
+      this.scheduleRefresh();
+      this.scheduleGmailTaskIntake(file);
+    }));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 
@@ -126,6 +141,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async onunload(): Promise<void> {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    if (this.gmailIntakeTimer !== null) window.clearTimeout(this.gmailIntakeTimer);
     await this.catalogServer.stop();
     this.app.workspace.detachLeavesOfType(TASK_DASHBOARD_VIEW);
   }
@@ -150,6 +166,64 @@ export default class FjgTaskManagerPlugin extends Plugin {
       return this.settings.openAiApiKey;
     }
     return "";
+  }
+
+  async processGmailTaskIntake(): Promise<number> {
+    if (!this.settings.gmailTaskIntakeEnabled) return 0;
+    if (this.gmailIntakeRunning) {
+      this.gmailIntakePending = true;
+      return 0;
+    }
+
+    this.gmailIntakeRunning = true;
+    let imported = 0;
+    try {
+      const root = normalizePath(this.settings.gmailTaskIntakeRoot);
+      const files = this.app.vault.getMarkdownFiles()
+        .filter((file) => file.parent?.path === root)
+        .sort((left, right) => left.path.localeCompare(right.path));
+
+      for (const file of files) {
+        const markdown = await this.app.vault.read(file);
+        const intake = parseGmailTaskIntake(markdown);
+        if (!intake || intake.importedTaskId) continue;
+
+        let task = this.workspaceService.list({ includeArchived: true })
+          .find((candidate) => candidate.record.task_id === intake.taskId);
+        if (!task) {
+          task = await this.workspaceService.createTask({
+            taskId: intake.taskId,
+            title: intake.title,
+            status: intake.status,
+            source: { type: "email", title: intake.emailSubject },
+            tags: ["task"],
+            createdAt: intake.emailDate,
+            updatedAt: intake.emailDate
+          }, { requestId: intake.requestId, actor: "Gmail intake" });
+          imported++;
+        }
+
+        const latest = await this.app.vault.read(file);
+        const marked = markGmailTaskIntakeImported(latest, task.record.task_id);
+        if (marked !== latest) await this.app.vault.modify(file, marked);
+      }
+
+      if (imported > 0) {
+        new Notice(`${imported} Gmail ${imported === 1 ? "task" : "tasks"} added to FJG Task Manager.`);
+        this.refreshDashboard();
+      }
+      return imported;
+    } catch (error) {
+      console.error("[FJG Task Manager] Gmail task intake failed", error);
+      new Notice(`Gmail task intake failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      return imported;
+    } finally {
+      this.gmailIntakeRunning = false;
+      if (this.gmailIntakePending) {
+        this.gmailIntakePending = false;
+        this.scheduleGmailTaskIntake();
+      }
+    }
   }
 
   async restartCatalog(): Promise<void> {
@@ -441,6 +515,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       // without losing them from the dashboard during startup.
       await this.workspaceService.refresh();
       await this.workspaceService.normalizeVisibleFolderNames();
+      await this.processGmailTaskIntake();
       this.refreshDashboard();
       this.recoverMissedAdvancedUriLaunch();
     } catch (error) {
@@ -465,6 +540,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
       await this.workspaceService.refresh();
       this.refreshDashboard();
     }, 300);
+  }
+
+  private scheduleGmailTaskIntake(file?: TAbstractFile): void {
+    if (!this.settings.gmailTaskIntakeEnabled) return;
+    if (file) {
+      if (!(file instanceof TFile) || file.extension !== "md") return;
+      const root = normalizePath(this.settings.gmailTaskIntakeRoot);
+      if (file.parent?.path !== root) return;
+    }
+    if (this.gmailIntakeTimer !== null) window.clearTimeout(this.gmailIntakeTimer);
+    this.gmailIntakeTimer = window.setTimeout(() => {
+      this.gmailIntakeTimer = null;
+      void this.processGmailTaskIntake();
+    }, 500);
   }
 
   private refreshDashboard(): void {
