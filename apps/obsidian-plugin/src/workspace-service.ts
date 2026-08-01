@@ -485,6 +485,45 @@ export class TaskWorkspaceService {
     return created;
   }
 
+  async availableAttachmentPath(taskId: string, fileName: string, preferredPath = ""): Promise<string> {
+    const task = this.getById(taskId);
+    const attachmentsPath = normalizePath(`${task.folderPath}/attachments`);
+    await this.ensureFolder(attachmentsPath);
+    if (preferredPath) {
+      const normalized = normalizePath(preferredPath);
+      if (!normalized.startsWith(`${attachmentsPath}/`)) {
+        throw new Error("The Gmail attachment destination is outside the task attachments folder.");
+      }
+      const cached = this.app.vault.getAbstractFileByPath(normalized);
+      const diskEntry = cached ? null : await this.app.vault.adapter.stat(normalized);
+      if (cached || diskEntry) {
+        throw new Error(`The Gmail attachment destination already exists: ${normalized}`);
+      }
+      return normalized;
+    }
+    const name = safeRelatedFileName(fileName, "Email.md");
+    return this.availableFilePath(attachmentsPath, name);
+  }
+
+  async moveVaultFileToTaskAttachments(taskId: string, source: TFile, targetPath: string): Promise<TFile> {
+    const task = this.getById(taskId);
+    const attachmentsPath = normalizePath(`${task.folderPath}/attachments`);
+    const normalizedTarget = normalizePath(targetPath);
+    if (!normalizedTarget.startsWith(`${attachmentsPath}/`)) {
+      throw new Error("The Gmail attachment destination is outside the task attachments folder.");
+    }
+    if (this.app.vault.getAbstractFileByPath(normalizedTarget) || await this.app.vault.adapter.stat(normalizedTarget)) {
+      throw new Error(`The Gmail attachment destination already exists: ${normalizedTarget}`);
+    }
+    await this.app.fileManager.renameFile(source, normalizedTarget);
+    await this.refresh();
+    const moved = this.app.vault.getAbstractFileByPath(normalizedTarget);
+    if (!(moved instanceof TFile)) {
+      throw new Error(`The moved Gmail email was not found at ${normalizedTarget}.`);
+    }
+    return moved;
+  }
+
   async changeStatus(
     taskId: string,
     target: string,

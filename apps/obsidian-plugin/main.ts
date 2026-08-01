@@ -177,6 +177,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     this.gmailIntakeRunning = true;
     let imported = 0;
+    let attached = 0;
     let failed = 0;
     try {
       const root = normalizePath(this.settings.gmailTaskIntakeRoot);
@@ -188,7 +189,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         try {
           const markdown = await this.app.vault.read(file);
           const intake = parseGmailTaskIntake(markdown);
-          if (!intake || intake.importedTaskId) continue;
+          if (!intake) continue;
 
           let task = this.workspaceService.list({ includeArchived: true })
             .find((candidate) => candidate.record.task_id === intake.taskId);
@@ -205,17 +206,57 @@ export default class FjgTaskManagerPlugin extends Plugin {
             imported++;
           }
 
+          if (intake.importedTaskId && intake.importedTaskId !== task.record.task_id) {
+            throw new Error(
+              `Gmail intake task ID ${intake.importedTaskId} does not match ${task.record.task_id}.`
+            );
+          }
+
+          if (intake.attachmentPath) {
+            const existingAttachment = this.app.vault.getAbstractFileByPath(normalizePath(intake.attachmentPath));
+            if (existingAttachment instanceof TFile) continue;
+          }
+
+          const attachmentPath = await this.workspaceService.availableAttachmentPath(
+            task.record.task_id,
+            file.name,
+            intake.attachmentPath
+          );
+
           const latest = await this.app.vault.read(file);
-          const marked = markGmailTaskIntakeImported(latest, task.record.task_id);
+          const marked = markGmailTaskIntakeImported(latest, {
+            taskId: task.record.task_id,
+            attachmentPath
+          });
           if (marked !== latest) await this.app.vault.modify(file, marked);
+          const moved = await this.workspaceService.moveVaultFileToTaskAttachments(
+            task.record.task_id,
+            file,
+            attachmentPath
+          );
+          attached++;
+          try {
+            await this.workspaceService.appendUpdate(task.record.task_id, {
+              actor: "Gmail intake",
+              type: "attachment",
+              text: "Original Gmail email moved into the task attachments folder.",
+              relatedFiles: [moved.path],
+              source: { type: "email", title: intake.emailSubject },
+              requestId: `${intake.requestId}_attachment`
+            });
+          } catch (updateError) {
+            console.warn("[FJG Task Manager] Gmail attachment update log failed", moved.path, updateError);
+          }
         } catch (error) {
           failed++;
           console.error("[FJG Task Manager] Gmail task intake file failed", file.path, error);
         }
       }
 
-      if (imported > 0) {
-        new Notice(`${imported} Gmail ${imported === 1 ? "task" : "tasks"} added to FJG Task Manager.`);
+      if (imported > 0 || attached > 0) {
+        const taskText = `${imported} Gmail ${imported === 1 ? "task" : "tasks"} added`;
+        const attachmentText = `${attached} original ${attached === 1 ? "email" : "emails"} moved to task attachments`;
+        new Notice(`${taskText}; ${attachmentText}.`);
         this.refreshDashboard();
       }
       if (failed > 0) {

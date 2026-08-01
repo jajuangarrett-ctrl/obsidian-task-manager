@@ -13,6 +13,7 @@ export interface GmailTaskIntake {
   emailSubject: string;
   emailDate: string;
   importedTaskId: string;
+  attachmentPath: string;
 }
 
 interface GmailTaskIntakeFrontmatter {
@@ -24,6 +25,7 @@ interface GmailTaskIntakeFrontmatter {
   task_status?: unknown;
   fjg_task_manager_task_id?: unknown;
   fjg_task_manager_imported_at?: unknown;
+  fjg_task_manager_attachment_path?: unknown;
   [key: string]: unknown;
 }
 
@@ -61,21 +63,31 @@ export function parseGmailTaskIntake(markdown: string): GmailTaskIntake | null {
     status,
     emailSubject,
     emailDate: new Date(emailDate).toISOString(),
-    importedTaskId: cleanInline(data.fjg_task_manager_task_id)
+    importedTaskId: cleanInline(data.fjg_task_manager_task_id),
+    attachmentPath: cleanInline(data.fjg_task_manager_attachment_path)
   };
 }
 
 export function markGmailTaskIntakeImported(
   markdown: string,
-  taskId: string,
-  importedAt = new Date().toISOString()
+  result: {
+    taskId: string;
+    attachmentPath: string;
+    importedAt?: string;
+  }
 ): string {
   const document = parseFrontmatter(markdown);
   if (!document || Number(document.data.fjg_task_intake_version) !== GMAIL_TASK_INTAKE_VERSION) {
     throw new Error("Cannot mark a file that is not an FJG Gmail task intake.");
   }
-  document.data.fjg_task_manager_task_id = cleanInline(taskId);
-  document.data.fjg_task_manager_imported_at = new Date(importedAt).toISOString();
+  const taskId = cleanInline(result.taskId);
+  const attachmentPath = cleanInline(result.attachmentPath);
+  if (!taskId || !attachmentPath) {
+    throw new Error("Gmail task intake import metadata is incomplete.");
+  }
+  document.data.fjg_task_manager_task_id = taskId;
+  document.data.fjg_task_manager_imported_at = new Date(result.importedAt || Date.now()).toISOString();
+  document.data.fjg_task_manager_attachment_path = attachmentPath;
   const frontmatter = YAML.stringify(document.data, { lineWidth: 0 }).trimEnd();
   return `---\n${frontmatter}\n---\n${document.body}`;
 }

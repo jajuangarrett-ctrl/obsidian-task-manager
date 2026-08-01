@@ -24,7 +24,8 @@ describe("Gmail task intake", () => {
       status: "do-first",
       emailSubject: "[Do First] Call Michelle",
       emailDate: "2026-07-31T18:05:00.000Z",
-      importedTaskId: ""
+      importedTaskId: "",
+      attachmentPath: ""
     });
   });
 
@@ -35,13 +36,22 @@ describe("Gmail task intake", () => {
   test("marks an intake while preserving its email body", () => {
     const marked = markGmailTaskIntakeImported(
       intake,
-      "tsk_gmail_19abc123",
-      "2026-07-31T18:06:00.000Z"
+      {
+        taskId: "tsk_gmail_19abc123",
+        attachmentPath: "08 Tasks/Workspaces/Call Michelle/attachments/[Do First] Call Michelle.md",
+        importedAt: "2026-07-31T18:06:00.000Z"
+      }
     );
     expect(marked).toContain("fjg_task_manager_task_id: tsk_gmail_19abc123");
     expect(marked).toContain("fjg_task_manager_imported_at: 2026-07-31T18:06:00.000Z");
+    expect(marked).toContain(
+      "fjg_task_manager_attachment_path: 08 Tasks/Workspaces/Call Michelle/attachments/[Do First] Call Michelle.md"
+    );
     expect(marked.endsWith("Email body.\n")).toBe(true);
     expect(parseGmailTaskIntake(marked)?.importedTaskId).toBe("tsk_gmail_19abc123");
+    expect(parseGmailTaskIntake(marked)?.attachmentPath).toBe(
+      "08 Tasks/Workspaces/Call Michelle/attachments/[Do First] Call Michelle.md"
+    );
   });
 
   test("rejects noncanonical statuses instead of silently using Inbox", () => {
