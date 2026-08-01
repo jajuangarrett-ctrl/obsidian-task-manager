@@ -39,7 +39,7 @@ describe("Gmail task intake", () => {
       "2026-07-31T18:06:00.000Z"
     );
     expect(marked).toContain("fjg_task_manager_task_id: tsk_gmail_19abc123");
-    expect(marked).toContain('fjg_task_manager_imported_at: "2026-07-31T18:06:00.000Z"');
+    expect(marked).toContain("fjg_task_manager_imported_at: 2026-07-31T18:06:00.000Z");
     expect(marked.endsWith("Email body.\n")).toBe(true);
     expect(parseGmailTaskIntake(marked)?.importedTaskId).toBe("tsk_gmail_19abc123");
   });
