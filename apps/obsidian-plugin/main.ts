@@ -214,7 +214,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
           if (intake.attachmentPath) {
             const existingAttachment = this.app.vault.getAbstractFileByPath(normalizePath(intake.attachmentPath));
-            if (existingAttachment instanceof TFile) continue;
+            if (existingAttachment instanceof TFile) {
+              throw new Error(
+                `The task attachment already exists while the original email remains in intake: ${intake.attachmentPath}`
+              );
+            }
           }
 
           const attachmentPath = await this.workspaceService.availableAttachmentPath(

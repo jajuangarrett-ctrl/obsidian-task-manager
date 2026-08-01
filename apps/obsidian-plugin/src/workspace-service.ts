@@ -501,7 +501,10 @@ export class TaskWorkspaceService {
       }
       return normalized;
     }
-    const name = safeRelatedFileName(fileName, "Email.md");
+    const name = fileName || "Email.md";
+    if (name.includes("/") || name.includes("\\")) {
+      throw new Error("The Gmail email filename must not contain a folder path.");
+    }
     return this.availableFilePath(attachmentsPath, name);
   }
 

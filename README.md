@@ -19,14 +19,18 @@ The `FJG Task Manager` Google Apps Script saves matching messages into
 `AI Team/Mira Emails/`. When a new email subject begins with `[Inbox]`,
 `[Do First]`, `[Do Soon]`, `[Delegate]`, `[Waiting]`, or `[On Hold]`, the saved
 note includes versioned intake metadata. FJG Task Manager detects that note,
-creates a normal task workspace with the matching status, and writes the stable
-task ID back to the email note.
+creates a normal task workspace with the matching status, writes the stable
+task ID and final attachment path into the email note, and moves that original
+Markdown email into the task workspace's `attachments/` folder.
 
 Only marked notes are imported. Existing historical email files and new emails
-without a supported status prefix remain ordinary notes. Gmail message IDs are
+without a supported status prefix remain ordinary notes. The email is moved,
+not copied, so no second active copy remains in `AI Team/Mira Emails/`. Gmail message IDs are
 used to create deterministic task and request IDs, making the import repeat-safe
 across plugin reloads and synchronization. Intake is enabled by default and its
-vault-relative folder can be changed in FJG Task Manager settings.
+vault-relative folder can be changed in FJG Task Manager settings. If the task
+or attachment move cannot finish, the original email remains in the intake
+folder and is retried safely.
 
 Live workspace folders use the readable task title. The stable `task_id` remains inside `task.md` and is hidden from ordinary dashboard and folder-title views. Duplicate titles receive a numeric folder suffix such as `(2)`.
 
