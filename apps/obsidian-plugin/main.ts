@@ -177,6 +177,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     this.gmailIntakeRunning = true;
     let imported = 0;
+    let failed = 0;
     try {
       const root = normalizePath(this.settings.gmailTaskIntakeRoot);
       const files = this.app.vault.getMarkdownFiles()
@@ -184,33 +185,41 @@ export default class FjgTaskManagerPlugin extends Plugin {
         .sort((left, right) => left.path.localeCompare(right.path));
 
       for (const file of files) {
-        const markdown = await this.app.vault.read(file);
-        const intake = parseGmailTaskIntake(markdown);
-        if (!intake || intake.importedTaskId) continue;
+        try {
+          const markdown = await this.app.vault.read(file);
+          const intake = parseGmailTaskIntake(markdown);
+          if (!intake || intake.importedTaskId) continue;
 
-        let task = this.workspaceService.list({ includeArchived: true })
-          .find((candidate) => candidate.record.task_id === intake.taskId);
-        if (!task) {
-          task = await this.workspaceService.createTask({
-            taskId: intake.taskId,
-            title: intake.title,
-            status: intake.status,
-            source: { type: "email", title: intake.emailSubject },
-            tags: ["task"],
-            createdAt: intake.emailDate,
-            updatedAt: intake.emailDate
-          }, { requestId: intake.requestId, actor: "Gmail intake" });
-          imported++;
+          let task = this.workspaceService.list({ includeArchived: true })
+            .find((candidate) => candidate.record.task_id === intake.taskId);
+          if (!task) {
+            task = await this.workspaceService.createTask({
+              taskId: intake.taskId,
+              title: intake.title,
+              status: intake.status,
+              source: { type: "email", title: intake.emailSubject },
+              tags: ["task"],
+              createdAt: intake.emailDate,
+              updatedAt: intake.emailDate
+            }, { requestId: intake.requestId, actor: "Gmail intake" });
+            imported++;
+          }
+
+          const latest = await this.app.vault.read(file);
+          const marked = markGmailTaskIntakeImported(latest, task.record.task_id);
+          if (marked !== latest) await this.app.vault.modify(file, marked);
+        } catch (error) {
+          failed++;
+          console.error("[FJG Task Manager] Gmail task intake file failed", file.path, error);
         }
-
-        const latest = await this.app.vault.read(file);
-        const marked = markGmailTaskIntakeImported(latest, task.record.task_id);
-        if (marked !== latest) await this.app.vault.modify(file, marked);
       }
 
       if (imported > 0) {
         new Notice(`${imported} Gmail ${imported === 1 ? "task" : "tasks"} added to FJG Task Manager.`);
         this.refreshDashboard();
+      }
+      if (failed > 0) {
+        new Notice(`${failed} Gmail ${failed === 1 ? "intake needs" : "intakes need"} attention. See Developer Console.`, 10000);
       }
       return imported;
     } catch (error) {
