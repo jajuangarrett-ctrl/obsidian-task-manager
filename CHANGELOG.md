@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.0 — 2026-07-31
+
+### Added
+
+- Import status-prefixed Gmail captures into canonical FJG Task Manager task
+  workspaces after the email note synchronizes into `AI Team/Mira Emails`.
+- Map `[Inbox]`, `[Do First]`, `[Do Soon]`, `[Delegate]`, `[Waiting]`, and
+  `[On Hold]` to the corresponding native task statuses.
+- Use deterministic Gmail-derived task IDs and write the created task ID back
+  to the email note so synchronization and plugin restarts cannot create a
+  duplicate task.
+- Add configurable Gmail intake enablement and a vault-relative intake folder
+  in FJG Task Manager settings.
+
+### Changed
+
+- Replace the Gmail Apps Script's Netlify Taskboard mutation with FJG Task
+  Manager intake metadata. Ordinary Gmail captures without a status prefix
+  remain email notes and do not become tasks.
+
+### Validation
+
+- Add intake parsing, status validation, deterministic ID, ordinary-note, and
+  processed-marker tests.
+
 ## 0.8.4 — 2026-07-30
 
 ### Fixed

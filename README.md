@@ -1,6 +1,6 @@
 # FJG Task Manager
 
-Folder-based task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Chrome clipping, safe agent updates, archive moves, and migration tooling.
+Folder-based task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
 ## Architecture
 
@@ -12,6 +12,21 @@ Folder-based task workspaces for Obsidian with a native dashboard, live update c
 - `tools/migration` — dry-run-first Taskboard JSON importer
 
 Markdown task workspaces are authoritative. The dashboard and Chrome search catalog are derived.
+
+## Gmail task intake
+
+The `FJG Task Manager` Google Apps Script saves matching messages into
+`AI Team/Mira Emails/`. When a new email subject begins with `[Inbox]`,
+`[Do First]`, `[Do Soon]`, `[Delegate]`, `[Waiting]`, or `[On Hold]`, the saved
+note includes versioned intake metadata. FJG Task Manager detects that note,
+creates a normal task workspace with the matching status, and writes the stable
+task ID back to the email note.
+
+Only marked notes are imported. Existing historical email files and new emails
+without a supported status prefix remain ordinary notes. Gmail message IDs are
+used to create deterministic task and request IDs, making the import repeat-safe
+across plugin reloads and synchronization. Intake is enabled by default and its
+vault-relative folder can be changed in FJG Task Manager settings.
 
 Live workspace folders use the readable task title. The stable `task_id` remains inside `task.md` and is hidden from ordinary dashboard and folder-title views. Duplicate titles receive a numeric folder suffix such as `(2)`.
 
