@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.2 — 2026-08-03
+
+### Fixed
+
+- Make **Copy path** copy the portable vault-relative task workspace path on
+  desktop and mobile instead of adding the desktop vault's absolute system path.
+- Keep forward-slash separators so the copied value works directly in Obsidian
+  Web Clipper's folder field.
+
+### Validation
+
+- Add regression coverage for the reported `Fw MIS inputs for Summer 2026`
+  workspace path, leading/trailing separators, and Windows-style separators.
+- Confirm the live Obsidian action copies
+  `08 Tasks/Workspaces/Fw MIS inputs for Summer 2026` exactly.
+
 ## 0.9.0 — 2026-07-31
 
 ### Added

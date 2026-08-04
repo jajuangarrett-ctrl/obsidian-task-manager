@@ -2,29 +2,20 @@ import { describe, expect, it } from "vitest";
 import { taskFolderClipboardPath } from "./task-folder-path";
 
 describe("task folder clipboard paths", () => {
-  it("joins a macOS vault root to the vault-relative task folder", () => {
+  it("returns the vault-relative folder expected by Obsidian Web Clipper", () => {
     expect(taskFolderClipboardPath(
-      "08 Tasks/Workspaces/Purchase a swing outdoor for CalWorks",
-      "/Users/franklingarrett/FJG Vault"
-    )).toBe(
-      "/Users/franklingarrett/FJG Vault/08 Tasks/Workspaces/Purchase a swing outdoor for CalWorks"
-    );
+      "08 Tasks/Workspaces/Fw MIS inputs for Summer 2026"
+    )).toBe("08 Tasks/Workspaces/Fw MIS inputs for Summer 2026");
   });
 
-  it("does not duplicate a trailing desktop separator", () => {
-    expect(taskFolderClipboardPath("08 Tasks/Archive/Finished task", "/Vault/"))
-      .toBe("/Vault/08 Tasks/Archive/Finished task");
+  it("removes leading and trailing separators", () => {
+    expect(taskFolderClipboardPath("/08 Tasks/Archive/Finished task/"))
+      .toBe("08 Tasks/Archive/Finished task");
   });
 
-  it("uses native Windows separators for desktop paths", () => {
+  it("normalizes Windows and repeated separators to portable vault separators", () => {
     expect(taskFolderClipboardPath(
-      "08 Tasks/Workspaces/Windows task",
-      "C:\\Users\\Franklin\\FJG Vault"
-    )).toBe("C:\\Users\\Franklin\\FJG Vault\\08 Tasks\\Workspaces\\Windows task");
-  });
-
-  it("returns the vault-relative folder on mobile", () => {
-    expect(taskFolderClipboardPath("08 Tasks/Workspaces/Mobile task"))
-      .toBe("08 Tasks/Workspaces/Mobile task");
+      "\\08 Tasks\\Workspaces\\\\Portable task\\"
+    )).toBe("08 Tasks/Workspaces/Portable task");
   });
 });

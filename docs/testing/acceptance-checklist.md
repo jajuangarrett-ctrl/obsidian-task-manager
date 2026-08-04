@@ -20,8 +20,8 @@
 - [x] Confirm the two newest task updates render below the task and View all opens `updates.md`.
 - [x] Confirm each per-task Recent Updates card opens its parent task without repeating the parent task title.
 - [x] Confirm Copy path appears between Add file and Open folder on live task cards.
-- [x] Confirm Copy path writes the complete desktop task-workspace path to the clipboard.
-- [x] Confirm the path helper falls back to a vault-relative path on mobile.
+- [x] Confirm Copy path writes the vault-relative task-workspace path used by Obsidian Web Clipper.
+- [x] Confirm the path helper uses portable forward-slash separators on desktop and mobile.
 - [x] Confirm multiline task titles stay inside an auto-height callout without overlapping status metadata.
 - [x] Confirm long-title action controls remain top-aligned on the live desktop dashboard.
 - [x] Confirm Recent Updates cards contain their metadata and full update text.

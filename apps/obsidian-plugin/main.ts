@@ -1,5 +1,4 @@
 import {
-  FileSystemAdapter,
   Notice,
   normalizePath,
   Platform,
@@ -474,18 +473,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async copyTaskFolderPath(taskId: string): Promise<void> {
     const task = this.workspaceService.getById(taskId);
-    const adapter = this.app.vault.adapter;
-    const desktopBasePath = adapter instanceof FileSystemAdapter
-      ? adapter.getBasePath()
-      : "";
-    const path = taskFolderClipboardPath(task.folderPath, desktopBasePath);
+    const path = taskFolderClipboardPath(task.folderPath);
     try {
       await navigator.clipboard.writeText(path);
-      new Notice(
-        desktopBasePath
-          ? `Task folder path copied: ${path}`
-          : `Vault-relative task folder path copied: ${path}`
-      );
+      new Notice(`Vault-relative task folder path copied: ${path}`);
     } catch (error) {
       console.error("[FJG Task Manager] Could not copy task folder path", error);
       new Notice("Could not copy the task folder path.");
