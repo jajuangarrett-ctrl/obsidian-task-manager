@@ -453,6 +453,10 @@
   --fjg-status-color: #3377b6;
 }
 
+.fjg-task-row[data-status="ongoing"] {
+  --fjg-status-color: #268a72;
+}
+
 .fjg-task-row[data-status="delegate"] {
   --fjg-status-color: #7b61a8;
 }

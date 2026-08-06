@@ -4,6 +4,7 @@ export const TASK_STATUSES = [
   "inbox",
   "do-first",
   "do-soon",
+  "ongoing",
   "delegate",
   "waiting",
   "on-hold",

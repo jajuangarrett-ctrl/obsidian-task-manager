@@ -1,7 +1,7 @@
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "tasks" | "projects";
-export type TaskViewKey = "recent" | "all-open" | "due" | "unassigned" | TaskStatus;
+export type TaskViewKey = "recent" | "all-open" | "due" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;
 
@@ -31,13 +31,13 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "recent", label: "Recent Tasks", icon: "history" },
   { key: "do-first", label: "Do First", icon: "flame" },
   { key: "do-soon", label: "Do Soon", icon: "arrow-right-circle" },
+  { key: "ongoing", label: "Ongoing", icon: "play-circle" },
   { key: "waiting", label: "Waiting", icon: "clock-3" },
   { key: "delegate", label: "Delegated", icon: "user-round-check" },
   { key: "inbox", label: "Inbox", icon: "inbox" },
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
-  { key: "unassigned", label: "Unassigned", icon: "circle-help" },
   { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
 
@@ -58,7 +58,6 @@ export function taskMatchesView(
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
-  if (view === "unassigned") return !statusAssigned;
   if (view === "inbox") return statusAssigned && record.status === "inbox";
   return record.status === view;
 }

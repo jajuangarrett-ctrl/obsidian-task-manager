@@ -4,6 +4,7 @@ export const CAPTURE_STATUSES: TaskStatus[] = [
   "inbox",
   "do-first",
   "do-soon",
+  "ongoing",
   "delegate",
   "waiting",
   "on-hold"
@@ -54,6 +55,7 @@ export function buildTaskDraftRequest(
               "For each task, write a concise, action-oriented title of at most 12 words.",
               "Lightly clean each task's details without adding facts or details from a different task.",
               "Use do-first unless the wording clearly indicates another allowed status.",
+              "Use ongoing for work that is actively underway and needs continued attention.",
               "Use delegate only when the user intends another person to do the work.",
               "Use waiting only when progress depends on an external response or event.",
               "Use on-hold only when the task is deliberately paused.",

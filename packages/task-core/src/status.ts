@@ -11,6 +11,7 @@ const STATUS_ALIASES: Record<string, TaskStatus> = {
   next: "do-soon",
   active: "do-soon",
   "in-progress": "do-soon",
+  ongoing: "ongoing",
   delegate: "delegate",
   delegated: "delegate",
   waiting: "waiting",
@@ -29,14 +30,15 @@ const STATUS_ALIASES: Record<string, TaskStatus> = {
 };
 
 const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  inbox: ["do-first", "do-soon", "delegate", "waiting", "on-hold", "completed", "archived"],
-  "do-first": ["inbox", "do-soon", "delegate", "waiting", "on-hold", "completed", "archived"],
-  "do-soon": ["inbox", "do-first", "delegate", "waiting", "on-hold", "completed", "archived"],
-  delegate: ["inbox", "do-first", "do-soon", "waiting", "on-hold", "completed", "archived"],
-  waiting: ["inbox", "do-first", "do-soon", "delegate", "on-hold", "completed", "archived"],
-  "on-hold": ["inbox", "do-first", "do-soon", "delegate", "waiting", "completed", "archived"],
-  completed: ["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold", "archived"],
-  archived: ["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold"]
+  inbox: ["do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed", "archived"],
+  "do-first": ["inbox", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed", "archived"],
+  "do-soon": ["inbox", "do-first", "ongoing", "delegate", "waiting", "on-hold", "completed", "archived"],
+  ongoing: ["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold", "completed", "archived"],
+  delegate: ["inbox", "do-first", "do-soon", "ongoing", "waiting", "on-hold", "completed", "archived"],
+  waiting: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "on-hold", "completed", "archived"],
+  "on-hold": ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "completed", "archived"],
+  completed: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "archived"],
+  archived: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold"]
 };
 
 export function normalizeStatus(value: unknown, fallback: TaskStatus = "inbox"): TaskStatus {
@@ -75,6 +77,7 @@ export function statusLabel(status: TaskStatus): string {
     inbox: "Inbox",
     "do-first": "Do First",
     "do-soon": "Do Soon",
+    ongoing: "Ongoing",
     delegate: "Delegate",
     waiting: "Waiting",
     "on-hold": "On Hold",

@@ -21,16 +21,19 @@ describe("task core", () => {
   test("normalizes the approved status vocabulary", () => {
     expect(normalizeStatus("DoFirst")).toBe("do-first");
     expect(normalizeStatus("do soon")).toBe("do-soon");
+    expect(normalizeStatus("Ongoing")).toBe("ongoing");
+    expect(normalizeStatus("in progress")).toBe("do-soon");
     expect(normalizeStatus("Cancelled")).toBe("archived");
     expect(isRecognizedTaskStatus("Do First")).toBe(true);
     expect(isRecognizedTaskStatus("")).toBe(false);
     expect(isRecognizedTaskStatus("triage-later")).toBe(false);
     expect(canTransition("archived", "do-first")).toBe(true);
+    expect(canTransition("ongoing", "completed")).toBe(true);
   });
 
   test("keeps task as the sole default and strips status tags", () => {
     expect(normalizeTags([])).toEqual(["task"]);
-    expect(normalizeTags(["task", "DoFirst", "Basic-Needs", "waiting"])).toEqual(["task", "Basic-Needs"]);
+    expect(normalizeTags(["task", "DoFirst", "Basic-Needs", "waiting", "ongoing"])).toEqual(["task", "Basic-Needs"]);
   });
 
   test("creates readable stable folder names", () => {

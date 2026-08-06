@@ -72,13 +72,11 @@ describe("dashboard task views", () => {
     expect(countTasksForView(records, "archived")).toBe(1);
   });
 
-  it("keeps explicitly assigned Inbox tasks separate from Unassigned tasks", () => {
+  it("keeps explicitly assigned Inbox tasks in the Inbox view", () => {
     expect(taskMatchesView(task({ status: "inbox" }), "inbox")).toBe(true);
-    expect(taskMatchesView(task({ status: "inbox" }), "unassigned")).toBe(false);
-    expect(taskMatchesView(task({ status: "inbox" }), "unassigned", "2026-07-27", false)).toBe(true);
     expect(taskMatchesView(task({ status: "inbox" }), "inbox", "2026-07-27", false)).toBe(false);
-    expect(TASK_VIEWS.map((view) => view.key)).toContain("unassigned");
     expect(TASK_VIEWS.map((view) => view.key)).toContain("inbox");
+    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("unassigned");
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
   });
 
@@ -88,12 +86,16 @@ describe("dashboard task views", () => {
     expect(isDueOrOverdue(task({ due: "2026-07-20", status: "completed" }), "2026-07-27")).toBe(false);
   });
 
-  it.each<Exclude<TaskStatus, "archived">>(["inbox", "do-first", "do-soon", "delegate", "waiting", "on-hold", "completed"])(
+  it.each<Exclude<TaskStatus, "archived">>(["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed"])(
     "matches the %s status view",
     (status) => {
       expect(taskMatchesView(task({ status }), status)).toBe(true);
     }
   );
+
+  it("includes an Ongoing dashboard view", () => {
+    expect(TASK_VIEWS).toContainEqual({ key: "ongoing", label: "Ongoing", icon: "play-circle" });
+  });
 });
 
 describe("dashboard project summaries", () => {
