@@ -7,6 +7,7 @@ import {
   DashboardMode,
   isDueOrOverdue,
   matchesProject,
+  mostRecentlyModifiedTasks,
   NO_PROJECT,
   ProjectSummary,
   summarizeProjects,
@@ -151,10 +152,14 @@ export class TaskDashboardView extends ItemView {
       setIcon(iconEl, definition.icon);
       const copy = button.createSpan({ cls: "fjg-view-copy" });
       copy.createSpan({ text: definition.label, cls: "fjg-view-label" });
+      const viewTasks = definition.key === "recent"
+        ? mostRecentlyModifiedTasks(scopedTasks.map((task) => ({
+          ...task,
+          modifiedAt: task.taskFile.stat.mtime
+        })))
+        : scopedTasks.filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned));
       copy.createSpan({
-        text: taskCountLabel(scopedTasks.filter((task) => {
-          return taskMatchesView(task.record, definition.key, undefined, task.statusAssigned);
-        }).length),
+        text: taskCountLabel(viewTasks.length),
         cls: "fjg-view-count"
       });
       button.addEventListener("click", () => {
@@ -451,11 +456,16 @@ export class TaskDashboardView extends ItemView {
     if (!rows) return;
     rows.empty();
     const query = normalize(this.query);
-    const tasks = this.taskPlugin.workspaceService.list({ includeArchived: true }).filter((task) => {
-      if (!taskMatchesSearch(task, query)) return false;
-      if (!matchesProject(task.record, this.project)) return false;
-      return taskMatchesView(task.record, this.view, undefined, task.statusAssigned);
-    });
+    const scopedTasks = this.taskPlugin.workspaceService
+      .list({ includeArchived: true })
+      .filter((task) => matchesProject(task.record, this.project));
+    const viewTasks = this.view === "recent"
+      ? mostRecentlyModifiedTasks(scopedTasks.map((task) => ({
+        ...task,
+        modifiedAt: task.taskFile.stat.mtime
+      })))
+      : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned));
+    const tasks = viewTasks.filter((task) => taskMatchesSearch(task, query));
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No tasks match this view." });
       return;

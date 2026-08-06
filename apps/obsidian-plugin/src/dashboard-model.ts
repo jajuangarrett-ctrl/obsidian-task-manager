@@ -1,7 +1,15 @@
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "tasks" | "projects";
-export type TaskViewKey = "all-open" | "due" | "unassigned" | TaskStatus;
+export type TaskViewKey = "recent" | "all-open" | "due" | "unassigned" | TaskStatus;
+
+export const RECENT_TASK_LIMIT = 30;
+
+export interface RecentlyModifiedTask {
+  record: Pick<TaskRecord, "updated_at" | "created_at" | "task_id" | "title">;
+  /** Vault file modification time, used when the task record has no usable update timestamp. */
+  modifiedAt?: number;
+}
 
 export const ALL_PROJECTS = "__all_projects__";
 export const NO_PROJECT = "__no_project__";
@@ -20,6 +28,7 @@ export interface ProjectSummary {
 }
 
 export const TASK_VIEWS: readonly TaskViewDefinition[] = [
+  { key: "recent", label: "Recent Tasks", icon: "history" },
   { key: "do-first", label: "Do First", icon: "flame" },
   { key: "do-soon", label: "Do Soon", icon: "arrow-right-circle" },
   { key: "waiting", label: "Waiting", icon: "clock-3" },
@@ -46,11 +55,38 @@ export function taskMatchesView(
   today = todayKey(),
   statusAssigned = true
 ): boolean {
+  if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
   if (view === "unassigned") return !statusAssigned;
   if (view === "inbox") return statusAssigned && record.status === "inbox";
   return record.status === view;
+}
+
+/**
+ * Returns the newest task records first. Task metadata is authoritative; the
+ * canonical task file's mtime keeps older or imported records discoverable.
+ */
+export function mostRecentlyModifiedTasks<T extends RecentlyModifiedTask>(
+  tasks: readonly T[],
+  limit = RECENT_TASK_LIMIT
+): T[] {
+  return [...tasks]
+    .sort((left, right) => {
+      const timestampCompare = taskModifiedAt(right) - taskModifiedAt(left);
+      return timestampCompare
+        || left.record.title.localeCompare(right.record.title)
+        || left.record.task_id.localeCompare(right.record.task_id);
+    })
+    .slice(0, limit);
+}
+
+function taskModifiedAt(task: RecentlyModifiedTask): number {
+  const updatedAt = Date.parse(task.record.updated_at);
+  if (!Number.isNaN(updatedAt)) return updatedAt;
+  if (typeof task.modifiedAt === "number" && Number.isFinite(task.modifiedAt)) return task.modifiedAt;
+  const createdAt = Date.parse(task.record.created_at);
+  return Number.isNaN(createdAt) ? 0 : createdAt;
 }
 
 export function countTasksForView(records: readonly TaskRecord[], view: TaskViewKey, today = todayKey()): number {

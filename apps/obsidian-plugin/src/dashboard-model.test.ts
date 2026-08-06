@@ -6,6 +6,7 @@ import {
   countTasksForView,
   isDueOrOverdue,
   matchesProject,
+  mostRecentlyModifiedTasks,
   NO_PROJECT,
   summarizeProjects,
   TASK_VIEWS,
@@ -37,6 +38,29 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
 }
 
 describe("dashboard task views", () => {
+  it("puts Recent Tasks first and returns at most 30 newest tasks", () => {
+    const records = Array.from({ length: 31 }, (_, index) => task({
+      task_id: `task-${String(index).padStart(2, "0")}`,
+      title: `Task ${String(index).padStart(2, "0")}`,
+      updated_at: `2026-07-${String(index + 1).padStart(2, "0")}T12:00:00.000Z`
+    }));
+    const recent = mostRecentlyModifiedTasks(records.map((record) => ({ record })));
+
+    expect(TASK_VIEWS[0]).toMatchObject({ key: "recent", label: "Recent Tasks" });
+    expect(recent).toHaveLength(30);
+    expect(recent[0].record.task_id).toBe("task-30");
+    expect(recent.at(-1)?.record.task_id).toBe("task-01");
+  });
+
+  it("uses the canonical task file modification time when update metadata is invalid", () => {
+    const recent = mostRecentlyModifiedTasks([
+      { record: task({ task_id: "old", updated_at: "not a timestamp" }), modifiedAt: 100 },
+      { record: task({ task_id: "new", updated_at: "not a timestamp" }), modifiedAt: 200 }
+    ]);
+
+    expect(recent.map((item) => item.record.task_id)).toEqual(["new", "old"]);
+  });
+
   it("keeps completed and archived work out of All Open", () => {
     const records = [
       task({ task_id: "open", status: "do-first" }),
