@@ -11,6 +11,8 @@
   update log; choosing No project returns the task to Inbox.
 - Copy the project or Inbox `Files` path for Obsidian Web Clipper and place
   dashboard/Gmail files in that shared area.
+- Keep Inbox files task-specific with a readable task-title prefix while
+  continuing to expose project files as shared project resources.
 - Route reopened tasks back to an active project when possible, or to Inbox
   with a cleared stale project assignment when the project no longer exists.
 

@@ -63,7 +63,7 @@ Live task notes use the readable task title. The stable `task_id` remains inside
 
 The dashboard keeps **Do First** as the opening view and adds two clear sections:
 
-- **Tasks** — switch among Do First, Do Soon, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, Unassigned, and Archived without leaving the dashboard. Inbox contains tasks explicitly assigned the Inbox status; Unassigned is a separate validation view for task files whose source status is missing or unrecognized.
+- **Tasks** — switch among Recent Tasks, Do First, Do Soon, Ongoing, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, and Archived without leaving the dashboard.
 - **Projects** — scan every active project by open and total task counts, search the project list, archive finished projects, and switch to Archived Projects when older work is needed.
 
 Tasks without a project appear in a separate **No project** group and are physically stored in Inbox. The Archived task view reads task notes from the configured archive root and provides **Reopen to Do First**.
@@ -72,7 +72,7 @@ Select **New Project** on the Projects screen to create a project before it has 
 
 When a registered project has zero open tasks, its card offers **Archive**. After confirmation, all completed tasks in that project move to `08 Tasks/Archive/` and the project workspace moves to `08 Tasks/Project Archive/`. Nothing is deleted. **Archived Projects** lists the finished project and provides **Reopen**; reopening returns only the project definition to the active list, while its tasks remain archived until explicitly reopened.
 
-Each task row shows its two newest task updates. The dashboard's Recent Updates section identifies the associated task on every update card, and selecting a card opens that task. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
+Each task row shows its two newest task updates without redundantly repeating the task title inside the parent task card. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete update log.
 
 Each task also includes a compact **Related files** section backed by the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** copies the portable vault-relative `Files/` path used by Obsidian Web Clipper; **Open folder** reveals the shared workspace in Obsidian.
 
@@ -148,7 +148,7 @@ node tools/migration/dist/migrate.cjs \
 
 Review `migration-manifest.json`, then repeat with `--apply`. The importer never connects to or modifies the legacy Taskboard.
 
-After applying into an isolated staging directory, reconcile every task, update history, attachments folder, and project workspace:
+After applying into an isolated staging directory, reconcile every task, update history, supporting-file area, and project workspace:
 
 ```bash
 node tools/migration/dist/audit.cjs \
@@ -156,7 +156,7 @@ node tools/migration/dist/audit.cjs \
   --staging /path/to/staging
 ```
 
-The importer uses readable task-title folders, adds quiet numeric suffixes for duplicate titles, imports only the approved `task` tag, uses an explicit unknown-date sentinel when the source creation date is missing, and stages both managed and task-referenced project workspaces.
+The importer uses readable task-title files, adds quiet numeric suffixes for duplicate titles, imports only the approved `task` tag, uses an explicit unknown-date sentinel when the source creation date is missing, and stages both managed and task-referenced project workspaces.
 
 ## Release
 
@@ -165,4 +165,4 @@ npm run check
 npm run package:release
 ```
 
-The existing Taskboard, iOS app, Taskboard clipper, Obsidian clipper, and bridge remain legacy references until Franklin approves cutover.
+The prior Taskboard, iOS app, Taskboard clipper, Obsidian-focused clipper, and bridge remain legacy references. FJG Task Manager is the active Obsidian task workflow.
