@@ -12,7 +12,12 @@ import {
   renderTaskMarkdown,
   renderUpdatesMarkdown,
   sanitizeTitleForPath,
+  taskFilesFolderPath,
   taskFolderName,
+  taskNoteFilePath,
+  taskNotesFolderPath,
+  taskUpdateFilePath,
+  taskUpdatesFolderPath,
   transitionTaskRecord,
   validateTaskRecord
 } from "./index";
@@ -41,6 +46,15 @@ describe("task core", () => {
     expect(taskFolderName("tsk_123", "Review budget")).toBe("Review budget");
     expect(numberedTaskFolderName("tsk_456", "Review budget", 2)).toBe("Review budget (2)");
     expect(legacyTaskFolderName("tsk_123", "Review budget")).toBe("tsk_123 - Review budget");
+  });
+
+  test("builds project-centered task, update, and file paths without exposing task IDs", () => {
+    const workspace = "08 Tasks/Projects/Basic Needs Expansion";
+    expect(taskNotesFolderPath(workspace)).toBe(`${workspace}/Tasks`);
+    expect(taskUpdatesFolderPath(workspace)).toBe(`${workspace}/Updates`);
+    expect(taskFilesFolderPath(workspace)).toBe(`${workspace}/Files`);
+    expect(taskNoteFilePath(workspace, "Review: quote / packet")).toBe(`${workspace}/Tasks/Review quote packet.md`);
+    expect(taskUpdateFilePath(workspace, "Review: quote / packet", 2)).toBe(`${workspace}/Updates/Review quote packet (2).md`);
   });
 
   test("round trips task Markdown", () => {
