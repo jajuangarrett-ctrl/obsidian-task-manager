@@ -1,5 +1,11 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
-import { createRequestId, DEFAULT_ACTIVE_ROOT, DEFAULT_ARCHIVE_ROOT, normalizeVaultPath } from "@fjg/task-core";
+import {
+  createRequestId,
+  DEFAULT_ACTIVE_ROOT,
+  DEFAULT_ARCHIVE_ROOT,
+  DEFAULT_INBOX_ROOT,
+  normalizeVaultPath
+} from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import { testOpenAiKey } from "./openai-capture";
 import { DEFAULT_GMAIL_TASK_INTAKE_ROOT } from "./gmail-task-intake";
@@ -9,6 +15,7 @@ export const DEFAULT_PROJECT_ARCHIVE_ROOT = "08 Tasks/Project Archive";
 
 export interface TaskManagerSettings {
   activeRoot: string;
+  inboxRoot: string;
   archiveRoot: string;
   projectRoot: string;
   projectArchiveRoot: string;
@@ -27,6 +34,7 @@ export interface TaskManagerSettings {
 
 export const DEFAULT_SETTINGS: TaskManagerSettings = {
   activeRoot: DEFAULT_ACTIVE_ROOT,
+  inboxRoot: DEFAULT_INBOX_ROOT,
   archiveRoot: DEFAULT_ARCHIVE_ROOT,
   projectRoot: DEFAULT_PROJECT_ROOT,
   projectArchiveRoot: DEFAULT_PROJECT_ARCHIVE_ROOT,
@@ -48,6 +56,7 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     ...DEFAULT_SETTINGS,
     ...value,
     activeRoot: normalizeVaultPath(value.activeRoot || DEFAULT_ACTIVE_ROOT),
+    inboxRoot: normalizeVaultPath(value.inboxRoot || DEFAULT_INBOX_ROOT),
     archiveRoot: normalizeVaultPath(value.archiveRoot || DEFAULT_ARCHIVE_ROOT),
     projectRoot: normalizeVaultPath(value.projectRoot || DEFAULT_PROJECT_ROOT),
     projectArchiveRoot: normalizeVaultPath(value.projectArchiveRoot || DEFAULT_PROJECT_ARCHIVE_ROOT),
@@ -80,8 +89,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "FJG Task Manager" });
 
     new Setting(containerEl)
-      .setName("Active task workspace root")
-      .setDesc("Vault-relative folder containing active task workspaces.")
+      .setName("Inbox workspace root")
+      .setDesc("Tasks without a project are stored here in shared Tasks, Updates, and Files folders.")
+      .addText((text) => text
+        .setValue(this.taskPlugin.settings.inboxRoot)
+        .onChange(async (value) => {
+          this.taskPlugin.settings.inboxRoot = normalizeVaultPath(value || DEFAULT_INBOX_ROOT);
+          await this.taskPlugin.saveSettings();
+          await this.taskPlugin.workspaceService.refresh();
+        }));
+
+    new Setting(containerEl)
+      .setName("Legacy task workspace root")
+      .setDesc("Read-only compatibility location for older per-task folders during migration.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.activeRoot)
         .onChange(async (value) => {

@@ -12,7 +12,12 @@ import {
   TaskStatus,
   TaskUpdateInput,
   taskFilePath,
+  taskFilesFolderPath,
   taskFolderPath,
+  taskNoteFilePath,
+  taskNotesFolderPath,
+  taskUpdateFilePath,
+  taskUpdatesFolderPath,
   transitionTaskRecord,
   updateTaskFields,
   updatesFilePath,
@@ -54,6 +59,7 @@ export interface IndexedTask {
   updates: TaskUpdatePreview[];
   relatedFiles: TaskRelatedFile[];
   archived: boolean;
+  legacyWorkspace: boolean;
 }
 
 export interface IndexedProject {
@@ -75,6 +81,7 @@ export class TaskWorkspaceService {
   async initialize(): Promise<void> {
     const settings = this.getSettings();
     await this.ensureFolder(settings.activeRoot);
+    await this.ensureWorkspaceFolders(settings.inboxRoot);
     await this.ensureFolder(settings.archiveRoot);
     await this.ensureFolder(settings.projectRoot);
     await this.ensureFolder(settings.projectArchiveRoot);
@@ -86,18 +93,29 @@ export class TaskWorkspaceService {
   async refresh(): Promise<void> {
     const settings = this.getSettings();
     const activePrefix = `${normalizePath(settings.activeRoot)}/`;
+    const inboxPrefix = `${normalizePath(settings.inboxRoot)}/`;
     const archivePrefix = `${normalizePath(settings.archiveRoot)}/`;
     const projectPrefix = `${normalizePath(settings.projectRoot)}/`;
     const projectArchivePrefix = `${normalizePath(settings.projectArchiveRoot)}/`;
     const next = new Map<string, IndexedTask>();
     const nextProjects = new Map<string, IndexedProject>();
     for (const file of this.app.vault.getMarkdownFiles()) {
-      if (file.name === "task.md" && (file.path.startsWith(activePrefix) || file.path.startsWith(archivePrefix))) {
+      const legacyWorkspace = file.name === "task.md"
+        && (file.path.startsWith(activePrefix) || file.path.startsWith(archivePrefix));
+      const projectTask = file.path.startsWith(projectPrefix) && file.path.includes("/Tasks/");
+      const inboxTask = file.path.startsWith(inboxPrefix) && file.path.includes("/Tasks/");
+      const archivedTask = file.path.startsWith(archivePrefix) && file.path.includes("/Tasks/");
+      if (legacyWorkspace || projectTask || inboxTask || archivedTask) {
         try {
           const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
           if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
-          const folderPath = file.parent?.path || "";
-          const updateFile = this.app.vault.getAbstractFileByPath(updatesFilePath(folderPath));
+          const folderPath = legacyWorkspace
+            ? file.parent?.path || ""
+            : workspaceRootFromTaskPath(file.path);
+          const updatePath = legacyWorkspace
+            ? updatesFilePath(folderPath)
+            : `${taskUpdatesFolderPath(folderPath)}/${file.name}`;
+          const updateFile = this.app.vault.getAbstractFileByPath(updatePath);
           const updates = updateFile instanceof TFile
             ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
             : [];
@@ -109,7 +127,8 @@ export class TaskWorkspaceService {
             updatesFile: updateFile instanceof TFile ? updateFile : null,
             updates,
             relatedFiles: [],
-            archived: file.path.startsWith(archivePrefix)
+            archived: file.path.startsWith(archivePrefix),
+            legacyWorkspace
           });
         } catch (error) {
           console.error("[FJG Task Manager] Invalid task workspace", file.path, error);
@@ -140,8 +159,11 @@ export class TaskWorkspaceService {
     }
     const vaultFiles = this.app.vault.getFiles();
     for (const task of next.values()) {
+      const relatedRoot = task.legacyWorkspace
+        ? `${task.folderPath}/`
+        : `${taskFilesFolderPath(task.folderPath)}/`;
       const related = vaultFiles
-        .filter((file) => file.path.startsWith(`${task.folderPath}/`) && !isCanonicalTaskFile(file.name))
+        .filter((file) => file.path.startsWith(relatedRoot) && !isCanonicalTaskFile(file.name))
         .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
       for (const file of related) {
         const kind = relatedFileKind(file.extension);
@@ -202,7 +224,7 @@ export class TaskWorkspaceService {
       throw new Error(`Project already exists: ${record.name}`);
     }
     const folderPath = await this.availableProjectPath(this.getSettings().projectRoot, record.name);
-    await this.ensureFolder(folderPath);
+    await this.ensureWorkspaceFolders(folderPath);
     const projectPath = `${folderPath}/project.md`;
     let projectFile: TFile | null = null;
     try {
@@ -372,11 +394,11 @@ export class TaskWorkspaceService {
   ): Promise<IndexedTask> {
     const record = createTaskRecord(input);
     if (this.index.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
-    const root = record.status === "archived" ? this.getSettings().archiveRoot : this.getSettings().activeRoot;
-    const folderPath = await this.availableWorkspacePath(root, record);
-    await this.ensureFolder(folderPath);
-    const taskPath = taskFilePath(folderPath);
-    const updatesPath = updatesFilePath(folderPath);
+    const folderPath = await this.workspaceForRecord(record);
+    await this.ensureWorkspaceFolders(folderPath);
+    const paths = await this.availableTaskPaths(folderPath, record);
+    const taskPath = paths.taskPath;
+    const updatesPath = paths.updatesPath;
     const body = buildTaskBody(record, input.details || "", input.outcome || "");
     let taskFile: TFile | null = null;
     try {
@@ -390,11 +412,10 @@ export class TaskWorkspaceService {
         newStatus: record.status
       });
       await this.app.vault.create(updatesPath, updates);
-      await this.ensureFolder(`${folderPath}/attachments`);
     } catch (error) {
       if (taskFile) await this.app.vault.delete(taskFile, true);
-      const folder = this.app.vault.getAbstractFileByPath(folderPath);
-      if (folder instanceof TFolder) await this.app.vault.delete(folder, true);
+      const updateFile = this.app.vault.getAbstractFileByPath(updatesPath);
+      if (updateFile instanceof TFile) await this.app.vault.delete(updateFile, true);
       throw error;
     }
     await this.refresh();
@@ -464,7 +485,9 @@ export class TaskWorkspaceService {
     if (isCanonicalTaskFile(`${cleanTitle}.md`)) {
       throw new Error("That name is reserved for the task workspace.");
     }
-    const path = await this.availableFilePath(task.folderPath, `${cleanTitle}.md`);
+    const filesPath = task.legacyWorkspace ? task.folderPath : taskFilesFolderPath(task.folderPath);
+    await this.ensureFolder(filesPath);
+    const path = await this.availableFilePath(filesPath, `${cleanTitle}.md`);
     const body = [`# ${cleanTitle}`, "", content.trim(), ""].join("\n").replace(/\n{3,}/g, "\n\n");
     const file = await this.app.vault.create(path, body);
     await this.refresh();
@@ -473,7 +496,9 @@ export class TaskWorkspaceService {
 
   async importRelatedFiles(taskId: string, files: File[]): Promise<TFile[]> {
     const task = this.getById(taskId);
-    const attachmentsPath = `${task.folderPath}/attachments`;
+    const attachmentsPath = task.legacyWorkspace
+      ? `${task.folderPath}/attachments`
+      : taskFilesFolderPath(task.folderPath);
     await this.ensureFolder(attachmentsPath);
     const created: TFile[] = [];
     for (const source of files) {
@@ -487,7 +512,9 @@ export class TaskWorkspaceService {
 
   async availableAttachmentPath(taskId: string, fileName: string, preferredPath = ""): Promise<string> {
     const task = this.getById(taskId);
-    const attachmentsPath = normalizePath(`${task.folderPath}/attachments`);
+    const attachmentsPath = normalizePath(task.legacyWorkspace
+      ? `${task.folderPath}/attachments`
+      : taskFilesFolderPath(task.folderPath));
     await this.ensureFolder(attachmentsPath);
     if (preferredPath) {
       const normalized = normalizePath(preferredPath);
@@ -510,7 +537,9 @@ export class TaskWorkspaceService {
 
   async moveVaultFileToTaskAttachments(taskId: string, source: TFile, targetPath: string): Promise<TFile> {
     const task = this.getById(taskId);
-    const attachmentsPath = normalizePath(`${task.folderPath}/attachments`);
+    const attachmentsPath = normalizePath(task.legacyWorkspace
+      ? `${task.folderPath}/attachments`
+      : taskFilesFolderPath(task.folderPath));
     const normalizedTarget = normalizePath(targetPath);
     if (!normalizedTarget.startsWith(`${attachmentsPath}/`)) {
       throw new Error("The Gmail attachment destination is outside the task attachments folder.");
@@ -554,9 +583,13 @@ export class TaskWorkspaceService {
       await this.app.vault.modify(updatesFile, nextUpdates);
       await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
       if (status === "archived" && !task.archived) {
-        await this.moveWorkspace(task.folderPath, this.getSettings().archiveRoot, nextRecord);
+        await this.moveTaskFiles(task, await this.archiveWorkspace(), nextRecord);
       } else if (task.archived && status !== "archived") {
-        await this.moveWorkspace(task.folderPath, this.getSettings().activeRoot, nextRecord);
+        const reopenedRecord = await this.recordForReopen(nextRecord);
+        if (reopenedRecord.project !== nextRecord.project) {
+          await this.app.vault.modify(task.taskFile, renderTaskMarkdown(reopenedRecord, taskDocument.body));
+        }
+        await this.moveTaskFiles(task, await this.workspaceForRecord(reopenedRecord), reopenedRecord);
       }
     } catch (error) {
       const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
@@ -576,16 +609,18 @@ export class TaskWorkspaceService {
   ): Promise<IndexedTask> {
     const task = this.getById(taskId);
     const nextProject = String(projectName || "").trim();
-    if (task.record.project.trim() === nextProject) return task;
+    const project = nextProject ? this.getProjectByName(nextProject) : null;
+    const canonicalProject = project?.record.name || "";
+    if (task.record.project.trim() === canonicalProject) return task;
 
     const at = new Date();
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
-    const nextRecord = updateTaskFields(taskDocument.record, { project: nextProject }, at);
+    const nextRecord = updateTaskFields(taskDocument.record, { project: canonicalProject }, at);
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
     const previous = task.record.project.trim() || "No project";
-    const next = nextProject || "No project";
+    const next = canonicalProject || "No project";
     const nextUpdates = appendUpdateMarkdown(oldUpdates, {
       actor,
       type: "fields-changed",
@@ -596,6 +631,9 @@ export class TaskWorkspaceService {
     try {
       await this.app.vault.modify(updatesFile, nextUpdates);
       await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+      if (!task.archived) {
+        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord);
+      }
     } catch (error) {
       const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
       if (currentTask instanceof TFile) await this.app.vault.modify(currentTask, oldTaskContent);

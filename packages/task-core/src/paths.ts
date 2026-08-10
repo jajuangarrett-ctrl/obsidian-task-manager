@@ -2,6 +2,11 @@ import { normalizeTaskId } from "./ids";
 
 export const DEFAULT_ACTIVE_ROOT = "08 Tasks/Workspaces";
 export const DEFAULT_ARCHIVE_ROOT = "08 Tasks/Archive";
+export const DEFAULT_INBOX_ROOT = "08 Tasks/Inbox";
+
+export const TASKS_FOLDER_NAME = "Tasks";
+export const UPDATES_FOLDER_NAME = "Updates";
+export const FILES_FOLDER_NAME = "Files";
 
 export function sanitizeTitleForPath(value: string): string {
   return String(value || "")
@@ -50,4 +55,28 @@ export function taskFilePath(folder: string): string {
 
 export function updatesFilePath(folder: string): string {
   return `${normalizeVaultPath(folder)}/updates.md`;
+}
+
+export function taskNotesFolderPath(workspace: string): string {
+  return `${normalizeVaultPath(workspace)}/${TASKS_FOLDER_NAME}`;
+}
+
+export function taskUpdatesFolderPath(workspace: string): string {
+  return `${normalizeVaultPath(workspace)}/${UPDATES_FOLDER_NAME}`;
+}
+
+export function taskFilesFolderPath(workspace: string): string {
+  return `${normalizeVaultPath(workspace)}/${FILES_FOLDER_NAME}`;
+}
+
+export function taskNoteFileName(title: string, copyNumber = 1): string {
+  return `${numberedTaskFolderName("", title, copyNumber)}.md`;
+}
+
+export function taskNoteFilePath(workspace: string, title: string, copyNumber = 1): string {
+  return `${taskNotesFolderPath(workspace)}/${taskNoteFileName(title, copyNumber)}`;
+}
+
+export function taskUpdateFilePath(workspace: string, title: string, copyNumber = 1): string {
+  return `${taskUpdatesFolderPath(workspace)}/${taskNoteFileName(title, copyNumber)}`;
 }
