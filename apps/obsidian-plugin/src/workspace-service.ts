@@ -162,8 +162,14 @@ export class TaskWorkspaceService {
       const relatedRoot = task.legacyWorkspace
         ? `${task.folderPath}/`
         : `${taskFilesFolderPath(task.folderPath)}/`;
+      const inboxPrefix = `${sanitizeTitleForPath(task.record.title)} - `.toLocaleLowerCase();
       const related = vaultFiles
-        .filter((file) => file.path.startsWith(relatedRoot) && !isCanonicalTaskFile(file.name))
+        .filter((file) => {
+          if (!file.path.startsWith(relatedRoot) || isCanonicalTaskFile(file.name)) return false;
+          return task.legacyWorkspace
+            || (!task.archived && Boolean(task.record.project))
+            || file.name.toLocaleLowerCase().startsWith(inboxPrefix);
+        })
         .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
       for (const file of related) {
         const kind = relatedFileKind(file.extension);
@@ -492,7 +498,10 @@ export class TaskWorkspaceService {
     }
     const filesPath = task.legacyWorkspace ? task.folderPath : taskFilesFolderPath(task.folderPath);
     await this.ensureFolder(filesPath);
-    const path = await this.availableFilePath(filesPath, `${cleanTitle}.md`);
+    const fileName = task.legacyWorkspace || task.record.project
+      ? `${cleanTitle}.md`
+      : `${sanitizeTitleForPath(task.record.title)} - ${cleanTitle}.md`;
+    const path = await this.availableFilePath(filesPath, fileName);
     const body = [`# ${cleanTitle}`, "", content.trim(), ""].join("\n").replace(/\n{3,}/g, "\n\n");
     const file = await this.app.vault.create(path, body);
     await this.refresh();
@@ -508,7 +517,10 @@ export class TaskWorkspaceService {
     const created: TFile[] = [];
     for (const source of files) {
       const name = safeRelatedFileName(source.name, "Attachment");
-      const path = await this.availableFilePath(attachmentsPath, name);
+      const fileName = task.legacyWorkspace || task.record.project
+        ? name
+        : `${sanitizeTitleForPath(task.record.title)} - ${name}`;
+      const path = await this.availableFilePath(attachmentsPath, fileName);
       created.push(await this.app.vault.createBinary(path, await source.arrayBuffer()));
     }
     await this.refresh();
@@ -533,7 +545,9 @@ export class TaskWorkspaceService {
       }
       return normalized;
     }
-    const name = fileName || "Email.md";
+    const name = task.legacyWorkspace || task.record.project
+      ? fileName || "Email.md"
+      : `${sanitizeTitleForPath(task.record.title)} - ${fileName || "Email.md"}`;
     if (name.includes("/") || name.includes("\\")) {
       throw new Error("The Gmail email filename must not contain a folder path.");
     }
@@ -719,10 +733,16 @@ export class TaskWorkspaceService {
       { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
       { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
     ];
-    if (task.legacyWorkspace) {
+    const moveTaskOwnedFiles = task.legacyWorkspace
+      || task.archived
+      || (!task.record.project && normalizePath(task.folderPath) === normalizePath(this.getSettings().inboxRoot));
+    if (moveTaskOwnedFiles) {
       const filesPath = taskFilesFolderPath(normalizedTarget);
       for (const related of task.relatedFiles) {
-        const name = `${sanitizeTitleForPath(record.title)} - ${related.file.name}`;
+        const prefix = `${sanitizeTitleForPath(record.title)} - `;
+        const name = related.file.name.startsWith(prefix)
+          ? related.file.name
+          : `${prefix}${related.file.name}`;
         moves.unshift({
           file: related.file,
           from: related.file.path,

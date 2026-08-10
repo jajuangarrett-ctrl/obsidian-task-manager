@@ -32,8 +32,9 @@ and its update log into the selected project's workspace. Choosing **No
 project** moves them back to Inbox. The stable `task_id` remains in task
 frontmatter and never appears in filenames.
 
-Files are shared project or Inbox resources. **Copy path** copies the
-vault-relative `Files/` destination for Obsidian Web Clipper. Existing
+Files are shared project resources. Inbox files added through the dashboard or
+Gmail intake receive a task-title prefix so only the owning Inbox task displays
+them. **Copy path** copies the vault-relative `Files/` destination for Obsidian Web Clipper. Existing
 per-task workspaces under `08 Tasks/Workspaces/` remain readable during a
 migration but are no longer used for new tasks.
 
