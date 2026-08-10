@@ -4,7 +4,6 @@ import {
   parseTaskMarkdown,
   renderTaskMarkdown,
   sanitizeTitleForPath,
-  taskFilesFolderPath,
   taskNoteFileName
 } from "@fjg/task-core";
 import { appendUpdateMarkdown, renderUpdatesMarkdown } from "@fjg/task-core";
@@ -23,6 +22,7 @@ interface PlannedTask {
   workspace: string;
   warning: string;
   taskMarkdown: string;
+  updatesMarkdown: string;
   moves: MoveItem[];
 }
 
@@ -40,54 +40,64 @@ interface MigrationPlan {
 }
 
 const args = process.argv.slice(2);
-const apply = args.includes("--apply");
-const vault = absoluteArg("--vault");
-if (!vault) throw new Error("Usage: tsx scripts/migrate-project-layout.ts --vault /path/to/vault [--apply]");
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
 
-const sourceRoot = path.join(vault, "08 Tasks/Workspaces");
-const inboxRoot = path.join(vault, "08 Tasks/Inbox");
-const projectRoot = path.join(vault, "08 Tasks/Projects");
-const plan = await buildPlan(vault, sourceRoot, inboxRoot, projectRoot);
+async function main(): Promise<void> {
+  const apply = args.includes("--apply");
+  const vault = absoluteArg("--vault");
+  if (!vault) throw new Error("Usage: tsx scripts/migrate-project-layout.ts --vault /path/to/vault [--apply]");
 
-console.log(JSON.stringify({
-  mode: apply ? "apply" : "dry-run",
-  taskCount: plan.taskCount,
-  inboxCount: plan.inboxCount,
-  projectCount: plan.projectCount,
-  missingProjectCount: plan.missingProjectCount,
-  moveCount: plan.tasks.reduce((sum, task) => sum + task.moves.length, 0),
-  missingProjects: plan.tasks.filter((task) => task.warning).map((task) => ({
-    task: task.title,
-    project: task.previousProject,
-    action: task.warning
-  }))
-}, null, 2));
+  const sourceRoot = path.join(vault, "08 Tasks/Workspaces");
+  const inboxRoot = path.join(vault, "08 Tasks/Inbox");
+  const projectRoot = path.join(vault, "08 Tasks/Projects");
+  const plan = await buildPlan(vault, sourceRoot, inboxRoot, projectRoot);
 
-if (!apply) process.exit(0);
+  console.log(JSON.stringify({
+    mode: apply ? "apply" : "dry-run",
+    taskCount: plan.taskCount,
+    inboxCount: plan.inboxCount,
+    projectCount: plan.projectCount,
+    missingProjectCount: plan.missingProjectCount,
+    moveCount: plan.tasks.reduce((sum, task) => sum + task.moves.length, 0),
+    missingProjects: plan.tasks.filter((task) => task.warning).map((task) => ({
+      task: task.title,
+      project: task.previousProject,
+      action: task.warning
+    }))
+  }, null, 2));
 
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const manifestDir = path.join(vault, "08 Tasks/Migration Manifests");
-await fs.mkdir(manifestDir, { recursive: true });
-const manifestPath = path.join(manifestDir, `project-layout-${stamp}.json`);
-await fs.writeFile(manifestPath, `${JSON.stringify(plan, null, 2)}\n`, { flag: "wx" });
+  if (!apply) return;
 
-for (const project of await activeProjects(projectRoot)) {
-  await ensureWorkspaceFolders(project.folder);
-}
-await ensureWorkspaceFolders(inboxRoot);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const manifestDir = path.join(vault, "08 Tasks/Migration Manifests");
+  await fs.mkdir(manifestDir, { recursive: true });
+  const manifestPath = path.join(manifestDir, `project-layout-${stamp}.json`);
+  await fs.writeFile(manifestPath, `${JSON.stringify(plan, null, 2)}\n`, { flag: "wx" });
 
-for (const task of plan.tasks) {
-  await ensureWorkspaceFolders(task.workspace);
-  const taskMove = task.moves.find((move) => move.kind === "task");
-  if (!taskMove) throw new Error(`Task move missing for ${task.taskId}.`);
-  for (const move of task.moves.filter((item) => item.kind !== "task")) {
-    await moveFile(move.from, move.to);
+  for (const project of await activeProjects(projectRoot)) {
+    await ensureWorkspaceFolders(project.folder);
   }
-  await fs.writeFile(taskMove.from, task.taskMarkdown);
-  await moveFile(taskMove.from, taskMove.to);
-}
+  await ensureWorkspaceFolders(inboxRoot);
 
-console.log(JSON.stringify({ applied: true, manifestPath, taskCount: plan.taskCount }, null, 2));
+  for (const task of plan.tasks) {
+    await ensureWorkspaceFolders(task.workspace);
+    const taskMove = task.moves.find((move) => move.kind === "task");
+    const updatesMove = task.moves.find((move) => move.kind === "updates");
+    if (!taskMove) throw new Error(`Task move missing for ${task.taskId}.`);
+    if (!updatesMove) throw new Error(`Update-log move missing for ${task.taskId}.`);
+    await fs.writeFile(updatesMove.from, task.updatesMarkdown);
+    for (const move of task.moves.filter((item) => item.kind !== "task")) {
+      await moveFile(move.from, move.to);
+    }
+    await fs.writeFile(taskMove.from, task.taskMarkdown);
+    await moveFile(taskMove.from, taskMove.to);
+  }
+
+  console.log(JSON.stringify({ applied: true, manifestPath, taskCount: plan.taskCount }, null, 2));
+}
 
 async function buildPlan(
   vaultPath: string,
@@ -96,6 +106,7 @@ async function buildPlan(
   projectsRoot: string
 ): Promise<MigrationPlan> {
   const projects = await activeProjects(projectsRoot);
+  const migrationAt = new Date().toISOString();
   const projectsByKey = new Map(projects.map((project) => [normalizeKey(project.name), project]));
   const sourceFolders = await directories(legacyRoot);
   const occupied = new Set<string>();
@@ -116,7 +127,7 @@ async function buildPlan(
       : "";
     const record = canonicalProject === document.record.project
       ? document.record
-      : { ...document.record, project: canonicalProject, updated_at: new Date().toISOString() };
+      : { ...document.record, project: canonicalProject, updated_at: migrationAt };
     const basename = await availableTaskBasename(workspace, record.title, occupied);
     const taskTarget = path.join(workspace, "Tasks", basename);
     const updatesTarget = path.join(workspace, "Updates", basename);
@@ -124,13 +135,7 @@ async function buildPlan(
     occupied.add(updatesTarget.toLocaleLowerCase());
     const moves: MoveItem[] = [{ kind: "task", from: sourceTask, to: taskTarget }];
     const sourceUpdates = path.join(sourceFolder, "updates.md");
-    if (await exists(sourceUpdates)) {
-      moves.push({ kind: "updates", from: sourceUpdates, to: updatesTarget });
-    } else {
-      await fs.mkdir(path.dirname(sourceUpdates), { recursive: true });
-      await fs.writeFile(sourceUpdates, renderUpdatesMarkdown(), { flag: "wx" });
-      moves.push({ kind: "updates", from: sourceUpdates, to: updatesTarget });
-    }
+    moves.push({ kind: "updates", from: sourceUpdates, to: updatesTarget });
     const related = await filesRecursively(sourceFolder);
     const filesFolder = path.join(workspace, "Files");
     for (const file of related) {
@@ -141,12 +146,14 @@ async function buildPlan(
       occupied.add(destination.toLocaleLowerCase());
       moves.push({ kind: "file", from: file, to: destination });
     }
-    let updatesMarkdown = await fs.readFile(sourceUpdates, "utf8");
+    let updatesMarkdown = await exists(sourceUpdates)
+      ? await fs.readFile(sourceUpdates, "utf8")
+      : renderUpdatesMarkdown();
     updatesMarkdown = appendUpdateMarkdown(updatesMarkdown, {
       actor: "FJG Task Manager migration",
       type: "migration",
       text: warning || `Moved into the ${canonicalProject ? `${canonicalProject} project` : "Inbox"} workspace.`,
-      createdAt: record.updated_at
+      createdAt: migrationAt
     });
     await fs.writeFile(sourceUpdates, updatesMarkdown);
     tasks.push({
@@ -157,6 +164,7 @@ async function buildPlan(
       workspace,
       warning,
       taskMarkdown: renderTaskMarkdown(record, document.body),
+      updatesMarkdown,
       moves
     });
   }
@@ -217,7 +225,7 @@ async function availableFile(folder: string, preferred: string, occupied: Set<st
 }
 
 async function ensureWorkspaceFolders(workspace: string): Promise<void> {
-  for (const folder of [workspace, path.join(workspace, "Tasks"), path.join(workspace, "Updates"), taskFilesFolderPath(workspace)]) {
+  for (const folder of [workspace, path.join(workspace, "Tasks"), path.join(workspace, "Updates"), path.join(workspace, "Files")]) {
     await fs.mkdir(folder, { recursive: true });
   }
 }

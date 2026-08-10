@@ -712,16 +712,36 @@ export class TaskWorkspaceService {
     if (!task.legacyWorkspace && normalizePath(task.folderPath) === normalizedTarget) return;
     const updatesFile = await this.ensureUpdatesFile(task);
     const paths = await this.availableTaskPaths(normalizedTarget, record);
-    await this.app.fileManager.renameFile(task.taskFile, paths.taskPath);
-    await this.app.fileManager.renameFile(updatesFile, paths.updatesPath);
-
+    const moves: Array<{ file: TFile; from: string; to: string }> = [
+      { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
+      { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
+    ];
     if (task.legacyWorkspace) {
       const filesPath = taskFilesFolderPath(normalizedTarget);
       for (const related of task.relatedFiles) {
         const name = `${sanitizeTitleForPath(record.title)} - ${related.file.name}`;
-        const destination = await this.availableFilePath(filesPath, name);
-        await this.app.fileManager.renameFile(related.file, destination);
+        moves.unshift({
+          file: related.file,
+          from: related.file.path,
+          to: await this.availableFilePath(filesPath, name)
+        });
       }
+    }
+    const completed: Array<{ file: TFile; from: string }> = [];
+    try {
+      for (const move of moves) {
+        await this.app.fileManager.renameFile(move.file, move.to);
+        completed.push({ file: move.file, from: move.from });
+      }
+    } catch (error) {
+      for (const move of completed.reverse()) {
+        try {
+          await this.app.fileManager.renameFile(move.file, move.from);
+        } catch (rollbackError) {
+          console.error("[FJG Task Manager] Task move rollback failed", move.file.path, rollbackError);
+        }
+      }
+      throw error;
     }
   }
 
@@ -914,7 +934,7 @@ function normalizeSearch(value: string): string {
   return String(value || "")
     .toLowerCase()
     .replace(/\.md$/i, "")
-    .replace(/[-_]+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
