@@ -150,12 +150,15 @@ async function buildPlan(
     let updatesMarkdown = await exists(sourceUpdates)
       ? await fs.readFile(sourceUpdates, "utf8")
       : renderUpdatesMarkdown();
-    updatesMarkdown = appendUpdateMarkdown(updatesMarkdown, {
-      actor: "FJG Task Manager migration",
-      type: "migration",
-      text: warning || `Moved into the ${canonicalProject ? `${canonicalProject} project` : "Inbox"} workspace.`,
-      createdAt: migrationAt
-    });
+    const migrationText = warning || `Moved into the ${canonicalProject ? `${canonicalProject} project` : "Inbox"} workspace.`;
+    if (!updatesMarkdown.includes("— FJG Task Manager migration") || !updatesMarkdown.includes(migrationText)) {
+      updatesMarkdown = appendUpdateMarkdown(updatesMarkdown, {
+        actor: "FJG Task Manager migration",
+        type: "migration",
+        text: migrationText,
+        createdAt: migrationAt
+      });
+    }
     await fs.writeFile(sourceUpdates, updatesMarkdown);
     tasks.push({
       taskId: record.task_id,
