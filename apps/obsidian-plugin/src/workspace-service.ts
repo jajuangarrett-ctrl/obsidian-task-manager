@@ -371,9 +371,14 @@ export class TaskWorkspaceService {
 
   resolveFromFile(file: TFile | null): IndexedTask | null {
     if (!file) return null;
-    return this.list({ includeArchived: true }).find((task) => {
-      return file.path === task.taskFile.path || file.path.startsWith(`${task.folderPath}/`);
-    }) || null;
+    const exact = this.list({ includeArchived: true }).find((task) => {
+      return file.path === task.taskFile.path || file.path === task.updatesFile?.path;
+    });
+    if (exact) return exact;
+    const related = this.list({ includeArchived: true }).filter((task) => {
+      return task.relatedFiles.some((entry) => entry.file.path === file.path);
+    });
+    return related.length === 1 ? related[0] : null;
   }
 
   async createFromClip(item: CreateTaskItem, requestId: string, createdAt: string): Promise<IndexedTask> {
@@ -652,7 +657,7 @@ export class TaskWorkspaceService {
       try {
         const document = parseTaskMarkdown(await this.app.vault.cachedRead(task.taskFile));
         const issues = validateTaskRecord(document.record).map((issue) => `${issue.field}: ${issue.message}`);
-        if (!task.updatesFile) issues.push("updates.md is missing.");
+        if (!task.updatesFile) issues.push("Task update log is missing.");
         if (issues.length) results.push({ path: task.folderPath, issues });
       } catch (error) {
         results.push({ path: task.folderPath, issues: [error instanceof Error ? error.message : String(error)] });
@@ -670,15 +675,54 @@ export class TaskWorkspaceService {
 
   private async ensureUpdatesFile(task: IndexedTask): Promise<TFile> {
     if (task.updatesFile) return task.updatesFile;
-    return this.app.vault.create(updatesFilePath(task.folderPath), renderUpdatesMarkdown());
+    if (task.legacyWorkspace) {
+      return this.app.vault.create(updatesFilePath(task.folderPath), renderUpdatesMarkdown());
+    }
+    await this.ensureFolder(taskUpdatesFolderPath(task.folderPath));
+    return this.app.vault.create(
+      `${taskUpdatesFolderPath(task.folderPath)}/${task.taskFile.name}`,
+      renderUpdatesMarkdown()
+    );
   }
 
-  private async moveWorkspace(currentPath: string, targetRoot: string, record: TaskRecord): Promise<void> {
-    await this.ensureFolder(targetRoot);
-    const folder = this.app.vault.getAbstractFileByPath(currentPath);
-    if (!(folder instanceof TFolder)) throw new Error(`Workspace folder not found: ${currentPath}`);
-    const destination = await this.availableWorkspacePath(targetRoot, record);
-    await this.app.vault.rename(folder, destination);
+  private async workspaceForRecord(record: TaskRecord): Promise<string> {
+    if (record.status === "archived") return this.archiveWorkspace();
+    const projectName = record.project.trim();
+    if (!projectName) return normalizePath(this.getSettings().inboxRoot);
+    return this.getProjectByName(projectName).folderPath;
+  }
+
+  private async archiveWorkspace(): Promise<string> {
+    return normalizePath(this.getSettings().archiveRoot);
+  }
+
+  private async recordForReopen(record: TaskRecord): Promise<TaskRecord> {
+    if (!record.project.trim()) return record;
+    const activeProject = this.listProjects().find((project) => {
+      return normalizeSearch(project.record.name) === normalizeSearch(record.project);
+    });
+    return activeProject
+      ? { ...record, project: activeProject.record.name }
+      : { ...record, project: "" };
+  }
+
+  private async moveTaskFiles(task: IndexedTask, targetWorkspace: string, record: TaskRecord): Promise<void> {
+    const normalizedTarget = normalizePath(targetWorkspace);
+    await this.ensureWorkspaceFolders(normalizedTarget);
+    if (!task.legacyWorkspace && normalizePath(task.folderPath) === normalizedTarget) return;
+    const updatesFile = await this.ensureUpdatesFile(task);
+    const paths = await this.availableTaskPaths(normalizedTarget, record);
+    await this.app.fileManager.renameFile(task.taskFile, paths.taskPath);
+    await this.app.fileManager.renameFile(updatesFile, paths.updatesPath);
+
+    if (task.legacyWorkspace) {
+      const filesPath = taskFilesFolderPath(normalizedTarget);
+      for (const related of task.relatedFiles) {
+        const name = `${sanitizeTitleForPath(record.title)} - ${related.file.name}`;
+        const destination = await this.availableFilePath(filesPath, name);
+        await this.app.fileManager.renameFile(related.file, destination);
+      }
+    }
   }
 
   private async moveProjectWorkspace(currentPath: string, targetRoot: string, name: string): Promise<void> {
@@ -692,6 +736,7 @@ export class TaskWorkspaceService {
   async normalizeVisibleFolderNames(): Promise<void> {
     let changed = false;
     for (const task of this.list({ includeArchived: true })) {
+      if (!task.legacyWorkspace) continue;
       const root = task.archived ? this.getSettings().archiveRoot : this.getSettings().activeRoot;
       const destination = await this.availableWorkspacePath(root, task.record, task.folderPath);
       if (destination === task.folderPath) continue;
@@ -729,6 +774,26 @@ export class TaskWorkspaceService {
       if (!cached && !diskEntry) return candidate;
     }
     throw new Error(`Could not create a unique workspace folder for ${record.title}.`);
+  }
+
+  private async availableTaskPaths(
+    workspace: string,
+    record: TaskRecord,
+    currentTaskPath = ""
+  ): Promise<{ taskPath: string; updatesPath: string }> {
+    const tasksFolder = taskNotesFolderPath(workspace);
+    const updatesFolder = taskUpdatesFolderPath(workspace);
+    await this.ensureFolder(tasksFolder);
+    await this.ensureFolder(updatesFolder);
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const taskPath = normalizePath(taskNoteFilePath(workspace, record.title, copyNumber));
+      const updatesPath = normalizePath(taskUpdateFilePath(workspace, record.title, copyNumber));
+      if (taskPath === currentTaskPath) return { taskPath, updatesPath };
+      const taskEntry = this.app.vault.getAbstractFileByPath(taskPath) || await this.app.vault.adapter.stat(taskPath);
+      const updatesEntry = this.app.vault.getAbstractFileByPath(updatesPath) || await this.app.vault.adapter.stat(updatesPath);
+      if (!taskEntry && !updatesEntry) return { taskPath, updatesPath };
+    }
+    throw new Error(`Could not create unique task files for ${record.title}.`);
   }
 
   private async availableFilePath(folderPath: string, fileName: string): Promise<string> {
@@ -780,26 +845,40 @@ export class TaskWorkspaceService {
     }
   }
 
+  private async ensureWorkspaceFolders(path: string): Promise<void> {
+    await this.ensureFolder(path);
+    await this.ensureFolder(taskNotesFolderPath(path));
+    await this.ensureFolder(taskUpdatesFolderPath(path));
+    await this.ensureFolder(taskFilesFolderPath(path));
+  }
+
   private async rollbackTaskWorkspaces(taskIds: Set<string>): Promise<void> {
     const settings = this.getSettings();
     const roots = [
       `${normalizePath(settings.activeRoot)}/`,
       `${normalizePath(settings.archiveRoot)}/`
     ];
-    const folders = new Map<string, TFolder>();
+    const files: TFile[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
-      if (file.name !== "task.md" || !roots.some((root) => file.path.startsWith(root))) continue;
+      const inLegacyRoot = file.name === "task.md" && roots.some((root) => file.path.startsWith(root));
+      const inManagedTasks = file.path.includes("/Tasks/");
+      if (!inLegacyRoot && !inManagedTasks) continue;
       try {
         const document = parseTaskMarkdown(await this.app.vault.read(file));
-        if (taskIds.has(document.record.task_id) && file.parent) {
-          folders.set(file.parent.path, file.parent);
+        if (taskIds.has(document.record.task_id)) {
+          files.push(file);
+          const workspace = inLegacyRoot ? file.parent?.path || "" : workspaceRootFromTaskPath(file.path);
+          const update = this.app.vault.getAbstractFileByPath(
+            inLegacyRoot ? updatesFilePath(workspace) : `${taskUpdatesFolderPath(workspace)}/${file.name}`
+          );
+          if (update instanceof TFile) files.push(update);
         }
       } catch {
         // An unrelated invalid task file must not prevent rollback of this batch.
       }
     }
-    for (const folder of [...folders.values()].reverse()) {
-      await this.app.vault.delete(folder, true);
+    for (const file of [...new Set(files)].reverse()) {
+      await this.app.vault.delete(file, true);
     }
   }
 }
@@ -842,4 +921,12 @@ function normalizeSearch(value: string): string {
 
 function projectIndexKey(name: string, archived: boolean): string {
   return `${archived ? "archived" : "active"}:${normalizeSearch(name)}`;
+}
+
+function workspaceRootFromTaskPath(path: string): string {
+  const marker = "/Tasks/";
+  const normalized = normalizePath(path);
+  const index = normalized.lastIndexOf(marker);
+  if (index < 0) throw new Error(`Task note is outside a managed Tasks folder: ${path}`);
+  return normalized.slice(0, index);
 }

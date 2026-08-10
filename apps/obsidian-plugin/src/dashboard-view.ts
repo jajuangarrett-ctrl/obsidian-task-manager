@@ -584,10 +584,10 @@ export class TaskDashboardView extends ItemView {
       actions,
       "copy",
       "Copy path",
-      `Copy the task folder path for ${task.record.title}`
+      `Copy the workspace files path for ${task.record.title}`
     );
     copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
-    const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task folder for ${task.record.title}`);
+    const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the workspace for ${task.record.title}`);
     folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
 
     if (!task.relatedFiles.length) {
