@@ -41,7 +41,8 @@ import {
   markdownPreview,
   RelatedFileKind,
   relatedFileKind,
-  safeRelatedFileName
+  safeRelatedFileName,
+  workspaceFileBelongsToTask
 } from "./related-files";
 
 export interface TaskRelatedFile {
@@ -162,13 +163,16 @@ export class TaskWorkspaceService {
       const relatedRoot = task.legacyWorkspace
         ? `${task.folderPath}/`
         : `${taskFilesFolderPath(task.folderPath)}/`;
-      const inboxPrefix = `${sanitizeTitleForPath(task.record.title)} - `.toLocaleLowerCase();
       const related = vaultFiles
         .filter((file) => {
           if (!file.path.startsWith(relatedRoot) || isCanonicalTaskFile(file.name)) return false;
-          return task.legacyWorkspace
-            || (!task.archived && Boolean(task.record.project))
-            || file.name.toLocaleLowerCase().startsWith(inboxPrefix);
+          return workspaceFileBelongsToTask(
+            file.name,
+            task.record.title,
+            task.record.project,
+            task.archived,
+            task.legacyWorkspace
+          );
         })
         .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
       for (const file of related) {

@@ -4,7 +4,8 @@ import {
   isCanonicalTaskFile,
   markdownPreview,
   relatedFileKind,
-  safeRelatedFileName
+  safeRelatedFileName,
+  workspaceFileBelongsToTask
 } from "./related-files";
 
 describe("related files", () => {
@@ -43,5 +44,14 @@ Follow up with [[Franklin Garrett|Franklin]] about the [quote](https://example.c
   it("sanitizes user-provided file names", () => {
     expect(safeRelatedFileName(`  Quote: RM/116?.pdf  `)).toBe("Quote RM 116.pdf");
     expect(safeRelatedFileName("...")).toBe("Untitled");
+  });
+
+  it("shares project files but keeps Inbox and archive files task-specific", () => {
+    expect(workspaceFileBelongsToTask("Project brief.pdf", "Call vendor", "Furniture", false, false)).toBe(true);
+    expect(workspaceFileBelongsToTask("Call vendor - Quote.pdf", "Call vendor", "", false, false)).toBe(true);
+    expect(workspaceFileBelongsToTask("Other task - Quote.pdf", "Call vendor", "", false, false)).toBe(false);
+    expect(workspaceFileBelongsToTask("Call vendor - Quote.pdf", "Call vendor", "Furniture", true, false)).toBe(true);
+    expect(workspaceFileBelongsToTask("Project brief.pdf", "Call vendor", "Furniture", true, false)).toBe(false);
+    expect(workspaceFileBelongsToTask("Anything.pdf", "Call vendor", "", false, true)).toBe(true);
   });
 });

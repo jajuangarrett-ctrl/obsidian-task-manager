@@ -1,3 +1,5 @@
+import { sanitizeTitleForPath } from "@fjg/task-core";
+
 export type RelatedFileKind = "note" | "image" | "pdf" | "document" | "file";
 
 const IMAGE_EXTENSIONS = new Set(["avif", "bmp", "gif", "jpeg", "jpg", "png", "svg", "webp"]);
@@ -28,6 +30,19 @@ export function relatedFileKind(extension: string): RelatedFileKind {
 export function isCanonicalTaskFile(name: string): boolean {
   const clean = name.toLowerCase();
   return clean === "task.md" || clean === "updates.md";
+}
+
+export function workspaceFileBelongsToTask(
+  fileName: string,
+  taskTitle: string,
+  project: string,
+  archived: boolean,
+  legacyWorkspace: boolean
+): boolean {
+  if (legacyWorkspace) return true;
+  if (project && !archived) return true;
+  const prefix = `${sanitizeTitleForPath(taskTitle)} - `.toLocaleLowerCase();
+  return fileName.toLocaleLowerCase().startsWith(prefix);
 }
 
 export function markdownPreview(markdown: string, limit = 180): string {

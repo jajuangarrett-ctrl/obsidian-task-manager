@@ -3,7 +3,7 @@
   "name": "FJG Task Manager",
   "version": "0.10.0",
   "minAppVersion": "1.5.0",
-  "description": "Folder-based task workspaces, live updates, quick voice capture, AI drafting, and browser clipping.",
+  "description": "Project-centered task workspaces, live updates, quick voice capture, AI drafting, and browser clipping.",
   "author": "Franklin Garrett",
   "authorUrl": "https://github.com/jajuangarrett-ctrl",
   "isDesktopOnly": false
