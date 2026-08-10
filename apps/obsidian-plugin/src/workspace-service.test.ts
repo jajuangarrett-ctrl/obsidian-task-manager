@@ -208,4 +208,90 @@ describe("TaskWorkspaceService project-centered moves", () => {
     );
     expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
   });
+
+  it("creates browser-clipped tasks in Inbox or the selected project workspace", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+
+    const inboxTask = await service.createFromClip({
+      title: "Review clipped article",
+      details: "Selected browser text",
+      status: "inbox",
+      project: "",
+      tags: ["task"],
+      source: { type: "web", title: "Source article", url: "https://example.com/article" }
+    }, "req_clipper_inbox", "2026-08-10T16:00:00.000Z");
+    const projectTask = await service.createFromClip({
+      title: "Send project follow-up",
+      details: "Project-specific selected text",
+      status: "do-first",
+      project: "Project Alpha",
+      tags: ["task"],
+      source: { type: "web", title: "Project source", url: "https://example.com/project" }
+    }, "req_clipper_project", "2026-08-10T16:05:00.000Z");
+
+    expect(inboxTask.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Review clipped article.md");
+    expect(inboxTask.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Review clipped article.md");
+    expect(projectTask.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/Send project follow-up.md");
+    expect(projectTask.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Send project follow-up.md");
+    expect(await vault.read(projectTask.taskFile as never)).toContain("source_url: https://example.com/project");
+    expect(await vault.read(projectTask.updatesFile as never)).toContain("Request ID: `req_clipper_project`");
+  });
+
+  it("keeps clipped updates attached by stable task ID after a project move", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    const created = await service.createFromClip({
+      title: "Track browser research",
+      details: "Initial selected text",
+      status: "inbox",
+      project: "",
+      tags: ["task"],
+      source: { type: "web", title: "Initial source", url: "https://example.com/initial" }
+    }, "req_clipper_create", "2026-08-10T17:00:00.000Z");
+
+    const moved = await service.changeProject(created.record.task_id, "Project Alpha");
+    const resolved = service.findByIdOrQuery(created.record.task_id, "obsolete title text");
+    expect(resolved.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/Track browser research.md");
+
+    const updated = await service.appendUpdate(resolved.record.task_id, {
+      actor: "Browser clipper",
+      type: "update",
+      text: "New evidence clipped after the task moved.",
+      source: { type: "web", title: "Follow-up source", url: "https://example.com/follow-up" },
+      createdAt: "2026-08-10T17:15:00.000Z",
+      requestId: "req_clipper_update"
+    });
+
+    expect(updated.record.task_id).toBe(created.record.task_id);
+    expect(updated.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Track browser research.md");
+    expect(await vault.read(updated.updatesFile as never)).toContain("New evidence clipped after the task moved.");
+    expect(await vault.read(updated.updatesFile as never)).toContain("Request ID: `req_clipper_update`");
+    expect(moved.record.project).toBe("Project Alpha");
+
+    const catalogEntry = service.catalog().find((task) => task.task_id === created.record.task_id);
+    expect(catalogEntry).toMatchObject({
+      project: "Project Alpha",
+      path: "08 Tasks/Projects/Project Alpha"
+    });
+  });
+
+  it("rejects a clipped task for a project that no longer exists", async () => {
+    const { service } = createService();
+    await service.initialize();
+
+    await expect(service.createFromClip({
+      title: "Do not orphan this clip",
+      details: "The selected project was deleted before capture.",
+      status: "inbox",
+      project: "Deleted Project",
+      tags: ["task"],
+      source: { type: "web", title: "Source", url: "https://example.com" }
+    }, "req_missing_project", "2026-08-10T18:00:00.000Z")).rejects.toThrow(
+      "Project not found: Deleted Project"
+    );
+    expect(service.list()).toHaveLength(0);
+  });
 });
