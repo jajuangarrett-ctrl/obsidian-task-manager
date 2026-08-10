@@ -1,6 +1,6 @@
 {
   "name": "obsidian-task-manager",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "private": true,
   "description": "FJG Task Manager monorepo for Obsidian task workspaces and browser capture.",
   "workspaces": [
@@ -13,6 +13,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test && npm run build",
+    "migrate:project-layout": "tsx scripts/migrate-project-layout.ts",
     "install:vault": "node scripts/install-vault.mjs",
     "package:release": "node scripts/package-release.mjs"
   },

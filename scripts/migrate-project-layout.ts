@@ -73,6 +73,7 @@ async function main(): Promise<void> {
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const manifestDir = path.join(vault, "08 Tasks/Migration Manifests");
+  await preflight(plan);
   await fs.mkdir(manifestDir, { recursive: true });
   const manifestPath = path.join(manifestDir, `project-layout-${stamp}.json`);
   await fs.writeFile(manifestPath, `${JSON.stringify(plan, null, 2)}\n`, { flag: "wx" });
@@ -235,6 +236,21 @@ async function moveFile(from: string, to: string): Promise<void> {
   if (await exists(to)) throw new Error(`Migration destination already exists: ${to}`);
   await fs.mkdir(path.dirname(to), { recursive: true });
   await fs.rename(from, to);
+}
+
+async function preflight(plan: MigrationPlan): Promise<void> {
+  const destinations = new Set<string>();
+  for (const task of plan.tasks) {
+    for (const move of task.moves) {
+      const destinationKey = move.to.toLocaleLowerCase();
+      if (destinations.has(destinationKey)) throw new Error(`Duplicate migration destination: ${move.to}`);
+      destinations.add(destinationKey);
+      if (move.kind !== "updates" && !(await exists(move.from))) {
+        throw new Error(`Migration source is missing: ${move.from}`);
+      }
+      if (await exists(move.to)) throw new Error(`Migration destination already exists: ${move.to}`);
+    }
+  }
 }
 
 async function directories(root: string): Promise<string[]> {

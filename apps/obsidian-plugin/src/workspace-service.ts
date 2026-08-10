@@ -572,14 +572,21 @@ export class TaskWorkspaceService {
     const at = new Date();
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
-    const nextRecord = transitionTaskRecord(taskDocument.record, status, at);
+    const transitionedRecord = transitionTaskRecord(taskDocument.record, status, at);
+    const nextRecord = task.archived && status !== "archived"
+      ? await this.recordForReopen(transitionedRecord)
+      : transitionedRecord;
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
     const type = status === "completed" ? "completed" : status === "archived" ? "archived" : task.record.status === "archived" ? "reopened" : "status-change";
     const nextUpdates = appendUpdateMarkdown(oldUpdates, {
       actor,
       type,
-      text: text || `Status changed from ${task.record.status} to ${status}.`,
+      text: text || (
+        transitionedRecord.project && !nextRecord.project
+          ? `Status changed from ${task.record.status} to ${status}. The previous project is not active, so the task returned to Inbox.`
+          : `Status changed from ${task.record.status} to ${status}.`
+      ),
       previousStatus: task.record.status,
       newStatus: status,
       createdAt: at.toISOString()
@@ -590,11 +597,7 @@ export class TaskWorkspaceService {
       if (status === "archived" && !task.archived) {
         await this.moveTaskFiles(task, await this.archiveWorkspace(), nextRecord);
       } else if (task.archived && status !== "archived") {
-        const reopenedRecord = await this.recordForReopen(nextRecord);
-        if (reopenedRecord.project !== nextRecord.project) {
-          await this.app.vault.modify(task.taskFile, renderTaskMarkdown(reopenedRecord, taskDocument.body));
-        }
-        await this.moveTaskFiles(task, await this.workspaceForRecord(reopenedRecord), reopenedRecord);
+        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord);
       }
     } catch (error) {
       const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);

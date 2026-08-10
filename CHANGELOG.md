@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.10.0 — 2026-08-10
+
+### Changed
+
+- Replace one-folder-per-task storage with project-centered workspaces that
+  contain shared `Tasks`, `Updates`, and `Files` areas.
+- Store tasks without a project under `08 Tasks/Inbox` using the same layout.
+- Make project changes in the dashboard physically relocate the task note and
+  update log; choosing No project returns the task to Inbox.
+- Copy the project or Inbox `Files` path for Obsidian Web Clipper and place
+  dashboard/Gmail files in that shared area.
+- Route reopened tasks back to an active project when possible, or to Inbox
+  with a cleared stale project assignment when the project no longer exists.
+
+### Migration and validation
+
+- Add a dry-run-first, manifest-backed project-layout migration for existing
+  active task workspaces.
+- Preserve every stable task ID, update log, and related file while leaving
+  empty legacy directories untouched.
+- Add path regression coverage and staged-vault checks for Inbox routing,
+  project routing, duplicate titles, update logs, and unique task IDs.
+
 ## 0.9.2 — 2026-08-03
 
 ### Fixed

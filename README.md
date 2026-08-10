@@ -1,6 +1,6 @@
 # FJG Task Manager
 
-Folder-based task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
+Project-centered task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
 ## Architecture
 
@@ -11,7 +11,31 @@ Folder-based task workspaces for Obsidian with a native dashboard, live update c
 - `tools/taskctl` — vault-relative task CLI for Codex and agents
 - `tools/migration` — dry-run-first Taskboard JSON importer
 
-Markdown task workspaces are authoritative. The dashboard and Chrome search catalog are derived.
+Markdown task files are authoritative. The dashboard and Chrome search catalog are derived.
+
+## Storage layout
+
+Tasks now live inside a project workspace instead of creating one folder per
+task. A project uses this synchronized layout:
+
+```text
+08 Tasks/Projects/<Project Name>/
+  project.md
+  Tasks/<Task Title>.md
+  Updates/<Task Title>.md
+  Files/
+```
+
+Tasks without a project use the same layout under `08 Tasks/Inbox/`. Assigning
+or changing a project from the dashboard physically moves both the task note
+and its update log into the selected project's workspace. Choosing **No
+project** moves them back to Inbox. The stable `task_id` remains in task
+frontmatter and never appears in filenames.
+
+Files are shared project or Inbox resources. **Copy path** copies the
+vault-relative `Files/` destination for Obsidian Web Clipper. Existing
+per-task workspaces under `08 Tasks/Workspaces/` remain readable during a
+migration but are no longer used for new tasks.
 
 ## Gmail task intake
 
@@ -19,9 +43,9 @@ The `FJG Task Manager` Google Apps Script saves matching messages into
 `AI Team/Mira Emails/`. When a new email subject begins with `[Inbox]`,
 `[Do First]`, `[Do Soon]`, `[Delegate]`, `[Waiting]`, or `[On Hold]`, the saved
 note includes versioned intake metadata. FJG Task Manager detects that note,
-creates a normal task workspace with the matching status, writes the stable
-task ID and final attachment path into the email note, and moves that original
-Markdown email into the task workspace's `attachments/` folder.
+creates a normal task with the matching status, writes the stable task ID and
+final file path into the email note, and moves that original Markdown email
+into the task's project or Inbox `Files/` folder.
 
 Only marked notes are imported. Existing historical email files and new emails
 without a supported status prefix remain ordinary notes. The email is moved,
@@ -32,7 +56,7 @@ vault-relative folder can be changed in FJG Task Manager settings. If the task
 or attachment move cannot finish, the original email remains in the intake
 folder and is retried safely.
 
-Live workspace folders use the readable task title. The stable `task_id` remains inside `task.md` and is hidden from ordinary dashboard and folder-title views. Duplicate titles receive a numeric folder suffix such as `(2)`.
+Live task notes use the readable task title. The stable `task_id` remains inside the note and is hidden from ordinary dashboard and file-title views. Duplicate titles receive a numeric suffix such as `(2)`.
 
 ## Dashboard navigation
 
@@ -41,7 +65,7 @@ The dashboard keeps **Do First** as the opening view and adds two clear sections
 - **Tasks** — switch among Do First, Do Soon, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, Unassigned, and Archived without leaving the dashboard. Inbox contains tasks explicitly assigned the Inbox status; Unassigned is a separate validation view for task files whose source status is missing or unrecognized.
 - **Projects** — scan every active project by open and total task counts, search the project list, archive finished projects, and switch to Archived Projects when older work is needed.
 
-Tasks without a project appear in a separate **No project** group. The Archived task view reads workspaces from the configured task archive root and provides **Reopen to Do First**.
+Tasks without a project appear in a separate **No project** group and are physically stored in Inbox. The Archived task view reads task notes from the configured archive root and provides **Reopen to Do First**.
 
 Select **New Project** on the Projects screen to create a project before it has tasks. Project definitions are stored as synchronized vault workspaces at `08 Tasks/Projects/<Project Name>/project.md`; they remain visible with zero tasks and become immediately selectable in Quick Capture and the Chrome clipper.
 
@@ -49,7 +73,7 @@ When a registered project has zero open tasks, its card offers **Archive**. Afte
 
 Each task row shows its two newest task updates. The dashboard's Recent Updates section identifies the associated task on every update card, and selecting a card opens that task. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete `updates.md` log.
 
-Each task also includes a compact **Related files** section. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and task-relative location. **Add file** can create a new working note or import existing files into `attachments/`; **Copy path** copies the portable vault-relative task-folder path used by Obsidian Web Clipper; **Open folder** reveals the workspace in Obsidian's file explorer.
+Each task also includes a compact **Related files** section backed by the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** copies the portable vault-relative `Files/` path used by Obsidian Web Clipper; **Open folder** reveals the shared workspace in Obsidian.
 
 ## Quick capture
 
