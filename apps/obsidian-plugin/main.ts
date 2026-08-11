@@ -8,7 +8,6 @@ import {
   WorkspaceLeaf
 } from "obsidian";
 import { decodeProtocolPayload } from "@fjg/task-protocol";
-import { taskFilesFolderPath } from "@fjg/task-core";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import {
@@ -473,13 +472,13 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async copyTaskFolderPath(taskId: string): Promise<void> {
-    const task = this.workspaceService.getById(taskId);
-    const path = taskFolderClipboardPath(
-      task.legacyWorkspace ? task.folderPath : taskFilesFolderPath(task.folderPath)
-    );
+    const destination = this.workspaceService.copyFolderForTask(taskId);
+    const path = taskFolderClipboardPath(destination.folderPath);
     try {
       await navigator.clipboard.writeText(path);
-      new Notice(`Vault-relative files folder copied: ${path}`);
+      new Notice(destination.projectName
+        ? `Project folder copied: ${path}`
+        : `Task workspace folder copied: ${path}`);
     } catch (error) {
       console.error("[FJG Task Manager] Could not copy task folder path", error);
       new Notice("Could not copy the task folder path.");

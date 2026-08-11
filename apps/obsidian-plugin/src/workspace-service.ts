@@ -70,6 +70,11 @@ export interface IndexedProject {
   archived: boolean;
 }
 
+export interface TaskCopyFolder {
+  folderPath: string;
+  projectName: string;
+}
+
 export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
   private readonly projectIndex = new Map<string, IndexedProject>();
@@ -258,6 +263,26 @@ export class TaskWorkspaceService {
       throw new Error(`${archived ? "Archived project" : "Project"} not found: ${name}`);
     }
     return project;
+  }
+
+  copyFolderForTask(taskId: string): TaskCopyFolder {
+    const task = this.getById(taskId);
+    const projectName = task.record.project.trim();
+    if (projectName) {
+      const project = this.listProjects({ includeArchived: true }).find((candidate) => {
+        return normalizeSearch(candidate.record.name) === normalizeSearch(projectName);
+      });
+      if (project) {
+        return {
+          folderPath: project.folderPath,
+          projectName: project.record.name
+        };
+      }
+    }
+    return {
+      folderPath: task.folderPath,
+      projectName: ""
+    };
   }
 
   async archiveProject(name: string): Promise<{ project: IndexedProject; archivedTaskCount: number }> {

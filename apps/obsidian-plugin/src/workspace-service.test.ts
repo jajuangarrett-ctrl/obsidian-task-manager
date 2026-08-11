@@ -188,6 +188,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(created.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
     expect(created.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Move budget packet.md");
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Move budget packet - Budget evidence.md")).not.toBeNull();
+    expect(service.copyFolderForTask(created.record.task_id)).toEqual({
+      folderPath: "08 Tasks/Inbox",
+      projectName: ""
+    });
 
     const assigned = await service.changeProject(created.record.task_id, "Project Alpha");
     expect(assigned.record.project).toBe("Project Alpha");
@@ -195,6 +199,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(assigned.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Move budget packet.md");
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Move budget packet - Budget evidence.md")).not.toBeNull();
     expect(await vault.read(assigned.updatesFile as never)).toContain("Project changed from No project to Project Alpha.");
+    expect(service.copyFolderForTask(created.record.task_id)).toEqual({
+      folderPath: "08 Tasks/Projects/Project Alpha",
+      projectName: "Project Alpha"
+    });
 
     const returned = await service.changeProject(created.record.task_id, "");
     expect(returned.record.project).toBe("");
@@ -207,6 +215,27 @@ describe("TaskWorkspaceService project-centered moves", () => {
       "Project not found: Deleted Project"
     );
     expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
+  });
+
+  it("resolves a project folder from task metadata even when the indexed task file is in Inbox", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    const created = await service.createTask({
+      taskId: "tsk_copy_project_folder_test",
+      title: "Email project update",
+      status: "do-first",
+      project: "Project Alpha"
+    });
+
+    await vault.renameFile(created.taskFile as never, "08 Tasks/Inbox/Tasks/Email project update.md");
+    await service.refresh();
+
+    expect(service.getById(created.record.task_id).folderPath).toBe("08 Tasks/Inbox");
+    expect(service.copyFolderForTask(created.record.task_id)).toEqual({
+      folderPath: "08 Tasks/Projects/Project Alpha",
+      projectName: "Project Alpha"
+    });
   });
 
   it("creates browser-clipped tasks in Inbox or the selected project workspace", async () => {
