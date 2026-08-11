@@ -1,11 +1,14 @@
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
+import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import {
   ALL_PROJECTS,
   canArchiveProject,
   DashboardMode,
+  groupTasksForKanban,
   isDueOrOverdue,
+  kanbanMoveTarget,
   matchesProject,
   mostRecentlyModifiedTasks,
   NO_PROJECT,
@@ -62,9 +65,11 @@ export class TaskDashboardView extends ItemView {
       tasks.map((task) => task.record),
       this.taskPlugin.workspaceService.projectNames()
     );
-    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length);
+    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.length);
     if (this.mode === "projects") {
       this.renderProjects(root, projects, allTasks);
+    } else if (this.mode === "kanban") {
+      this.renderKanban(root, allTasks);
     } else {
       this.renderTasks(root, allTasks, projects);
     }
@@ -85,12 +90,13 @@ export class TaskDashboardView extends ItemView {
     });
   }
 
-  private renderSectionTabs(root: HTMLElement, projectCount: number): void {
+  private renderSectionTabs(root: HTMLElement, projectCount: number, taskCount: number): void {
     const tabs = root.createDiv({
       cls: "fjg-dashboard-tabs",
       attr: { role: "tablist", "aria-label": "Task Manager sections" }
     });
     this.sectionTab(tabs, "tasks", "Tasks", "list-checks");
+    this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
     this.sectionTab(tabs, "projects", "Projects", "folder-kanban", projectCount);
   }
 
@@ -227,6 +233,135 @@ export class TaskDashboardView extends ItemView {
       }
     });
     this.renderRows(root);
+  }
+
+  private renderKanban(root: HTMLElement, tasks: IndexedTask[]): void {
+    const heading = root.createDiv({ cls: "fjg-section-heading fjg-kanban-heading" });
+    const headingCopy = heading.createDiv();
+    headingCopy.createEl("h2", { text: "Kanban" });
+    headingCopy.createEl("p", {
+      text: "Scan every task by status. Drag cards between columns or use the status menu on a card."
+    });
+    heading.createSpan({
+      text: taskCountLabel(tasks.length),
+      cls: "fjg-kanban-total"
+    });
+
+    const board = root.createDiv({
+      cls: "fjg-kanban-board",
+      attr: { "aria-label": "Tasks grouped by status" }
+    });
+    for (const column of groupTasksForKanban(tasks)) {
+      const section = board.createEl("section", {
+        cls: `fjg-kanban-column is-${column.status}`,
+        attr: {
+          "aria-labelledby": `fjg-kanban-${column.status}`,
+          "data-kanban-status": column.status
+        }
+      });
+      const columnHeading = section.createDiv({ cls: "fjg-kanban-column-heading" });
+      columnHeading.createEl("h3", {
+        text: statusLabel(column.status),
+        attr: { id: `fjg-kanban-${column.status}` }
+      });
+      columnHeading.createSpan({
+        text: String(column.tasks.length),
+        cls: "fjg-kanban-count",
+        attr: { "aria-label": taskCountLabel(column.tasks.length) }
+      });
+      const cards = section.createDiv({ cls: "fjg-kanban-cards" });
+      section.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        section.addClass("is-drag-over");
+      });
+      section.addEventListener("dragleave", (event) => {
+        if (!event.relatedTarget || !section.contains(event.relatedTarget as Node)) {
+          section.removeClass("is-drag-over");
+        }
+      });
+      section.addEventListener("drop", (event) => {
+        event.preventDefault();
+        section.removeClass("is-drag-over");
+        const taskId = event.dataTransfer?.getData("application/x-fjg-task-id")
+          || event.dataTransfer?.getData("text/plain")
+          || "";
+        void this.moveKanbanTask(taskId, column.status);
+      });
+      if (!column.tasks.length) {
+        cards.createDiv({ text: "Drop tasks here", cls: "fjg-kanban-empty" });
+        continue;
+      }
+      for (const task of column.tasks) this.renderKanbanCard(cards, task);
+    }
+  }
+
+  private renderKanbanCard(parent: HTMLElement, task: IndexedTask): void {
+    const card = parent.createEl("article", {
+      cls: "fjg-kanban-card",
+      attr: {
+        draggable: "true",
+        "data-task-id": task.record.task_id,
+        "data-status": task.record.status
+      }
+    });
+    card.addEventListener("dragstart", (event) => {
+      if (!event.dataTransfer) return;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("application/x-fjg-task-id", task.record.task_id);
+      event.dataTransfer.setData("text/plain", task.record.task_id);
+      card.addClass("is-dragging");
+    });
+    card.addEventListener("dragend", () => {
+      card.removeClass("is-dragging");
+      this.containerEl.querySelectorAll(".fjg-kanban-column.is-drag-over")
+        .forEach((column) => column.removeClass("is-drag-over"));
+    });
+
+    const title = card.createEl("button", {
+      text: task.record.title,
+      cls: "fjg-kanban-card-title",
+      attr: { type: "button" }
+    });
+    title.addEventListener("click", () => void this.taskPlugin.openTask(task.record.task_id));
+    const meta = card.createDiv({ cls: "fjg-kanban-card-meta" });
+    if (task.record.project) meta.createSpan({ text: task.record.project, cls: "is-project" });
+    if (task.record.due) {
+      meta.createSpan({
+        text: `Due ${task.record.due}`,
+        cls: isDueOrOverdue(task.record) ? "is-overdue" : ""
+      });
+    }
+    if (task.record.delegated_to) meta.createSpan({ text: task.record.delegated_to, cls: "is-delegated" });
+    const latestUpdate = task.updates.find((update) => update.type !== "created");
+    if (latestUpdate) card.createEl("p", { text: latestUpdate.text, cls: "fjg-kanban-card-update" });
+
+    const fallback = card.createEl("label", { cls: "fjg-kanban-status-control" });
+    fallback.createSpan({ text: "Status" });
+    const status = fallback.createEl("select", {
+      attr: { "aria-label": `Change status for ${task.record.title}` }
+    });
+    for (const value of TASK_STATUSES) {
+      status.createEl("option", { text: statusLabel(value), value });
+    }
+    status.value = task.record.status;
+    status.addEventListener("change", () => void this.moveKanbanTask(task.record.task_id, status.value));
+  }
+
+  private async moveKanbanTask(taskId: string, target: unknown): Promise<void> {
+    const task = this.taskPlugin.workspaceService
+      .list({ includeArchived: true })
+      .find((candidate) => candidate.record.task_id === taskId);
+    if (!task) return;
+    const status = kanbanMoveTarget(task.record.status, target);
+    if (!status) return;
+    try {
+      await this.taskPlugin.changeStatus(taskId, status);
+      this.render();
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : String(error));
+      this.render();
+    }
   }
 
   private renderActiveProject(root: HTMLElement): void {

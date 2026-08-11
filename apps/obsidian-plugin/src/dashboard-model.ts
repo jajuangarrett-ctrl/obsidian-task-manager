@@ -1,6 +1,7 @@
+import { isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
-export type DashboardMode = "tasks" | "projects";
+export type DashboardMode = "tasks" | "kanban" | "projects";
 export type TaskViewKey = "recent" | "all-open" | "due" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;
@@ -27,6 +28,15 @@ export interface ProjectSummary {
   totalCount: number;
 }
 
+export interface KanbanTask<TRecord extends Pick<TaskRecord, "status"> = TaskRecord> {
+  record: TRecord;
+}
+
+export interface KanbanColumn<TTask extends KanbanTask = KanbanTask> {
+  status: TaskStatus;
+  tasks: TTask[];
+}
+
 export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "recent", label: "Recent Tasks", icon: "history" },
   { key: "do-first", label: "Do First", icon: "flame" },
@@ -40,6 +50,17 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "all-open", label: "All Open", icon: "list-checks" },
   { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
+
+export function groupTasksForKanban<TTask extends KanbanTask>(tasks: readonly TTask[]): KanbanColumn<TTask>[] {
+  return TASK_STATUSES.map((status) => ({
+    status,
+    tasks: tasks.filter((task) => task.record.status === status)
+  }));
+}
+
+export function kanbanMoveTarget(current: TaskStatus, target: unknown): TaskStatus | null {
+  return isTaskStatus(target) && target !== current ? target : null;
+}
 
 export function isOpenTask(record: TaskRecord): boolean {
   return record.status !== "completed" && record.status !== "archived";

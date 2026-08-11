@@ -4,9 +4,11 @@ import {
   ALL_PROJECTS,
   canArchiveProject,
   countTasksForView,
+  groupTasksForKanban,
   isDueOrOverdue,
   matchesProject,
   mostRecentlyModifiedTasks,
+  kanbanMoveTarget,
   NO_PROJECT,
   summarizeProjects,
   TASK_VIEWS,
@@ -95,6 +97,24 @@ describe("dashboard task views", () => {
 
   it("includes an Ongoing dashboard view", () => {
     expect(TASK_VIEWS).toContainEqual({ key: "ongoing", label: "Ongoing", icon: "play-circle" });
+  });
+
+  it("creates Kanban columns for every canonical status without losing tasks", () => {
+    const statuses: TaskStatus[] = [
+      "inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed", "archived"
+    ];
+    const tasks = statuses.map((status) => ({ record: task({ task_id: status, status }) }));
+    const columns = groupTasksForKanban(tasks);
+
+    expect(columns.map((column) => column.status)).toEqual(statuses);
+    expect(columns.flatMap((column) => column.tasks)).toHaveLength(tasks.length);
+    expect(columns.every((column) => column.tasks.length === 1)).toBe(true);
+  });
+
+  it("accepts valid Kanban moves and ignores invalid or no-op drops", () => {
+    expect(kanbanMoveTarget("inbox", "waiting")).toBe("waiting");
+    expect(kanbanMoveTarget("inbox", "inbox")).toBeNull();
+    expect(kanbanMoveTarget("inbox", "not-a-status")).toBeNull();
   });
 });
 
