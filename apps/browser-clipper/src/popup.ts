@@ -105,7 +105,7 @@ function setMode(value: "create" | "update"): void {
 
 function renderStatusOptions(): void {
   elements.status.replaceChildren();
-  for (const status of TASK_STATUSES.filter((item) => item !== "archived" && item !== "completed")) {
+  for (const status of TASK_STATUSES.filter((item) => item !== "archived")) {
     const option = document.createElement("option");
     option.value = status;
     option.textContent = statusLabel(status);
