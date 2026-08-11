@@ -134,6 +134,9 @@
 }
 
 .fjg-kanban-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   padding: 10px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
@@ -146,30 +149,39 @@
   cursor: grabbing;
 }
 
-.fjg-kanban-card-title {
+.fjg-task-dashboard button.fjg-kanban-card-title {
+  appearance: none;
   display: block;
   width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  max-height: none;
   margin: 0;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   box-shadow: none;
   color: var(--text-normal);
   font-size: 0.9rem;
   font-weight: 750;
   line-height: 1.32;
+  overflow: visible;
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.fjg-kanban-card-title:hover {
+.fjg-task-dashboard button.fjg-kanban-card-title:hover {
   color: var(--fjg-teal);
   background: transparent;
+  box-shadow: none;
 }
 
 .fjg-kanban-card-meta {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 8px;
@@ -178,9 +190,12 @@
 }
 
 .fjg-kanban-card-meta span {
+  max-width: 100%;
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--background-secondary);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .fjg-kanban-card-meta .is-project {
@@ -193,20 +208,23 @@
 
 .fjg-kanban-card-update {
   display: -webkit-box;
+  min-width: 0;
   margin: 8px 0 0;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 0.76rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .fjg-kanban-status-control {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 5px;
   margin-top: 9px;
 }
 
@@ -219,8 +237,9 @@
 }
 
 .fjg-kanban-status-control select {
+  width: 100%;
   min-width: 0;
-  max-width: 150px;
+  max-width: none;
   font-size: 0.78rem;
 }
 
