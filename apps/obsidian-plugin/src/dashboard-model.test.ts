@@ -84,18 +84,29 @@ describe("dashboard task views", () => {
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
   });
 
-  it("filters No Project independently of task status and preserves Inbox behavior", () => {
+  it("filters No Project independently of active task status and preserves Inbox behavior", () => {
     const noProjectOpen = task({ task_id: "no-project-open", status: "do-soon", project: "" });
     const noProjectArchived = task({ task_id: "no-project-archived", status: "archived", project: "" });
     const assigned = task({ task_id: "assigned", status: "inbox", project: "CalWORKs" });
     const inboxWithoutProject = task({ task_id: "inbox-no-project", status: "inbox", project: "" });
 
     expect(taskMatchesView(noProjectOpen, "no-project")).toBe(true);
-    expect(taskMatchesView(noProjectArchived, "no-project")).toBe(true);
+    expect(taskMatchesView(noProjectArchived, "no-project")).toBe(false);
     expect(taskMatchesView(assigned, "no-project")).toBe(false);
     expect(taskMatchesView(inboxWithoutProject, "inbox")).toBe(true);
     expect(taskMatchesView(noProjectOpen, "inbox")).toBe(false);
-    expect(countTasksForView([noProjectOpen, noProjectArchived, assigned, inboxWithoutProject], "no-project")).toBe(3);
+    expect(countTasksForView([noProjectOpen, noProjectArchived, assigned, inboxWithoutProject], "no-project")).toBe(2);
+  });
+
+  it("shows archived tasks only in the Archived view", () => {
+    const archived = task({ task_id: "archived", status: "archived", project: "Finished" });
+
+    for (const view of TASK_VIEWS.filter((candidate) => candidate.key !== "archived")) {
+      expect(taskMatchesView(archived, view.key)).toBe(false);
+    }
+    expect(taskMatchesView(archived, "archived")).toBe(true);
+    expect(countTasksForView([archived], "all-open")).toBe(0);
+    expect(countTasksForView([archived], "archived")).toBe(1);
   });
 
   it("counts only open tasks due today or earlier", () => {

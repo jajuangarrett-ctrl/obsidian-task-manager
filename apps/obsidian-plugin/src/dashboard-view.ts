@@ -78,7 +78,7 @@ export class TaskDashboardView extends ItemView {
     if (this.mode === "projects") {
       this.renderProjects(root, projects, allTasks);
     } else if (this.mode === "kanban") {
-      this.renderKanban(root, allTasks);
+      this.renderKanban(root, allTasks.filter((task) => task.record.status !== "archived"));
     } else {
       this.renderTasks(root, allTasks, projects);
     }
@@ -135,7 +135,9 @@ export class TaskDashboardView extends ItemView {
 
   private renderTasks(root: HTMLElement, tasks: IndexedTask[], projects: ProjectSummary[]): void {
     const activeProject = projects.find((project) => project.key === this.project);
-    const selectedRecords = tasks.filter((task) => matchesProject(task.record, this.project));
+    const selectedRecords = tasks
+      .filter((task) => matchesProject(task.record, this.project))
+      .filter((task) => this.view === "archived" || task.record.status !== "archived");
     const selectedName = this.project === NO_PROJECT ? "No project" : this.project;
     if (this.project !== ALL_PROJECTS) this.renderActiveProject(root);
 
@@ -168,7 +170,9 @@ export class TaskDashboardView extends ItemView {
       const copy = button.createSpan({ cls: "fjg-view-copy" });
       copy.createSpan({ text: definition.label, cls: "fjg-view-label" });
       const viewTasks = definition.key === "recent"
-        ? mostRecentlyModifiedTasks(scopedTasks.map((task) => ({
+        ? mostRecentlyModifiedTasks(scopedTasks
+          .filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned))
+          .map((task) => ({
           ...task,
           modifiedAt: task.taskFile.stat.mtime
         })))
@@ -604,7 +608,9 @@ export class TaskDashboardView extends ItemView {
       .list({ includeArchived: true })
       .filter((task) => matchesProject(task.record, this.project));
     const viewTasks = this.view === "recent"
-      ? mostRecentlyModifiedTasks(scopedTasks.map((task) => ({
+      ? mostRecentlyModifiedTasks(scopedTasks
+        .filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned))
+        .map((task) => ({
         ...task,
         modifiedAt: task.taskFile.stat.mtime
       })))

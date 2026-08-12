@@ -77,6 +77,9 @@ export function taskMatchesView(
   today = todayKey(),
   statusAssigned = true
 ): boolean {
+  if (view === "archived") return record.status === "archived";
+  // Archived tasks have a single home in the dashboard: the Archived view.
+  if (record.status === "archived") return false;
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
