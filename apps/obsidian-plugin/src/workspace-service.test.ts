@@ -64,7 +64,7 @@ vi.mock("obsidian", () => ({
 }));
 
 import { TaskWorkspaceService } from "./workspace-service";
-import { parseTaskMarkdown, renderTaskMarkdown, updateTaskFields } from "@fjg/task-core";
+import { createTaskRecord, parseTaskMarkdown, renderTaskMarkdown, renderUpdatesMarkdown, updateTaskFields } from "@fjg/task-core";
 
 class MockVault {
   private readonly entries = new Map<string, InstanceType<typeof obsidianMock.MockTFile> | InstanceType<typeof obsidianMock.MockTFolder>>();
@@ -179,6 +179,37 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("previews and migrates a legacy flat task without moving untracked files", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const record = createTaskRecord({ taskId: "tsk_migrate_flat", title: "Migrate a flat task" });
+    const taskFile = await vault.create("08 Tasks/Inbox/Tasks/Migrate a flat task.md", renderTaskMarkdown(record, "# Migrate a flat task"));
+    await vault.create("08 Tasks/Inbox/Updates/Migrate a flat task.md", renderUpdatesMarkdown());
+    await vault.create("08 Tasks/Inbox/Files/Attached.md", "Attached");
+    await vault.create("08 Tasks/Inbox/Files/Untracked.md", "Leave in place");
+    const document = parseTaskMarkdown(await vault.read(taskFile as never));
+    await vault.modify(taskFile as never, renderTaskMarkdown(updateTaskFields(document.record, {
+      related_files: ["08 Tasks/Inbox/Files/Attached.md"]
+    }), document.body));
+    await service.refresh();
+
+    expect(service.previewTaskArtifactMigration()).toContainEqual(expect.objectContaining({
+      taskId: "tsk_migrate_flat",
+      eligible: true,
+      to: "08 Tasks/Inbox/Tasks/tsk_migrate_flat/task.md"
+    }));
+    const result = await service.migrateTaskArtifacts();
+
+    expect(result).toMatchObject({ migrated: 1, attachmentMoves: 1, errors: [] });
+    const migrated = service.getById("tsk_migrate_flat");
+    expect(migrated.taskFile.path).toBe("08 Tasks/Inbox/Tasks/tsk_migrate_flat/task.md");
+    expect(migrated.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/tsk_migrate_flat/updates.md");
+    expect(migrated.record.related_files).toEqual(["08 Tasks/Inbox/Files/tsk_migrate_flat/Attached.md"]);
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Untracked.md")).not.toBeNull();
+    expect(service.previewTaskArtifactMigration().find((item) => item.taskId === "tsk_migrate_flat")?.reason)
+      .toBe("already uses task-specific folders");
+  });
+
   it("moves explicitly related files with Inbox task records into a project and back", async () => {
     const { service, vault } = createService();
     await service.initialize();
@@ -192,9 +223,9 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await service.createRelatedNote(created.record.task_id, "Budget evidence", "Source material");
     await vault.create("08 Tasks/Inbox/Files/Unrelated file.md", "Leave this file alone.");
 
-    expect(created.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
-    expect(created.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Move budget packet.md");
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Move budget packet - Budget evidence.md")).not.toBeNull();
+    expect(created.taskFile.path).toBe("08 Tasks/Inbox/Tasks/tsk_project_move_test/task.md");
+    expect(created.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/tsk_project_move_test/updates.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/tsk_project_move_test/Budget evidence.md")).not.toBeNull();
     expect(service.copyFolderForTask(created.record.task_id)).toEqual({
       folderPath: "08 Tasks/Inbox",
       projectName: ""
@@ -202,10 +233,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     const assigned = await service.changeProject(created.record.task_id, "Project Alpha");
     expect(assigned.record.project).toBe("Project Alpha");
-    expect(assigned.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/Move budget packet.md");
-    expect(assigned.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Move budget packet.md");
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Move budget packet - Budget evidence.md")).toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Move budget packet - Budget evidence.md")).not.toBeNull();
+    expect(assigned.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/tsk_project_move_test/task.md");
+    expect(assigned.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/tsk_project_move_test/updates.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/tsk_project_move_test/Budget evidence.md")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/tsk_project_move_test/Budget evidence.md")).not.toBeNull();
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Unrelated file.md")).not.toBeNull();
     expect(await vault.read(assigned.updatesFile as never)).toContain("Project changed from No project to Project Alpha.");
     expect(service.copyFolderForTask(created.record.task_id)).toEqual({
@@ -215,15 +246,15 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     const returned = await service.changeProject(created.record.task_id, "");
     expect(returned.record.project).toBe("");
-    expect(returned.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
-    expect(returned.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Move budget packet.md");
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Move budget packet - Budget evidence.md")).not.toBeNull();
+    expect(returned.taskFile.path).toBe("08 Tasks/Inbox/Tasks/tsk_project_move_test/task.md");
+    expect(returned.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/tsk_project_move_test/updates.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/tsk_project_move_test/Budget evidence.md")).not.toBeNull();
     expect(await vault.read(returned.updatesFile as never)).toContain("Project changed from Project Alpha to No project.");
 
     await expect(service.changeProject(created.record.task_id, "Deleted Project")).rejects.toThrow(
       "Project not found: Deleted Project"
     );
-    expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet.md");
+    expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/tsk_project_move_test/task.md");
   });
 
   it("moves task records directly between projects and creates a missing destination Tasks folder", async () => {
@@ -243,11 +274,11 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const moved = await service.changeProject(created.record.task_id, "Project Beta");
 
     expect(moved.record.project).toBe("Project Beta");
-    expect(moved.taskFile.path).toBe("08 Tasks/Projects/Project Beta/Tasks/Coordinate shared work.md");
-    expect(moved.updatesFile?.path).toBe("08 Tasks/Projects/Project Beta/Updates/Coordinate shared work.md");
+    expect(moved.taskFile.path).toBe("08 Tasks/Projects/Project Beta/Tasks/tsk_project_to_project/task.md");
+    expect(moved.updatesFile?.path).toBe("08 Tasks/Projects/Project Beta/Updates/tsk_project_to_project/updates.md");
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta/Tasks")).not.toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Coordination notes.md")).toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta/Files/Coordination notes.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/tsk_project_to_project/Coordination notes.md")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta/Files/tsk_project_to_project/Coordination notes.md")).not.toBeNull();
   });
 
   it("does not move a related file referenced by more than one task", async () => {
@@ -268,7 +299,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     expect(moved.record.related_files).toEqual([shared.path]);
     expect(vault.getAbstractFileByPath(shared.path)).not.toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/First shared task - Shared brief.md")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/tsk_shared_first/Shared brief.md")).toBeNull();
   });
 
   it("creates a standard project workspace before assigning and relocating a task", async () => {
@@ -287,7 +318,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/New Initiative/Tasks")).not.toBeNull();
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/New Initiative/Updates")).not.toBeNull();
     expect(assigned.record.project).toBe("New Initiative");
-    expect(assigned.taskFile.path).toBe("08 Tasks/Projects/New Initiative/Tasks/Start new initiative.md");
+    expect(assigned.taskFile.path).toBe("08 Tasks/Projects/New Initiative/Tasks/tsk_inline_project_create/task.md");
   });
 
   it("rolls back record content and paths when a task-note move fails", async () => {
@@ -299,16 +330,16 @@ describe("TaskWorkspaceService project-centered moves", () => {
       title: "Keep assignment consistent"
     });
     await service.createRelatedNote(created.record.task_id, "Rollback evidence", "Must return after failure.");
-    vault.failNextRenameTarget = "08 Tasks/Projects/Project Alpha/Tasks/Keep assignment consistent.md";
+    vault.failNextRenameTarget = "08 Tasks/Projects/Project Alpha/Tasks/tsk_project_move_rollback/task.md";
 
     await expect(service.changeProject(created.record.task_id, "Project Alpha")).rejects.toThrow("Simulated rename failure");
 
     const unchanged = service.getById(created.record.task_id);
     expect(unchanged.record.project).toBe("");
-    expect(unchanged.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Keep assignment consistent.md");
-    expect(unchanged.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Keep assignment consistent.md");
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Keep assignment consistent - Rollback evidence.md")).not.toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Keep assignment consistent - Rollback evidence.md")).toBeNull();
+    expect(unchanged.taskFile.path).toBe("08 Tasks/Inbox/Tasks/tsk_project_move_rollback/task.md");
+    expect(unchanged.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/tsk_project_move_rollback/updates.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/tsk_project_move_rollback/Rollback evidence.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/tsk_project_move_rollback/Rollback evidence.md")).toBeNull();
     expect(await vault.read(unchanged.taskFile as never)).toContain("project: \"\"");
     expect(await vault.read(unchanged.updatesFile as never)).not.toContain("Project changed from No project");
   });
@@ -356,10 +387,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
       source: { type: "web", title: "Project source", url: "https://example.com/project" }
     }, "req_clipper_project", "2026-08-10T16:05:00.000Z");
 
-    expect(inboxTask.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Review clipped article.md");
-    expect(inboxTask.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Review clipped article.md");
-    expect(projectTask.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/Send project follow-up.md");
-    expect(projectTask.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Send project follow-up.md");
+    expect(inboxTask.taskFile.path).toMatch(/^08 Tasks\/Inbox\/Tasks\/tsk_[^/]+\/task\.md$/);
+    expect(inboxTask.updatesFile?.path).toMatch(/^08 Tasks\/Inbox\/Updates\/tsk_[^/]+\/updates\.md$/);
+    expect(projectTask.taskFile.path).toMatch(/^08 Tasks\/Projects\/Project Alpha\/Tasks\/tsk_[^/]+\/task\.md$/);
+    expect(projectTask.updatesFile?.path).toMatch(/^08 Tasks\/Projects\/Project Alpha\/Updates\/tsk_[^/]+\/updates\.md$/);
     expect(await vault.read(projectTask.taskFile as never)).toContain("source_url: https://example.com/project");
     expect(await vault.read(projectTask.updatesFile as never)).toContain("Request ID: `req_clipper_project`");
   });
@@ -379,7 +410,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     const moved = await service.changeProject(created.record.task_id, "Project Alpha");
     const resolved = service.findByIdOrQuery(created.record.task_id, "obsolete title text");
-    expect(resolved.taskFile.path).toBe("08 Tasks/Projects/Project Alpha/Tasks/Track browser research.md");
+    expect(resolved.taskFile.path).toMatch(/^08 Tasks\/Projects\/Project Alpha\/Tasks\/tsk_[^/]+\/task\.md$/);
 
     const updated = await service.appendUpdate(resolved.record.task_id, {
       actor: "Browser clipper",
@@ -391,7 +422,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     });
 
     expect(updated.record.task_id).toBe(created.record.task_id);
-    expect(updated.updatesFile?.path).toBe("08 Tasks/Projects/Project Alpha/Updates/Track browser research.md");
+    expect(updated.updatesFile?.path).toMatch(/^08 Tasks\/Projects\/Project Alpha\/Updates\/tsk_[^/]+\/updates\.md$/);
     expect(await vault.read(updated.updatesFile as never)).toContain("New evidence clipped after the task moved.");
     expect(await vault.read(updated.updatesFile as never)).toContain("Request ID: `req_clipper_update`");
     expect(moved.record.project).toBe("Project Alpha");

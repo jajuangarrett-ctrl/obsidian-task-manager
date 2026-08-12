@@ -12,6 +12,10 @@ import {
   TaskStatus,
   TaskUpdateInput,
   taskFilePath,
+  taskArtifactFilesPath,
+  taskArtifactFolderPath,
+  taskArtifactNotePath,
+  taskArtifactUpdatesPath,
   taskFilesFolderPath,
   taskFolderPath,
   taskNoteFilePath,
@@ -74,6 +78,22 @@ export interface TaskCopyFolder {
   projectName: string;
 }
 
+export interface TaskArtifactMigrationPreview {
+  taskId: string;
+  title: string;
+  from: string;
+  to: string;
+  eligible: boolean;
+  reason?: string;
+}
+
+export interface TaskArtifactMigrationResult {
+  migrated: number;
+  attachmentMoves: number;
+  skippedShared: string[];
+  errors: Array<{ taskId: string; message: string }>;
+}
+
 export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
   private readonly projectIndex = new Map<string, IndexedProject>();
@@ -119,7 +139,9 @@ export class TaskWorkspaceService {
             : workspaceRootFromTaskPath(file.path);
           const updatePath = legacyWorkspace
             ? updatesFilePath(folderPath)
-            : `${taskUpdatesFolderPath(folderPath)}/${file.name}`;
+            : usesTaskArtifactLayout(file)
+              ? taskArtifactUpdatesPath(folderPath, document.record.task_id)
+              : `${taskUpdatesFolderPath(folderPath)}/${file.name}`;
           const updateFile = this.app.vault.getAbstractFileByPath(updatePath);
           const updates = updateFile instanceof TFile
             ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
@@ -513,9 +535,9 @@ export class TaskWorkspaceService {
     if (isCanonicalTaskFile(`${cleanTitle}.md`)) {
       throw new Error("That name is reserved for the task workspace.");
     }
-    const filesPath = task.legacyWorkspace ? task.folderPath : taskFilesFolderPath(task.folderPath);
+    const filesPath = this.relatedFilesPath(task);
     await this.ensureFolder(filesPath);
-    const fileName = task.legacyWorkspace || task.record.project
+    const fileName = task.legacyWorkspace || task.record.project || usesTaskArtifactLayout(task.taskFile)
       ? `${cleanTitle}.md`
       : `${sanitizeTitleForPath(task.record.title)} - ${cleanTitle}.md`;
     const path = await this.availableFilePath(filesPath, fileName);
@@ -533,14 +555,12 @@ export class TaskWorkspaceService {
 
   async importRelatedFiles(taskId: string, files: File[]): Promise<TFile[]> {
     const task = this.getById(taskId);
-    const attachmentsPath = task.legacyWorkspace
-      ? `${task.folderPath}/attachments`
-      : taskFilesFolderPath(task.folderPath);
+    const attachmentsPath = this.relatedFilesPath(task);
     await this.ensureFolder(attachmentsPath);
     const created: TFile[] = [];
     for (const source of files) {
       const name = safeRelatedFileName(source.name, "Attachment");
-      const fileName = task.legacyWorkspace || task.record.project
+      const fileName = task.legacyWorkspace || task.record.project || usesTaskArtifactLayout(task.taskFile)
         ? name
         : `${sanitizeTitleForPath(task.record.title)} - ${name}`;
       const path = await this.availableFilePath(attachmentsPath, fileName);
@@ -559,9 +579,7 @@ export class TaskWorkspaceService {
 
   async availableAttachmentPath(taskId: string, fileName: string, preferredPath = ""): Promise<string> {
     const task = this.getById(taskId);
-    const attachmentsPath = normalizePath(task.legacyWorkspace
-      ? `${task.folderPath}/attachments`
-      : taskFilesFolderPath(task.folderPath));
+    const attachmentsPath = this.relatedFilesPath(task);
     await this.ensureFolder(attachmentsPath);
     if (preferredPath) {
       const normalized = normalizePath(preferredPath);
@@ -575,7 +593,7 @@ export class TaskWorkspaceService {
       }
       return normalized;
     }
-    const name = task.legacyWorkspace || task.record.project
+    const name = task.legacyWorkspace || task.record.project || usesTaskArtifactLayout(task.taskFile)
       ? fileName || "Email.md"
       : `${sanitizeTitleForPath(task.record.title)} - ${fileName || "Email.md"}`;
     if (name.includes("/") || name.includes("\\")) {
@@ -586,9 +604,7 @@ export class TaskWorkspaceService {
 
   async moveVaultFileToTaskAttachments(taskId: string, source: TFile, targetPath: string): Promise<TFile> {
     const task = this.getById(taskId);
-    const attachmentsPath = normalizePath(task.legacyWorkspace
-      ? `${task.folderPath}/attachments`
-      : taskFilesFolderPath(task.folderPath));
+    const attachmentsPath = this.relatedFilesPath(task);
     const normalizedTarget = normalizePath(targetPath);
     if (!normalizedTarget.startsWith(`${attachmentsPath}/`)) {
       throw new Error("The Gmail attachment destination is outside the task attachments folder.");
@@ -753,6 +769,11 @@ export class TaskWorkspaceService {
     if (task.legacyWorkspace) {
       return this.app.vault.create(updatesFilePath(task.folderPath), renderUpdatesMarkdown());
     }
+    if (usesTaskArtifactLayout(task.taskFile)) {
+      const folder = taskArtifactFolderPath(task.folderPath, "Updates", task.record.task_id);
+      await this.ensureFolder(folder);
+      return this.app.vault.create(taskArtifactUpdatesPath(task.folderPath, task.record.task_id), renderUpdatesMarkdown());
+    }
     await this.ensureFolder(taskUpdatesFolderPath(task.folderPath));
     return this.app.vault.create(
       `${taskUpdatesFolderPath(task.folderPath)}/${task.taskFile.name}`,
@@ -785,7 +806,7 @@ export class TaskWorkspaceService {
     task: IndexedTask,
     targetWorkspace: string
   ): Promise<Array<{ file: TFile; from: string; to: string }>> {
-    const filesPath = taskFilesFolderPath(normalizePath(targetWorkspace));
+    const filesPath = this.relatedFilesPathForWorkspace(targetWorkspace, task.record, usesTaskArtifactLayout(task.taskFile), task.legacyWorkspace);
     await this.ensureFolder(filesPath);
     const moves: Array<{ file: TFile; from: string; to: string }> = [];
     for (const related of task.relatedFiles) {
@@ -817,7 +838,7 @@ export class TaskWorkspaceService {
     await this.ensureWorkspaceFolders(normalizedTarget);
     if (!task.legacyWorkspace && normalizePath(task.folderPath) === normalizedTarget) return;
     const updatesFile = await this.ensureUpdatesFile(task);
-    const paths = await this.availableTaskPaths(normalizedTarget, record);
+    const paths = await this.availableTaskPaths(normalizedTarget, record, task.taskFile.path);
     const moves: Array<{ file: TFile; from: string; to: string }> = [
       { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
       { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
@@ -825,9 +846,10 @@ export class TaskWorkspaceService {
     if (options.relatedMoves) {
       moves.unshift(...options.relatedMoves);
     } else if (options.includeRelatedFiles === true) {
-      const filesPath = taskFilesFolderPath(normalizedTarget);
+      const filesPath = this.relatedFilesPathForWorkspace(normalizedTarget, record, usesTaskArtifactLayout(task.taskFile), task.legacyWorkspace);
+      await this.ensureFolder(filesPath);
       for (const related of task.relatedFiles) {
-        const prefix = `${sanitizeTitleForPath(record.title)} - `;
+        const prefix = usesTaskArtifactLayout(task.taskFile) ? "" : `${sanitizeTitleForPath(record.title)} - `;
         const name = related.file.name.startsWith(prefix)
           ? related.file.name
           : `${prefix}${related.file.name}`;
@@ -912,6 +934,14 @@ export class TaskWorkspaceService {
     record: TaskRecord,
     currentTaskPath = ""
   ): Promise<{ taskPath: string; updatesPath: string }> {
+    const useArtifactLayout = !currentTaskPath || usesTaskArtifactPath(currentTaskPath);
+    if (useArtifactLayout) {
+      const taskPath = taskArtifactNotePath(workspace, record.task_id);
+      const updatesPath = taskArtifactUpdatesPath(workspace, record.task_id);
+      await this.ensureFolder(taskArtifactFolderPath(workspace, "Tasks", record.task_id));
+      await this.ensureFolder(taskArtifactFolderPath(workspace, "Updates", record.task_id));
+      return { taskPath, updatesPath };
+    }
     const tasksFolder = taskNotesFolderPath(workspace);
     const updatesFolder = taskUpdatesFolderPath(workspace);
     await this.ensureFolder(tasksFolder);
@@ -981,6 +1011,101 @@ export class TaskWorkspaceService {
     await this.ensureFolder(taskNotesFolderPath(path));
     await this.ensureFolder(taskUpdatesFolderPath(path));
     await this.ensureFolder(taskFilesFolderPath(path));
+  }
+
+  /** Read-only preview. Existing task files are never migrated automatically. */
+  previewTaskArtifactMigration(): TaskArtifactMigrationPreview[] {
+    return this.list({ includeArchived: true }).map((task) => {
+      if (task.legacyWorkspace) {
+        return { taskId: task.record.task_id, title: task.record.title, from: task.taskFile.path, to: "", eligible: false, reason: "legacy workspace layout" };
+      }
+      if (usesTaskArtifactLayout(task.taskFile)) {
+        return { taskId: task.record.task_id, title: task.record.title, from: task.taskFile.path, to: task.taskFile.path, eligible: false, reason: "already uses task-specific folders" };
+      }
+      return { taskId: task.record.task_id, title: task.record.title, from: task.taskFile.path, to: taskArtifactNotePath(task.folderPath, task.record.task_id), eligible: true };
+    });
+  }
+
+  /**
+   * Moves one canonical task at a time into the task-ID layout. Only explicit,
+   * uniquely referenced attachments travel with it. Each task is rolled back
+   * if any record or file move fails; existing folders are intentionally kept.
+   */
+  async migrateTaskArtifacts(): Promise<TaskArtifactMigrationResult> {
+    const result: TaskArtifactMigrationResult = { migrated: 0, attachmentMoves: 0, skippedShared: [], errors: [] };
+    for (const task of this.list({ includeArchived: true })) {
+      if (task.legacyWorkspace || usesTaskArtifactLayout(task.taskFile)) continue;
+      try {
+        const movedAttachments = await this.migrateTaskArtifactLayout(task, result.skippedShared);
+        result.migrated += 1;
+        result.attachmentMoves += movedAttachments;
+        await this.refresh();
+      } catch (error) {
+        result.errors.push({ taskId: task.record.task_id, message: error instanceof Error ? error.message : String(error) });
+        await this.refresh();
+      }
+    }
+    return result;
+  }
+
+  private async migrateTaskArtifactLayout(task: IndexedTask, skippedShared: string[]): Promise<number> {
+    const paths = await this.availableTaskPaths(task.folderPath, task.record);
+    const oldTaskContent = await this.app.vault.read(task.taskFile);
+    const updatesFile = task.updatesFile;
+    const relatedMoves: Array<{ file: TFile; from: string; to: string }> = [];
+    const relatedPaths = new Map<string, string>();
+    const filesPath = taskArtifactFilesPath(task.folderPath, task.record.task_id);
+    await this.ensureFolder(filesPath);
+    for (const related of task.relatedFiles) {
+      const from = normalizePath(related.file.path);
+      const referenceCount = this.list({ includeArchived: true })
+        .filter((candidate) => candidate.record.related_files.some((path) => normalizePath(path) === from)).length;
+      if (referenceCount > 1) {
+        skippedShared.push(from);
+        continue;
+      }
+      const to = await this.availableFilePath(filesPath, related.file.name);
+      relatedMoves.push({ file: related.file, from, to });
+      relatedPaths.set(from, to);
+    }
+    const document = parseTaskMarkdown(oldTaskContent);
+    const nextRecord = updateTaskFields(document.record, {
+      related_files: document.record.related_files.map((path) => relatedPaths.get(normalizePath(path)) || path)
+    });
+    const moves: Array<{ file: TFile; from: string; to: string }> = [
+      ...relatedMoves,
+      ...(updatesFile ? [{ file: updatesFile, from: updatesFile.path, to: paths.updatesPath }] : []),
+      { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
+    ];
+    const completed: Array<{ file: TFile; from: string }> = [];
+    try {
+      for (const move of moves) {
+        await this.app.fileManager.renameFile(move.file, move.to);
+        completed.push({ file: move.file, from: move.from });
+      }
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, document.body));
+      return relatedMoves.length;
+    } catch (error) {
+      for (const move of completed.reverse()) {
+        try {
+          await this.app.fileManager.renameFile(move.file, move.from);
+        } catch (rollbackError) {
+          console.error("[FJG Task Manager] Artifact migration rollback failed", move.file.path, rollbackError);
+        }
+      }
+      const restored = this.app.vault.getAbstractFileByPath(task.taskFile.path);
+      if (restored instanceof TFile) await this.app.vault.modify(restored, oldTaskContent);
+      throw error;
+    }
+  }
+
+  private relatedFilesPath(task: IndexedTask): string {
+    return this.relatedFilesPathForWorkspace(task.folderPath, task.record, usesTaskArtifactLayout(task.taskFile), task.legacyWorkspace);
+  }
+
+  private relatedFilesPathForWorkspace(workspace: string, record: TaskRecord, artifactLayout: boolean, legacyWorkspace: boolean): string {
+    if (legacyWorkspace) return normalizePath(`${workspace}/attachments`);
+    return artifactLayout ? taskArtifactFilesPath(workspace, record.task_id) : taskFilesFolderPath(workspace);
   }
 
   private async rollbackTaskWorkspaces(taskIds: Set<string>): Promise<void> {
@@ -1060,4 +1185,12 @@ function workspaceRootFromTaskPath(path: string): string {
   const index = normalized.lastIndexOf(marker);
   if (index < 0) throw new Error(`Task note is outside a managed Tasks folder: ${path}`);
   return normalized.slice(0, index);
+}
+
+function usesTaskArtifactLayout(file: TFile): boolean {
+  return usesTaskArtifactPath(file.path);
+}
+
+function usesTaskArtifactPath(path: string): boolean {
+  return /\/Tasks\/[^/]+\/task\.md$/i.test(normalizePath(path));
 }

@@ -114,6 +114,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       return true;
     }});
     this.addCommand({ id: "validate-task-workspaces", name: "Validate Task Workspaces", callback: () => this.validateWorkspaces() });
+    this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Task Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
+    this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Task Artifacts to Task Folders", callback: () => this.migrateTaskArtifacts() });
     this.addCommand({ id: "rebuild-task-index", name: "Rebuild Task Index", callback: async () => {
       await this.workspaceService.refresh();
       new Notice(`Task index rebuilt: ${this.workspaceService.list({ includeArchived: true }).length} tasks.`);
@@ -602,6 +604,32 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }
     console.warn("[FJG Task Manager] Validation issues", issues);
     new Notice(`${issues.length} task workspace${issues.length === 1 ? "" : "s"} need attention. See Developer Console.`, 10000);
+  }
+
+  private previewTaskArtifactMigration(): void {
+    const preview = this.workspaceService.previewTaskArtifactMigration();
+    const eligible = preview.filter((item) => item.eligible);
+    console.info("[FJG Task Manager] Task artifact migration preview", preview);
+    new Notice(`${eligible.length} task ${eligible.length === 1 ? "workspace is" : "workspaces are"} ready for task-folder migration. No files were changed.`, 8000);
+  }
+
+  private async migrateTaskArtifacts(): Promise<void> {
+    const preview = this.workspaceService.previewTaskArtifactMigration();
+    const eligible = preview.filter((item) => item.eligible);
+    if (!eligible.length) {
+      new Notice("No task workspaces need task-folder migration.");
+      return;
+    }
+    const result = await this.workspaceService.migrateTaskArtifacts();
+    console.info("[FJG Task Manager] Task artifact migration result", result);
+    this.refreshDashboard();
+    new Notice(
+      `Migrated ${result.migrated} task ${result.migrated === 1 ? "workspace" : "workspaces"}; `
+      + `${result.attachmentMoves} attachment ${result.attachmentMoves === 1 ? "moved" : "moved"}; `
+      + `${result.skippedShared.length} shared file ${result.skippedShared.length === 1 ? "skipped" : "skipped"}; `
+      + `${result.errors.length} ${result.errors.length === 1 ? "error" : "errors"}.`,
+      12000
+    );
   }
 
   private scheduleRefresh(): void {
