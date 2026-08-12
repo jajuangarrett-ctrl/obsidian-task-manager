@@ -472,6 +472,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async openTaskFolder(taskId: string): Promise<void> {
     const task = this.workspaceService.getById(taskId);
+    const destination = this.workspaceService.copyFolderForTask(taskId);
     const entries: TaskFolderEntry[] = [
       { file: task.taskFile, description: "Canonical task record", icon: "list-checks" }
     ];
@@ -492,7 +493,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new TaskFolderModal(
       this.app,
       task.record.title,
-      task.folderPath,
+      destination.folderPath,
       entries,
       async (file) => this.app.workspace.getLeaf("tab").openFile(file)
     ).open();
@@ -503,12 +504,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const path = taskFolderClipboardPath(destination.folderPath);
     try {
       await navigator.clipboard.writeText(path);
-      new Notice(destination.projectName
-        ? `Project folder copied: ${path}`
-        : `Task workspace folder copied: ${path}`);
+      new Notice(`${destination.legacy ? "Legacy task attachments" : "Task attachments"} folder copied: ${path}`);
     } catch (error) {
       console.error("[FJG Task Manager] Could not copy task folder path", error);
-      new Notice("Could not copy the task folder path.");
+      new Notice("Could not copy the task attachments folder path.");
     }
   }
 

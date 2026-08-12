@@ -245,8 +245,8 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(created.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Move budget packet/updates.md");
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Move budget packet/Budget evidence.md")).not.toBeNull();
     expect(service.copyFolderForTask(created.record.task_id)).toEqual({
-      folderPath: "08 Tasks/Inbox",
-      projectName: ""
+      folderPath: "08 Tasks/Inbox/Files/Move budget packet",
+      legacy: false
     });
 
     const assigned = await service.changeProject(created.record.task_id, "Project Alpha");
@@ -258,8 +258,8 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Unrelated file.md")).not.toBeNull();
     expect(await vault.read(assigned.updatesFile as never)).toContain("Project changed from No project to Project Alpha.");
     expect(service.copyFolderForTask(created.record.task_id)).toEqual({
-      folderPath: "08 Tasks/Projects/Project Alpha",
-      projectName: "Project Alpha"
+      folderPath: "08 Tasks/Projects/Project Alpha/Files/Move budget packet",
+      legacy: false
     });
 
     const returned = await service.changeProject(created.record.task_id, "");
@@ -273,6 +273,23 @@ describe("TaskWorkspaceService project-centered moves", () => {
       "Project not found: Deleted Project"
     );
     expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet/task.md");
+  });
+
+  it("returns distinct attachment destinations for tasks in the same project", async () => {
+    const { service } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    const first = await service.createTask({ taskId: "tsk_copy_one", title: "Shared project task", project: "Project Alpha" });
+    const second = await service.createTask({ taskId: "tsk_copy_two", title: "Another project task", project: "Project Alpha" });
+
+    expect(service.copyFolderForTask(first.record.task_id)).toEqual({
+      folderPath: "08 Tasks/Projects/Project Alpha/Files/Shared project task",
+      legacy: false
+    });
+    expect(service.copyFolderForTask(second.record.task_id)).toEqual({
+      folderPath: "08 Tasks/Projects/Project Alpha/Files/Another project task",
+      legacy: false
+    });
   });
 
   it("moves task records directly between projects and creates a missing destination Tasks folder", async () => {
@@ -362,7 +379,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(await vault.read(unchanged.updatesFile as never)).not.toContain("Project changed from No project");
   });
 
-  it("resolves a project folder from task metadata even when the indexed task file is in Inbox", async () => {
+  it("uses the legacy workspace Files fallback when a task record is outside its artifact folder", async () => {
     const { service, vault } = createService();
     await service.initialize();
     await service.createProject("Project Alpha");
@@ -378,8 +395,8 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     expect(service.getById(created.record.task_id).folderPath).toBe("08 Tasks/Inbox");
     expect(service.copyFolderForTask(created.record.task_id)).toEqual({
-      folderPath: "08 Tasks/Projects/Project Alpha",
-      projectName: "Project Alpha"
+      folderPath: "08 Tasks/Inbox/Files",
+      legacy: false
     });
   });
 

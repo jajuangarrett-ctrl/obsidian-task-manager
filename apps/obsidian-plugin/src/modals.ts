@@ -492,7 +492,7 @@ export class TaskFolderModal extends Modal {
     this.modalEl.addClass("fjg-task-folder-modal-shell");
     this.setTitle(this.taskTitle);
     this.contentEl.createEl("p", {
-      text: "Task folder",
+      text: "Task attachments folder",
       cls: "fjg-task-folder-eyebrow"
     });
     this.contentEl.createEl("code", {

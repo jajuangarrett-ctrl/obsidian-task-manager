@@ -76,7 +76,7 @@ export interface IndexedProject {
 
 export interface TaskCopyFolder {
   folderPath: string;
-  projectName: string;
+  legacy: boolean;
 }
 
 export interface TaskArtifactMigrationPreview {
@@ -287,21 +287,10 @@ export class TaskWorkspaceService {
 
   copyFolderForTask(taskId: string): TaskCopyFolder {
     const task = this.getById(taskId);
-    const projectName = task.record.project.trim();
-    if (projectName) {
-      const project = this.listProjects({ includeArchived: true }).find((candidate) => {
-        return normalizeSearch(candidate.record.name) === normalizeSearch(projectName);
-      });
-      if (project) {
-        return {
-          folderPath: project.folderPath,
-          projectName: project.record.name
-        };
-      }
-    }
     return {
-      folderPath: task.folderPath,
-      projectName: ""
+      // Copy Path is an attachment destination, never the shared workspace root.
+      folderPath: this.relatedFilesPath(task),
+      legacy: task.legacyWorkspace
     };
   }
 
