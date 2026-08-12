@@ -82,6 +82,20 @@ describe("dashboard task views", () => {
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
   });
 
+  it("filters No Project independently of task status and preserves Inbox behavior", () => {
+    const noProjectOpen = task({ task_id: "no-project-open", status: "do-soon", project: "" });
+    const noProjectArchived = task({ task_id: "no-project-archived", status: "archived", project: "" });
+    const assigned = task({ task_id: "assigned", status: "inbox", project: "CalWORKs" });
+    const inboxWithoutProject = task({ task_id: "inbox-no-project", status: "inbox", project: "" });
+
+    expect(taskMatchesView(noProjectOpen, "no-project")).toBe(true);
+    expect(taskMatchesView(noProjectArchived, "no-project")).toBe(true);
+    expect(taskMatchesView(assigned, "no-project")).toBe(false);
+    expect(taskMatchesView(inboxWithoutProject, "inbox")).toBe(true);
+    expect(taskMatchesView(noProjectOpen, "inbox")).toBe(false);
+    expect(countTasksForView([noProjectOpen, noProjectArchived, assigned, inboxWithoutProject], "no-project")).toBe(3);
+  });
+
   it("counts only open tasks due today or earlier", () => {
     expect(isDueOrOverdue(task({ due: "2026-07-27" }), "2026-07-27")).toBe(true);
     expect(isDueOrOverdue(task({ due: "2026-07-28" }), "2026-07-27")).toBe(false);
@@ -97,6 +111,13 @@ describe("dashboard task views", () => {
 
   it("includes an Ongoing dashboard view", () => {
     expect(TASK_VIEWS).toContainEqual({ key: "ongoing", label: "Ongoing", icon: "play-circle" });
+  });
+
+  it("places No Project directly before Archived without restoring Unassigned", () => {
+    const keys = TASK_VIEWS.map((view) => view.key);
+    expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "No Project" });
+    expect(keys.indexOf("no-project")).toBe(keys.indexOf("archived") - 1);
+    expect(keys).not.toContain("unassigned");
   });
 
   it("creates Kanban columns for every canonical status without losing tasks", () => {

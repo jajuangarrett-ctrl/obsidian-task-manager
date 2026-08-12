@@ -2,7 +2,7 @@ import { isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "tasks" | "kanban" | "projects";
-export type TaskViewKey = "recent" | "all-open" | "due" | TaskStatus;
+export type TaskViewKey = "recent" | "all-open" | "due" | "no-project" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;
 
@@ -48,6 +48,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
+  { key: "no-project", label: "No Project", icon: "folder-minus" },
   { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
 
@@ -79,6 +80,7 @@ export function taskMatchesView(
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
+  if (view === "no-project") return !record.project.trim();
   if (view === "inbox") return statusAssigned && record.status === "inbox";
   return record.status === view;
 }
