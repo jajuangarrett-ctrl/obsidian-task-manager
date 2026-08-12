@@ -10,6 +10,7 @@ import {
   mostRecentlyModifiedTasks,
   kanbanMoveTarget,
   NO_PROJECT,
+  projectSelectionAfterArchive,
   summarizeProjects,
   TASK_VIEWS,
   taskMatchesView
@@ -162,6 +163,19 @@ describe("dashboard project summaries", () => {
     expect(matchesProject(records[3], NO_PROJECT)).toBe(true);
     expect(matchesProject(records[0], "Basic Needs")).toBe(true);
     expect(matchesProject(records[0], "CalWORKs")).toBe(false);
+  });
+
+  it("clears only the project scope that was archived", () => {
+    expect(projectSelectionAfterArchive("2026 Coworkers Retreat", "2026 Coworkers Retreat"))
+      .toBe(ALL_PROJECTS);
+    expect(projectSelectionAfterArchive("2026 coworkers retreat", "2026 Coworkers Retreat"))
+      .toBe(ALL_PROJECTS);
+    expect(projectSelectionAfterArchive("CalWORKs", "2026 Coworkers Retreat"))
+      .toBe("CalWORKs");
+    expect(projectSelectionAfterArchive(ALL_PROJECTS, "2026 Coworkers Retreat"))
+      .toBe(ALL_PROJECTS);
+    expect(projectSelectionAfterArchive(NO_PROJECT, "2026 Coworkers Retreat"))
+      .toBe(NO_PROJECT);
   });
 
   it("keeps registered projects visible before they have tasks", () => {

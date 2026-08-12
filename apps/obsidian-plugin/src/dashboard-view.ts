@@ -12,6 +12,7 @@ import {
   matchesProject,
   mostRecentlyModifiedTasks,
   NO_PROJECT,
+  projectSelectionAfterArchive,
   ProjectSummary,
   summarizeProjects,
   TASK_VIEWS,
@@ -51,6 +52,14 @@ export class TaskDashboardView extends ItemView {
   async onOpen(): Promise<void> {
     this.view = this.taskPlugin.settings.dashboardDefault;
     this.render();
+  }
+
+  /** Called by the plugin after a project has been successfully archived. */
+  clearArchivedProjectSelection(projectName: string): boolean {
+    const nextProject = projectSelectionAfterArchive(this.project, projectName);
+    if (nextProject === this.project) return false;
+    this.project = nextProject;
+    return true;
   }
 
   render(): void {

@@ -157,10 +157,25 @@ export function matchesProject(record: TaskRecord, projectKey: string): boolean 
   return record.project === projectKey;
 }
 
+/**
+ * An archived project is no longer an active dashboard scope. Preserve every
+ * other filter choice, but clear the stale project selection immediately.
+ */
+export function projectSelectionAfterArchive(selectedProject: string, archivedProject: string): string {
+  if (selectedProject === ALL_PROJECTS || selectedProject === NO_PROJECT) return selectedProject;
+  return normalizeProjectKey(selectedProject) === normalizeProjectKey(archivedProject)
+    ? ALL_PROJECTS
+    : selectedProject;
+}
+
 export function canArchiveProject(summary: ProjectSummary): boolean {
   return summary.key !== NO_PROJECT && summary.openCount === 0;
 }
 
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeProjectKey(value: string): string {
+  return value.trim().toLocaleLowerCase();
 }

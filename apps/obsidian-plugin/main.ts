@@ -357,6 +357,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         `Project archived: ${result.project.record.name}. `
         + `${result.archivedTaskCount} completed ${result.archivedTaskCount === 1 ? "task" : "tasks"} archived.`
       );
+      this.clearArchivedProjectSelections(result.project.record.name);
       this.refreshDashboard();
     }).open();
   }
@@ -629,6 +630,13 @@ export default class FjgTaskManagerPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_DASHBOARD_VIEW)) {
       const view = leaf.view;
       if (view instanceof TaskDashboardView) view.render();
+    }
+  }
+
+  private clearArchivedProjectSelections(projectName: string): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(TASK_DASHBOARD_VIEW)) {
+      const view = leaf.view;
+      if (view instanceof TaskDashboardView) view.clearArchivedProjectSelection(projectName);
     }
   }
 }
