@@ -638,9 +638,9 @@ export class TaskWorkspaceService {
       await this.app.vault.modify(updatesFile, nextUpdates);
       await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
       if (status === "archived" && !task.archived) {
-        await this.moveTaskFiles(task, await this.archiveWorkspace(), nextRecord);
+        await this.moveTaskFiles(task, await this.archiveWorkspace(), nextRecord, { includeRelatedFiles: true });
       } else if (task.archived && status !== "archived") {
-        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord);
+        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord, { includeRelatedFiles: true });
       }
     } catch (error) {
       const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
@@ -683,13 +683,15 @@ export class TaskWorkspaceService {
       await this.app.vault.modify(updatesFile, nextUpdates);
       await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
       if (!task.archived) {
+        // Project assignment relocates the canonical task record and its update
+        // history only. Supporting files remain where they were attached.
         await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord);
       }
     } catch (error) {
-      const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
-      if (currentTask instanceof TFile) await this.app.vault.modify(currentTask, oldTaskContent);
-      const currentUpdates = this.app.vault.getAbstractFileByPath(updatesFile.path);
-      if (currentUpdates instanceof TFile) await this.app.vault.modify(currentUpdates, oldUpdates);
+      // TFile references survive Obsidian renames. Use them directly so a
+      // failed multi-file move can restore content even after a partial rename.
+      await this.app.vault.modify(task.taskFile, oldTaskContent);
+      await this.app.vault.modify(updatesFile, oldUpdates);
       throw error;
     }
 
@@ -752,7 +754,12 @@ export class TaskWorkspaceService {
       : { ...record, project: "" };
   }
 
-  private async moveTaskFiles(task: IndexedTask, targetWorkspace: string, record: TaskRecord): Promise<void> {
+  private async moveTaskFiles(
+    task: IndexedTask,
+    targetWorkspace: string,
+    record: TaskRecord,
+    options: { includeRelatedFiles?: boolean } = {}
+  ): Promise<void> {
     const normalizedTarget = normalizePath(targetWorkspace);
     await this.ensureWorkspaceFolders(normalizedTarget);
     if (!task.legacyWorkspace && normalizePath(task.folderPath) === normalizedTarget) return;
@@ -762,9 +769,7 @@ export class TaskWorkspaceService {
       { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
       { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
     ];
-    const moveTaskOwnedFiles = task.legacyWorkspace
-      || task.archived
-      || (!task.record.project && normalizePath(task.folderPath) === normalizePath(this.getSettings().inboxRoot));
+    const moveTaskOwnedFiles = options.includeRelatedFiles === true;
     if (moveTaskOwnedFiles) {
       const filesPath = taskFilesFolderPath(normalizedTarget);
       for (const related of task.relatedFiles) {
