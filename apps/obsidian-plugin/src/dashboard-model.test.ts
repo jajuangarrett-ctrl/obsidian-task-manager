@@ -34,6 +34,7 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
     source_url: "",
     legacy_ids: [],
     legacy_status: "",
+    related_files: [],
     tags: ["task"],
     ...overrides
   };

@@ -41,8 +41,7 @@ import {
   markdownPreview,
   RelatedFileKind,
   relatedFileKind,
-  safeRelatedFileName,
-  workspaceFileBelongsToTask
+  safeRelatedFileName
 } from "./related-files";
 
 export interface TaskRelatedFile {
@@ -165,20 +164,9 @@ export class TaskWorkspaceService {
     }
     const vaultFiles = this.app.vault.getFiles();
     for (const task of next.values()) {
-      const relatedRoot = task.legacyWorkspace
-        ? `${task.folderPath}/`
-        : `${taskFilesFolderPath(task.folderPath)}/`;
+      const referencedPaths = new Set(task.record.related_files.map((path) => normalizePath(path)));
       const related = vaultFiles
-        .filter((file) => {
-          if (!file.path.startsWith(relatedRoot) || isCanonicalTaskFile(file.name)) return false;
-          return workspaceFileBelongsToTask(
-            file.name,
-            task.record.title,
-            task.record.project,
-            task.archived,
-            task.legacyWorkspace
-          );
-        })
+        .filter((file) => referencedPaths.has(normalizePath(file.path)))
         .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
       for (const file of related) {
         const kind = relatedFileKind(file.extension);
@@ -533,6 +521,12 @@ export class TaskWorkspaceService {
     const path = await this.availableFilePath(filesPath, fileName);
     const body = [`# ${cleanTitle}`, "", content.trim(), ""].join("\n").replace(/\n{3,}/g, "\n\n");
     const file = await this.app.vault.create(path, body);
+    try {
+      await this.addRelatedFileReference(task, file.path);
+    } catch (error) {
+      await this.app.vault.delete(file, true);
+      throw error;
+    }
     await this.refresh();
     return file;
   }
@@ -550,7 +544,14 @@ export class TaskWorkspaceService {
         ? name
         : `${sanitizeTitleForPath(task.record.title)} - ${name}`;
       const path = await this.availableFilePath(attachmentsPath, fileName);
-      created.push(await this.app.vault.createBinary(path, await source.arrayBuffer()));
+      const file = await this.app.vault.createBinary(path, await source.arrayBuffer());
+      try {
+        await this.addRelatedFileReference(task, file.path);
+        created.push(file);
+      } catch (error) {
+        await this.app.vault.delete(file, true);
+        throw error;
+      }
     }
     await this.refresh();
     return created;
@@ -595,12 +596,19 @@ export class TaskWorkspaceService {
     if (this.app.vault.getAbstractFileByPath(normalizedTarget) || await this.app.vault.adapter.stat(normalizedTarget)) {
       throw new Error(`The Gmail attachment destination already exists: ${normalizedTarget}`);
     }
+    const originalSourcePath = source.path;
     await this.app.fileManager.renameFile(source, normalizedTarget);
-    await this.refresh();
     const moved = this.app.vault.getAbstractFileByPath(normalizedTarget);
     if (!(moved instanceof TFile)) {
       throw new Error(`The moved Gmail email was not found at ${normalizedTarget}.`);
     }
+    try {
+      await this.addRelatedFileReference(task, moved.path);
+    } catch (error) {
+      await this.app.fileManager.renameFile(moved, originalSourcePath);
+      throw error;
+    }
+    await this.refresh();
     return moved;
   }
 
@@ -667,7 +675,17 @@ export class TaskWorkspaceService {
     const at = new Date();
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
-    const nextRecord = updateTaskFields(taskDocument.record, { project: canonicalProject }, at);
+    const targetWorkspace = !task.archived
+      ? await this.workspaceForRecord({ ...taskDocument.record, project: canonicalProject })
+      : "";
+    const relatedMoves = !task.archived
+      ? await this.relatedFileMovesForProjectChange(task, targetWorkspace)
+      : [];
+    const relatedPaths = new Map(relatedMoves.map((move) => [normalizePath(move.from), move.to]));
+    const nextRecord = updateTaskFields(taskDocument.record, {
+      project: canonicalProject,
+      related_files: taskDocument.record.related_files.map((path) => relatedPaths.get(normalizePath(path)) || path)
+    }, at);
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
     const previous = task.record.project.trim() || "No project";
@@ -683,9 +701,7 @@ export class TaskWorkspaceService {
       await this.app.vault.modify(updatesFile, nextUpdates);
       await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
       if (!task.archived) {
-        // Project assignment relocates the canonical task record and its update
-        // history only. Supporting files remain where they were attached.
-        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord);
+        await this.moveTaskFiles(task, targetWorkspace, nextRecord, { relatedMoves });
       }
     } catch (error) {
       // TFile references survive Obsidian renames. Use them directly so a
@@ -718,6 +734,17 @@ export class TaskWorkspaceService {
     const current = await this.app.vault.read(task.taskFile);
     const document = parseTaskMarkdown(current);
     const next = { ...document.record, updated_at: at.toISOString() };
+    await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
+  }
+
+  private async addRelatedFileReference(task: IndexedTask, path: string): Promise<void> {
+    const current = await this.app.vault.read(task.taskFile);
+    const document = parseTaskMarkdown(current);
+    const normalizedPath = normalizePath(path);
+    if (document.record.related_files.some((entry) => normalizePath(entry) === normalizedPath)) return;
+    const next = updateTaskFields(document.record, {
+      related_files: [...document.record.related_files, normalizedPath]
+    });
     await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
   }
 
@@ -754,11 +781,37 @@ export class TaskWorkspaceService {
       : { ...record, project: "" };
   }
 
+  private async relatedFileMovesForProjectChange(
+    task: IndexedTask,
+    targetWorkspace: string
+  ): Promise<Array<{ file: TFile; from: string; to: string }>> {
+    const filesPath = taskFilesFolderPath(normalizePath(targetWorkspace));
+    await this.ensureFolder(filesPath);
+    const moves: Array<{ file: TFile; from: string; to: string }> = [];
+    for (const related of task.relatedFiles) {
+      const normalizedPath = normalizePath(related.file.path);
+      const referenceCount = this.list({ includeArchived: true })
+        .filter((candidate) => candidate.record.related_files.some((path) => normalizePath(path) === normalizedPath))
+        .length;
+      // A shared attachment stays put so every task keeps a valid reference.
+      if (referenceCount > 1) continue;
+      moves.push({
+        file: related.file,
+        from: related.file.path,
+        to: await this.availableFilePath(filesPath, related.file.name)
+      });
+    }
+    return moves;
+  }
+
   private async moveTaskFiles(
     task: IndexedTask,
     targetWorkspace: string,
     record: TaskRecord,
-    options: { includeRelatedFiles?: boolean } = {}
+    options: {
+      includeRelatedFiles?: boolean;
+      relatedMoves?: Array<{ file: TFile; from: string; to: string }>;
+    } = {}
   ): Promise<void> {
     const normalizedTarget = normalizePath(targetWorkspace);
     await this.ensureWorkspaceFolders(normalizedTarget);
@@ -769,8 +822,9 @@ export class TaskWorkspaceService {
       { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
       { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
     ];
-    const moveTaskOwnedFiles = options.includeRelatedFiles === true;
-    if (moveTaskOwnedFiles) {
+    if (options.relatedMoves) {
+      moves.unshift(...options.relatedMoves);
+    } else if (options.includeRelatedFiles === true) {
       const filesPath = taskFilesFolderPath(normalizedTarget);
       for (const related of task.relatedFiles) {
         const prefix = `${sanitizeTitleForPath(record.title)} - `;

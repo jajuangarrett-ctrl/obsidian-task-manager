@@ -64,6 +64,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     source_url: cleanUrl(input.source?.url),
     legacy_ids: uniqueStrings(input.legacyIds),
     legacy_status: cleanInline(input.legacyStatus),
+    related_files: [],
     tags: normalizeTags(input.tags)
   };
 }
@@ -121,7 +122,7 @@ export function transitionTaskRecord(record: TaskRecord, target: string, at = ne
 
 export function updateTaskFields(
   record: TaskRecord,
-  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "tags">>,
+  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "tags">>,
   at = new Date()
 ): TaskRecord {
   return normalizeRecord({
@@ -131,6 +132,7 @@ export function updateTaskFields(
     due: patch.due === undefined ? record.due : cleanDate(patch.due),
     project: patch.project === undefined ? record.project : cleanInline(patch.project),
     delegated_to: patch.delegated_to === undefined ? record.delegated_to : cleanInline(patch.delegated_to),
+    related_files: patch.related_files === undefined ? record.related_files : uniqueStrings(patch.related_files),
     tags: patch.tags === undefined ? record.tags : normalizeTags(patch.tags),
     updated_at: at.toISOString()
   });
@@ -195,6 +197,7 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     source_url: cleanUrl(record.source_url),
     legacy_ids: uniqueStrings(record.legacy_ids),
     legacy_status: cleanInline(record.legacy_status),
+    related_files: uniqueStrings(record.related_files),
     tags: normalizeTags(record.tags)
   };
 }

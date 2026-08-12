@@ -34,6 +34,8 @@ export interface TaskRecord {
   source_url: string;
   legacy_ids: string[];
   legacy_status: string;
+  /** Explicit vault paths for files attached to this task. */
+  related_files: string[];
   tags: string[];
 }
 
