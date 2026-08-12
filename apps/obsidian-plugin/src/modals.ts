@@ -2,6 +2,7 @@ import { App, Modal, Notice, setIcon, Setting, TFile } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
 import {
   filterProjectPickerOptions,
+  normalizeProjectPickerText,
   projectPickerCreationError
 } from "./project-picker-model";
 
@@ -17,6 +18,72 @@ export interface CreateTaskFormValue {
 export interface CreateProjectFormValue {
   name: string;
   description: string;
+}
+
+export interface DashboardProjectPickerOption {
+  key: string;
+  name: string;
+}
+
+/** Search-only picker for dashboard scope; it deliberately cannot create projects. */
+export class DashboardProjectPickerModal extends Modal {
+  private query = "";
+
+  constructor(
+    app: App,
+    private readonly currentProject: string,
+    private readonly options: readonly DashboardProjectPickerOption[],
+    private readonly selectProject: (projectKey: string) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-project-picker-modal");
+    this.setTitle("Filter tasks by project");
+    this.render();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("p", {
+      text: "Search projects to scope the current task view. Your current view and task search stay in place.",
+      cls: "fjg-project-picker-intro"
+    });
+    const search = this.contentEl.createEl("input", {
+      type: "search",
+      cls: "fjg-project-picker-search",
+      attr: { placeholder: "Search projects", "aria-label": "Search dashboard projects" }
+    });
+    search.value = this.query;
+    search.addEventListener("input", () => {
+      this.query = search.value;
+      this.render();
+    });
+    const choices = this.contentEl.createDiv({ cls: "fjg-project-picker-choices", attr: { role: "listbox", "aria-label": "Projects" } });
+    const matches = this.options.filter((option) => normalizeProjectPickerText(option.name).includes(normalizeProjectPickerText(this.query)));
+    if (!matches.length) {
+      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No projects match this search." });
+    } else {
+      for (const option of matches) {
+        const selected = option.key === this.currentProject;
+        const button = choices.createEl("button", {
+          cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
+          text: option.name,
+          attr: { type: "button", role: "option", "aria-selected": String(selected) }
+        });
+        button.addEventListener("click", () => {
+          this.selectProject(option.key);
+          this.close();
+        });
+      }
+    }
+    window.setTimeout(() => search.focus(), 0);
+  }
 }
 
 export class TaskProjectPickerModal extends Modal {

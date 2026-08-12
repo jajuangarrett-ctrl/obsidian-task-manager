@@ -416,8 +416,13 @@
   flex: 1;
 }
 
-.fjg-task-filters select {
+.fjg-task-filters select,
+.fjg-dashboard-project-filter {
   min-width: 190px;
+}
+
+.fjg-dashboard-project-filter {
+  text-align: left;
 }
 
 .fjg-active-project {
@@ -1115,6 +1120,7 @@
 
   .fjg-task-filters input,
   .fjg-task-filters select,
+  .fjg-dashboard-project-filter,
   .fjg-project-tools input {
     width: 100%;
     min-width: 0;

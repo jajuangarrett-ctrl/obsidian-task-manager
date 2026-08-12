@@ -2,6 +2,7 @@ import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
+import { DashboardProjectPickerModal } from "./modals";
 import {
   ALL_PROJECTS,
   canArchiveProject,
@@ -199,10 +200,6 @@ export class TaskDashboardView extends ItemView {
       this.renderRows(root);
     });
 
-    const projectSelect = filters.createEl("select", {
-      attr: { "aria-label": "Filter tasks by project" }
-    });
-    projectSelect.createEl("option", { text: "All projects", value: ALL_PROJECTS });
     const projectOptions = [...projects];
     if (this.view === "archived") {
       const known = new Set(projectOptions.map((project) => normalize(project.key)));
@@ -229,13 +226,24 @@ export class TaskDashboardView extends ItemView {
         return left.name.localeCompare(right.name);
       });
     }
-    for (const project of projectOptions) {
-      projectSelect.createEl("option", { text: project.name, value: project.key });
-    }
-    projectSelect.value = this.project;
-    projectSelect.addEventListener("change", () => {
-      this.project = projectSelect.value;
-      this.render();
+    const projectPicker = filters.createEl("button", {
+      cls: "fjg-dashboard-project-filter",
+      text: this.project === ALL_PROJECTS ? "All projects" : (projectOptions.find((option) => option.key === this.project)?.name || selectedName),
+      attr: { type: "button", "aria-label": "Filter tasks by project" }
+    });
+    projectPicker.addEventListener("click", () => {
+      new DashboardProjectPickerModal(
+        this.app,
+        this.project,
+        [
+          { key: ALL_PROJECTS, name: "All projects" },
+          ...projectOptions.map((project) => ({ key: project.key, name: project.name }))
+        ],
+        (projectKey) => {
+          this.project = projectKey;
+          this.render();
+        }
+      ).open();
     });
 
     root.createDiv({
