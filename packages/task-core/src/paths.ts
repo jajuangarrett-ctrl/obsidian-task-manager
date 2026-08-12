@@ -69,25 +69,25 @@ export function taskFilesFolderPath(workspace: string): string {
   return `${normalizeVaultPath(workspace)}/${FILES_FOLDER_NAME}`;
 }
 
-/** Stable per-task directory name; unlike a title, this never changes. */
-export function taskArtifactFolderName(taskId: string): string {
-  return normalizeTaskId(taskId);
+/** Human-readable task artifact directory. IDs remain in frontmatter. */
+export function taskArtifactFolderName(title: string, copyNumber = 1): string {
+  return numberedTaskFolderName("", title, copyNumber);
 }
 
-export function taskArtifactFolderPath(workspace: string, collection: string, taskId: string): string {
-  return `${normalizeVaultPath(workspace)}/${collection}/${taskArtifactFolderName(taskId)}`;
+export function taskArtifactFolderPath(workspace: string, collection: string, folderName: string): string {
+  return `${normalizeVaultPath(workspace)}/${collection}/${sanitizeTitleForPath(folderName)}`;
 }
 
-export function taskArtifactNotePath(workspace: string, taskId: string): string {
-  return `${taskArtifactFolderPath(workspace, TASKS_FOLDER_NAME, taskId)}/task.md`;
+export function taskArtifactNotePath(workspace: string, folderName: string): string {
+  return `${taskArtifactFolderPath(workspace, TASKS_FOLDER_NAME, folderName)}/task.md`;
 }
 
-export function taskArtifactUpdatesPath(workspace: string, taskId: string): string {
-  return `${taskArtifactFolderPath(workspace, UPDATES_FOLDER_NAME, taskId)}/updates.md`;
+export function taskArtifactUpdatesPath(workspace: string, folderName: string): string {
+  return `${taskArtifactFolderPath(workspace, UPDATES_FOLDER_NAME, folderName)}/updates.md`;
 }
 
-export function taskArtifactFilesPath(workspace: string, taskId: string): string {
-  return taskArtifactFolderPath(workspace, FILES_FOLDER_NAME, taskId);
+export function taskArtifactFilesPath(workspace: string, folderName: string): string {
+  return taskArtifactFolderPath(workspace, FILES_FOLDER_NAME, folderName);
 }
 
 export function taskNoteFileName(title: string, copyNumber = 1): string {

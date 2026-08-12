@@ -116,6 +116,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.addCommand({ id: "validate-task-workspaces", name: "Validate Task Workspaces", callback: () => this.validateWorkspaces() });
     this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Task Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
     this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Task Artifacts to Task Folders", callback: () => this.migrateTaskArtifacts() });
+    this.addCommand({ id: "preview-readable-task-folders", name: "Preview Readable Task Folder Rename", callback: () => this.previewReadableTaskFolders() });
+    this.addCommand({ id: "rename-readable-task-folders", name: "Rename Task Folders to Readable Titles", callback: () => this.renameReadableTaskFolders() });
     this.addCommand({ id: "rebuild-task-index", name: "Rebuild Task Index", callback: async () => {
       await this.workspaceService.refresh();
       new Notice(`Task index rebuilt: ${this.workspaceService.list({ includeArchived: true }).length} tasks.`);
@@ -630,6 +632,25 @@ export default class FjgTaskManagerPlugin extends Plugin {
       + `${result.errors.length} ${result.errors.length === 1 ? "error" : "errors"}.`,
       12000
     );
+  }
+
+  private previewReadableTaskFolders(): void {
+    const preview = this.workspaceService.previewTaskArtifactFolderRename();
+    const eligible = preview.filter((item) => item.eligible);
+    console.info("[FJG Task Manager] Readable task folder rename preview", preview);
+    new Notice(`${eligible.length} task ${eligible.length === 1 ? "folder is" : "folders are"} ready for readable-title rename. No files were changed.`, 8000);
+  }
+
+  private async renameReadableTaskFolders(): Promise<void> {
+    const preview = this.workspaceService.previewTaskArtifactFolderRename();
+    if (!preview.some((item) => item.eligible)) {
+      new Notice("No task folders need readable-title renaming.");
+      return;
+    }
+    const result = await this.workspaceService.renameTaskArtifactFolders();
+    console.info("[FJG Task Manager] Readable task folder rename result", result);
+    this.refreshDashboard();
+    new Notice(`Renamed ${result.renamed} task folders; ${result.skipped} skipped; ${result.errors.length} errors.`, 12000);
   }
 
   private scheduleRefresh(): void {
