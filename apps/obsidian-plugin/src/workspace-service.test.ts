@@ -210,6 +210,24 @@ describe("TaskWorkspaceService project-centered moves", () => {
       .toBe("already uses task-specific folders");
   });
 
+  it("isolates a failed migration and leaves the flat task intact", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const record = createTaskRecord({ taskId: "tsk_migrate_rollback", title: "Keep flat on failure" });
+    await vault.create("08 Tasks/Inbox/Tasks/Keep flat on failure.md", renderTaskMarkdown(record, "# Keep flat on failure"));
+    await vault.create("08 Tasks/Inbox/Updates/Keep flat on failure.md", renderUpdatesMarkdown());
+    await service.refresh();
+    vault.failNextRenameTarget = "08 Tasks/Inbox/Tasks/tsk_migrate_rollback/task.md";
+
+    const result = await service.migrateTaskArtifacts();
+
+    expect(result.migrated).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(service.getById("tsk_migrate_rollback").taskFile.path)
+      .toBe("08 Tasks/Inbox/Tasks/Keep flat on failure.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Keep flat on failure.md")).not.toBeNull();
+  });
+
   it("moves explicitly related files with Inbox task records into a project and back", async () => {
     const { service, vault } = createService();
     await service.initialize();
