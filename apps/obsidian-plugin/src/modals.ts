@@ -1,5 +1,9 @@
 import { App, Modal, Notice, setIcon, Setting, TFile } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
+import {
+  filterProjectPickerOptions,
+  projectPickerCreationError
+} from "./project-picker-model";
 
 export interface CreateTaskFormValue {
   title: string;
@@ -13,6 +17,105 @@ export interface CreateTaskFormValue {
 export interface CreateProjectFormValue {
   name: string;
   description: string;
+}
+
+export class TaskProjectPickerModal extends Modal {
+  private query = "";
+  private error = "";
+
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    private readonly currentProject: string,
+    private readonly projectNames: () => string[],
+    private readonly assignProject: (projectName: string) => Promise<void>,
+    private readonly createAndAssignProject: (projectName: string) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-project-picker-modal");
+    this.setTitle(`Project: ${this.taskTitle}`);
+    this.render();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("p", {
+      text: "Search an existing project, choose No project, or explicitly create and assign a new one.",
+      cls: "fjg-project-picker-intro"
+    });
+    const search = this.contentEl.createEl("input", {
+      type: "search",
+      cls: "fjg-project-picker-search",
+      attr: { placeholder: "Search projects", "aria-label": "Search projects" }
+    });
+    search.value = this.query;
+    search.addEventListener("input", () => {
+      this.query = search.value;
+      this.error = "";
+      this.render();
+    });
+    if (this.error) this.contentEl.createDiv({ cls: "fjg-project-picker-error", text: this.error });
+
+    const choices = this.contentEl.createDiv({ cls: "fjg-project-picker-choices" });
+    this.projectButton(choices, "No project", "", !this.currentProject);
+    const options = filterProjectPickerOptions(this.projectNames(), this.query);
+    if (!options.length) {
+      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No existing projects match this search." });
+    } else {
+      for (const project of options) this.projectButton(choices, project, project, project === this.currentProject);
+    }
+
+    const createName = this.query.replace(/\s+/g, " ").trim();
+    if (createName) {
+      const create = this.contentEl.createEl("button", {
+        cls: "mod-cta fjg-project-picker-create",
+        text: `Create project “${createName}” and assign`,
+        attr: { type: "button" }
+      });
+      create.addEventListener("click", async () => {
+        const validationError = projectPickerCreationError(this.projectNames(), createName);
+        if (validationError) {
+          this.error = validationError;
+          this.render();
+          return;
+        }
+        create.disabled = true;
+        try {
+          await this.createAndAssignProject(createName);
+          this.close();
+        } catch (error) {
+          this.error = error instanceof Error ? error.message : String(error);
+          this.render();
+        }
+      });
+    }
+    window.setTimeout(() => search.focus(), 0);
+  }
+
+  private projectButton(parent: HTMLElement, label: string, value: string, selected: boolean): void {
+    const button = parent.createEl("button", {
+      cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
+      text: label,
+      attr: { type: "button", "aria-pressed": String(selected) }
+    });
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await this.assignProject(value);
+        this.close();
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : String(error);
+        this.render();
+      }
+    });
+  }
 }
 
 export class ArchiveProjectModal extends Modal {

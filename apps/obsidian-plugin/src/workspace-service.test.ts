@@ -244,6 +244,25 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta/Tasks")).not.toBeNull();
   });
 
+  it("creates a standard project workspace before assigning and relocating a task", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const created = await service.createTask({
+      taskId: "tsk_inline_project_create",
+      title: "Start new initiative"
+    });
+
+    const project = await service.createProject("New Initiative");
+    const assigned = await service.changeProject(created.record.task_id, project.record.name);
+
+    expect(project.projectFile.path).toBe("08 Tasks/Projects/New Initiative/project.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/New Initiative/Files")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/New Initiative/Tasks")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/New Initiative/Updates")).not.toBeNull();
+    expect(assigned.record.project).toBe("New Initiative");
+    expect(assigned.taskFile.path).toBe("08 Tasks/Projects/New Initiative/Tasks/Start new initiative.md");
+  });
+
   it("rolls back record content and paths when a task-note move fails", async () => {
     const { service, vault } = createService();
     await service.initialize();

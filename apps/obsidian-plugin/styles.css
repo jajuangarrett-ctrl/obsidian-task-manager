@@ -1018,8 +1018,55 @@
   min-width: 126px;
 }
 
-.fjg-task-controls .fjg-task-project-select {
+.fjg-task-controls .fjg-task-project-picker-button {
   min-width: 180px;
+}
+
+.fjg-task-project-picker-modal .modal-content {
+  display: grid;
+  gap: 12px;
+}
+
+.fjg-project-picker-intro,
+.fjg-project-picker-empty {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.fjg-project-picker-search {
+  width: 100%;
+}
+
+.fjg-project-picker-choices {
+  display: grid;
+  max-height: 280px;
+  overflow: auto;
+  gap: 6px;
+}
+
+.fjg-project-picker-option {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.fjg-project-picker-option.is-selected {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.fjg-project-picker-empty,
+.fjg-project-picker-error {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.fjg-project-picker-error {
+  color: var(--text-error);
+}
+
+.fjg-project-picker-create {
+  justify-content: center;
 }
 
 .fjg-empty {

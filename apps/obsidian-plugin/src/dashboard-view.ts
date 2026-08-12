@@ -661,23 +661,12 @@ export class TaskDashboardView extends ItemView {
           new Notice(error instanceof Error ? error.message : String(error));
         }
       });
-      const project = controls.createEl("select", {
-        cls: "fjg-task-project-select",
-        attr: { "aria-label": `Project for ${task.record.title}` }
+      const project = controls.createEl("button", {
+        cls: "fjg-task-project-picker-button",
+        text: task.record.project || "No project",
+        attr: { type: "button", "aria-label": `Choose project for ${task.record.title}` }
       });
-      project.createEl("option", { text: "No project", value: "" });
-      for (const projectName of projectOptionsForTask(this.taskPlugin.projectNames(), task.record.project)) {
-        project.createEl("option", { text: projectName, value: projectName });
-      }
-      project.value = task.record.project;
-      project.addEventListener("change", async () => {
-        try {
-          await this.taskPlugin.changeProject(task.record.task_id, project.value);
-          this.render();
-        } catch (error) {
-          new Notice(error instanceof Error ? error.message : String(error));
-        }
-      });
+      project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
       const update = controls.createEl("button", {
         text: "Update",
         attr: { "aria-label": `Add an update to ${task.record.title}` }
@@ -859,17 +848,6 @@ function taskMatchesSearch(task: IndexedTask, query: string): boolean {
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function projectOptionsForTask(projectNames: readonly string[], currentProject: string): string[] {
-  const projects = new Map<string, string>();
-  for (const project of projectNames) {
-    const name = project.trim();
-    if (name) projects.set(normalize(name), name);
-  }
-  const current = currentProject.trim();
-  if (current && !projects.has(normalize(current))) projects.set(normalize(current), current);
-  return [...projects.values()].sort((left, right) => left.localeCompare(right));
 }
 
 function taskCountLabel(count: number): string {

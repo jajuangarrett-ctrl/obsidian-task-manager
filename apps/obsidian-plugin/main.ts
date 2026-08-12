@@ -14,6 +14,7 @@ import {
   ArchiveProjectModal,
   CreateProjectModal,
   CreateTaskModal,
+  TaskProjectPickerModal,
   TaskFileModal,
   TaskFolderEntry,
   TaskFolderModal,
@@ -326,6 +327,27 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Project created: ${project.record.name}`);
       this.refreshDashboard();
     }).open();
+  }
+
+  openTaskProjectPicker(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    new TaskProjectPickerModal(
+      this.app,
+      task.record.title,
+      task.record.project,
+      () => this.projectNames(),
+      async (projectName) => this.changeProject(taskId, projectName),
+      async (projectName) => {
+        const project = await this.workspaceService.createProject(projectName);
+        try {
+          await this.changeProject(taskId, project.record.name);
+        } catch (error) {
+          throw new Error(
+            `Project created, but the task could not be assigned: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    ).open();
   }
 
   openArchiveProjectModal(projectName: string, completedTaskCount: number): void {
