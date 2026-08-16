@@ -1074,6 +1074,65 @@
   justify-content: center;
 }
 
+.fjg-task-update-capture-modal {
+  width: min(94vw, 680px);
+}
+
+.fjg-task-update-capture-modal .modal-content {
+  display: grid;
+  gap: 12px;
+}
+
+.fjg-task-update-capture-intro {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.fjg-task-update-capture-search {
+  width: 100%;
+}
+
+.fjg-task-update-capture-results {
+  display: grid;
+  max-height: 280px;
+  overflow: auto;
+  gap: 6px;
+}
+
+.fjg-task-update-capture-option {
+  display: grid;
+  height: auto;
+  min-height: 48px;
+  justify-content: stretch;
+  padding: 8px 11px;
+  text-align: left;
+  white-space: normal;
+}
+
+.fjg-task-update-capture-option strong,
+.fjg-task-update-capture-option span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.fjg-task-update-capture-option span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.fjg-task-update-capture-option.is-selected {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.fjg-task-update-capture-empty {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
 .fjg-empty {
   grid-column: 1 / -1;
   padding: 44px;

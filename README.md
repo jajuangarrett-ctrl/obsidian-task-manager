@@ -101,6 +101,16 @@ obsidian://fjg-task-manager?text=<URL-encoded dictated text>
 
 Configure the OpenAI key, drafting model, transcription model, and automatic drafting behavior in FJG Task Manager settings.
 
+## Review-first task updates
+
+An integration can open a prefilled update review without writing to the vault:
+
+```text
+obsidian://fjg-task-update?text=<URL-encoded update text>
+```
+
+The native modal searches the live task catalog and requires the user to select one exact task before **Add Update** is enabled. Opening the link, searching, or selecting a task does not write an update; only the final button appends to the selected stable task ID.
+
 ## Build and test
 
 ```bash

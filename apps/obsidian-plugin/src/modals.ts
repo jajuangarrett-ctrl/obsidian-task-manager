@@ -1,10 +1,12 @@
 import { App, Modal, Notice, setIcon, Setting, TFile } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
+import type { CatalogTask } from "@fjg/task-protocol";
 import {
   filterProjectPickerOptions,
   normalizeProjectPickerText,
   projectPickerCreationError
 } from "./project-picker-model";
+import { filterTaskUpdateOptions } from "./task-update-capture-model";
 
 export interface CreateTaskFormValue {
   title: string;
@@ -385,6 +387,113 @@ export class TextEntryModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+  }
+}
+
+export class TaskUpdateCaptureModal extends Modal {
+  private query = "";
+  private text: string;
+  private selectedTaskId = "";
+  private resultsEl!: HTMLElement;
+  private submitEl!: HTMLButtonElement;
+
+  constructor(
+    app: App,
+    private readonly tasks: readonly CatalogTask[],
+    initialText: string,
+    private readonly submit: (taskId: string, text: string) => Promise<void>
+  ) {
+    super(app);
+    this.text = initialText;
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-update-capture-modal");
+    this.setTitle("Add Update to Existing Task");
+    this.contentEl.createEl("p", {
+      text: "Choose one exact task, review the prefilled email update, then confirm. Opening this form does not change any task.",
+      cls: "fjg-task-update-capture-intro"
+    });
+
+    const search = this.contentEl.createEl("input", {
+      type: "search",
+      cls: "fjg-task-update-capture-search",
+      attr: { placeholder: "Search task title, project, person, or ID", "aria-label": "Search existing tasks" }
+    });
+    search.addEventListener("input", () => {
+      this.query = search.value;
+      this.renderResults();
+    });
+
+    this.resultsEl = this.contentEl.createDiv({
+      cls: "fjg-task-update-capture-results",
+      attr: { role: "listbox", "aria-label": "Matching tasks" }
+    });
+    this.renderResults();
+
+    new Setting(this.contentEl).setName("Update").setDesc("Review or edit before saving.").addTextArea((area) => {
+      area.inputEl.rows = 8;
+      area.inputEl.value = this.text;
+      area.onChange((value) => {
+        this.text = value;
+        this.syncSubmitState();
+      });
+    });
+    new Setting(this.contentEl).addButton((button) => {
+      button.setButtonText("Add Update").setCta().setDisabled(true).onClick(async () => {
+        const text = this.text.trim();
+        if (!this.selectedTaskId || !text) return;
+        button.setDisabled(true);
+        try {
+          await this.submit(this.selectedTaskId, text);
+          this.close();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error), 8000);
+          this.syncSubmitState();
+        }
+      });
+      this.submitEl = button.buttonEl;
+    });
+    window.setTimeout(() => search.focus(), 0);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private renderResults(): void {
+    this.resultsEl.empty();
+    const matches = filterTaskUpdateOptions(this.tasks, this.query, 20);
+    if (!matches.length) {
+      this.resultsEl.createDiv({ cls: "fjg-task-update-capture-empty", text: "No tasks match this search." });
+      return;
+    }
+    for (const task of matches) {
+      const selected = task.task_id === this.selectedTaskId;
+      const button = this.resultsEl.createEl("button", {
+        cls: `fjg-task-update-capture-option${selected ? " is-selected" : ""}`,
+        attr: {
+          type: "button",
+          role: "option",
+          "aria-selected": String(selected),
+          title: `Task ID: ${task.task_id}`
+        }
+      });
+      button.createEl("strong", { text: task.title });
+      const metadata = [statusLabel(task.status), task.project, task.delegated_to, task.archived ? "Archived" : ""]
+        .filter(Boolean)
+        .join(" · ");
+      button.createEl("span", { text: metadata || task.task_id });
+      button.addEventListener("click", () => {
+        this.selectedTaskId = task.task_id;
+        this.renderResults();
+        this.syncSubmitState();
+      });
+    }
+  }
+
+  private syncSubmitState(): void {
+    if (this.submitEl) this.submitEl.disabled = !this.selectedTaskId || !this.text.trim();
   }
 }
 

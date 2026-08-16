@@ -18,6 +18,7 @@ import {
   TaskFileModal,
   TaskFolderEntry,
   TaskFolderModal,
+  TaskUpdateCaptureModal,
   TextEntryModal
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
@@ -59,6 +60,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
       this.openQuickCaptureModal(String(params.text || ""));
+    });
+    this.registerObsidianProtocolHandler("fjg-task-update", (params) => {
+      this.openUpdateCaptureModal(String(params.text || ""));
     });
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
@@ -409,6 +413,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Task updated: ${task.record.title}`);
       this.refreshDashboard();
     }).open();
+  }
+
+  openUpdateCaptureModal(initialText = ""): void {
+    new TaskUpdateCaptureModal(
+      this.app,
+      this.workspaceService.catalog(),
+      initialText,
+      async (taskId, text) => {
+        const task = this.workspaceService.getById(taskId);
+        await this.workspaceService.appendUpdate(taskId, { actor: "Franklin", text, type: "update" });
+        new Notice(`Task updated: ${task.record.title}`);
+        this.refreshDashboard();
+      }
+    ).open();
   }
 
   async changeStatus(taskId: string, status: string): Promise<void> {
