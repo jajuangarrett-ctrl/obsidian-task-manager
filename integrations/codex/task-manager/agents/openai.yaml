@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Manager"
+  short_description: "Query live tasks, projects, and updates"
+  default_prompt: "Use $task-manager to summarize my project status this week."

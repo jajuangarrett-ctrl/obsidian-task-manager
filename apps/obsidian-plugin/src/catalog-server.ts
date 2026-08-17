@@ -1,4 +1,5 @@
 import type { CatalogTask } from "@fjg/task-protocol";
+import type { TaskQueryResult } from "./task-query";
 
 type HttpModule = typeof import("node:http");
 type HttpServer = import("node:http").Server;
@@ -14,6 +15,7 @@ export class TaskCatalogServer {
     token: string;
     getTasks: () => CatalogTask[];
     getProjects?: () => string[];
+    queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
   }): Promise<void> {
     await this.stop();
     const http = await loadHttp();
@@ -58,7 +60,12 @@ export class TaskCatalogServer {
   private async handle(
     request: IncomingMessage,
     response: ServerResponse,
-    options: { token: string; getTasks: () => CatalogTask[]; getProjects?: () => string[] }
+    options: {
+      token: string;
+      getTasks: () => CatalogTask[];
+      getProjects?: () => string[];
+      queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
+    }
   ): Promise<void> {
     const origin = String(request.headers.origin || "");
     if (origin && !isAllowedExtensionOrigin(origin)) return sendJson(response, 403, { error: "Origin is not allowed." });
@@ -85,6 +92,13 @@ export class TaskCatalogServer {
         .filter(Boolean)
         .sort((left, right) => left.localeCompare(right));
       return sendJson(response, 200, { projects });
+    }
+    if (url.pathname === "/query") {
+      if (!options.queryTasks) return sendJson(response, 404, { error: "Task query is unavailable." });
+      const question = String(url.searchParams.get("q") || "").trim();
+      if (!question) return sendJson(response, 400, { error: "Provide a task or project question in q." });
+      const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit")) || 30, 50));
+      return sendJson(response, 200, await options.queryTasks(question, limit));
     }
     if (url.pathname === "/tasks") {
       const query = normalizeSearch(url.searchParams.get("q") || "");

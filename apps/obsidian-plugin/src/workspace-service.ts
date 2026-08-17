@@ -32,10 +32,19 @@ import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
 import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
 import {
+  queryTaskContext,
+  QueryableProject,
+  QueryableTask,
+  TaskQueryResult
+} from "./task-query";
+import {
+  renderTaskManagerBriefing,
+  TASK_BRIEFING_FILE_NAME
+} from "./task-briefing";
+import {
   archiveProjectRecord,
   createProjectRecord,
   parseProjectDocument,
-  parseProjectMarkdown,
   ProjectRecord,
   renderProjectDocument,
   reopenProjectRecord,
@@ -57,6 +66,7 @@ export interface TaskRelatedFile {
 
 export interface IndexedTask {
   record: TaskRecord;
+  notes: string;
   statusAssigned: boolean;
   folderPath: string;
   taskFile: TFile;
@@ -69,6 +79,7 @@ export interface IndexedTask {
 
 export interface IndexedProject {
   record: ProjectRecord;
+  notes: string;
   folderPath: string;
   projectFile: TFile;
   archived: boolean;
@@ -158,6 +169,7 @@ export class TaskWorkspaceService {
             : [];
           next.set(document.record.task_id, {
             record: document.record,
+            notes: document.body,
             statusAssigned: document.statusRecognized,
             folderPath,
             taskFile: file,
@@ -175,7 +187,8 @@ export class TaskWorkspaceService {
         && (file.path.startsWith(projectPrefix) || file.path.startsWith(projectArchivePrefix))
       ) {
         try {
-          const record = parseProjectMarkdown(await this.app.vault.cachedRead(file));
+          const document = parseProjectDocument(await this.app.vault.cachedRead(file));
+          const record = document.record;
           const archived = file.path.startsWith(projectArchivePrefix);
           const key = projectIndexKey(record.name, archived);
           if (nextProjects.has(key)) throw new Error(`Duplicate project name ${record.name}`);
@@ -185,6 +198,7 @@ export class TaskWorkspaceService {
               status: archived ? "archived" : "active",
               archived_at: archived ? record.archived_at : ""
             },
+            notes: document.body,
             folderPath: file.parent?.path || "",
             projectFile: file,
             archived
@@ -217,6 +231,11 @@ export class TaskWorkspaceService {
     for (const [id, task] of next) this.index.set(id, task);
     this.projectIndex.clear();
     for (const [key, project] of nextProjects) this.projectIndex.set(key, project);
+    try {
+      await this.refreshBriefingNote();
+    } catch (error) {
+      console.error("[FJG Task Manager] Could not refresh Task Manager briefing", error);
+    }
   }
 
   list(options: { includeArchived?: boolean } = {}): IndexedTask[] {
@@ -390,10 +409,60 @@ export class TaskWorkspaceService {
       .map((entry) => entry.task);
   }
 
+  queryForClaudian(question: string, now = new Date(), limit = 30): TaskQueryResult {
+    const { tasks, projects } = this.querySources();
+    return queryTaskContext(tasks, projects, question, now, limit);
+  }
+
+  briefingPath(): string {
+    return normalizePath(`${this.getSettings().activeRoot}/${TASK_BRIEFING_FILE_NAME}`);
+  }
+
+  isBriefingPath(value: string): boolean {
+    return normalizePath(value) === this.briefingPath();
+  }
+
+  async refreshBriefingNote(generatedAt = new Date()): Promise<TFile> {
+    const path = this.briefingPath();
+    const { tasks, projects } = this.querySources();
+    const markdown = renderTaskManagerBriefing(tasks, projects, generatedAt);
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof TFile) {
+      await this.app.vault.modify(existing, markdown);
+      return existing;
+    }
+    if (existing) throw new Error(`Task briefing path is not a file: ${path}`);
+    return this.app.vault.create(path, markdown);
+  }
+
   getById(taskId: string): IndexedTask {
     const task = this.index.get(taskId);
     if (!task) throw new Error(`No task matched ID ${taskId}.`);
     return task;
+  }
+
+  private querySources(): { tasks: QueryableTask[]; projects: QueryableProject[] } {
+    const indexedProjects = this.listProjects({ includeArchived: true });
+    const projectPaths = new Map(
+      indexedProjects.map((project) => [normalizeSearch(project.record.name), project.projectFile.path])
+    );
+    return {
+      tasks: this.list({ includeArchived: true }).map((task) => ({
+        record: task.record,
+        notes: task.notes,
+        updates: task.updates,
+        taskPath: task.taskFile.path,
+        updatesPath: task.updatesFile?.path || "",
+        projectPath: projectPaths.get(normalizeSearch(task.record.project)) || "",
+        archived: task.archived
+      })),
+      projects: indexedProjects.map((project) => ({
+        name: project.record.name,
+        status: project.record.status,
+        notes: project.notes,
+        path: project.projectFile.path
+      }))
+    };
   }
 
   findByIdOrQuery(taskId: string, query = ""): IndexedTask {

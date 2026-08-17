@@ -29,7 +29,18 @@ describe("TaskCatalogServer", () => {
       port: 0,
       token: "test-secret",
       getTasks: () => [task],
-      getProjects: () => ["Empty Project", "Task Manager"]
+      getProjects: () => ["Empty Project", "Task Manager"],
+      queryTasks: (question) => ({
+        ok: true,
+        mode: "search",
+        question,
+        generated_at: "2026-08-12T12:00:00.000Z",
+        count: question === "missing" ? 0 : 1,
+        no_results: question === "missing",
+        message: question === "missing" ? "No Task Manager tasks matched." : "Found one task.",
+        projects: [],
+        tasks: []
+      })
     });
     return { server, url: `http://127.0.0.1:${server.getPort()}` };
   }
@@ -51,6 +62,18 @@ describe("TaskCatalogServer", () => {
     });
     expect(result.status).toBe(200);
     expect(await result.json()).toMatchObject({ count: 1, tasks: [{ task_id: task.task_id }] });
+
+    const query = await fetch(`${url}/query?q=project%20status`, {
+      headers: { Authorization: "Bearer test-secret" }
+    });
+    expect(query.status).toBe(200);
+    expect(await query.json()).toMatchObject({ ok: true, question: "project status", no_results: false });
+
+    const emptyQuery = await fetch(`${url}/query`, {
+      headers: { Authorization: "Bearer test-secret" }
+    });
+    expect(emptyQuery.status).toBe(400);
+    expect(await emptyQuery.json()).toEqual({ error: "Provide a task or project question in q." });
 
     const writeAttempt = await fetch(`${url}/tasks`, {
       method: "POST",

@@ -111,6 +111,14 @@ obsidian://fjg-task-update?text=<URL-encoded update text>
 
 The native modal searches the live task catalog and requires the user to select one exact task before **Add Update** is enabled. Opening the link, searching, or selecting a task does not write an update; only the final button appends to the selected stable task ID.
 
+## Ask Claudian about tasks
+
+Task Manager generates `Task Manager Briefing.md` inside the configured active workspace root. The note is rebuilt from the authoritative Task Manager index whenever the dashboard refreshes. It contains every active and archived dashboard task, registered projects (including projects without tasks), task details and notes, status, due date, delegation, recent update history, and links back to the task, project, and full update notes.
+
+Click **Open Task Briefing** in the dashboard (or run **FJG Task Manager: Open Task Briefing**) to regenerate and open the note directly in Obsidian. Then ask Claudian a natural-language question such as “What is the status of my projects this week?” while the briefing note is open. The dashboard's **Refresh** button also regenerates the briefing.
+
+If Task Manager has no indexed data, the briefing states that no tasks or projects are available. If the note cannot be written or opened, Task Manager shows an error notice instead of opening an empty or invented result.
+
 ## Build and test
 
 ```bash

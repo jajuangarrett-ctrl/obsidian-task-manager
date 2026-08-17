@@ -66,6 +66,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     });
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
+    this.addCommand({ id: "open-task-briefing", name: "Open Task Briefing", callback: () => void this.openTaskBriefing() });
     this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
     this.addCommand({ id: "create-project", name: "Create Project", callback: () => this.openCreateProjectModal() });
     this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
@@ -128,11 +129,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }});
 
     this.registerEvent(this.app.vault.on("create", (file) => {
-      this.scheduleRefresh();
+      if (!this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      this.scheduleRefresh();
+      if (!this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
@@ -296,7 +297,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
         port: this.settings.catalogPort,
         token: this.settings.catalogToken,
         getTasks: () => this.workspaceService.catalog(),
-        getProjects: () => this.workspaceService.projectNames()
+        getProjects: () => this.workspaceService.projectNames(),
+        queryTasks: (question, limit) => this.workspaceService.queryForClaudian(question, new Date(), limit)
       });
     } catch (error) {
       console.error("[FJG Task Manager] Catalog failed to start", error);
@@ -327,6 +329,19 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Task workspace created: ${task.record.title}`);
       this.refreshDashboard();
     }).open();
+  }
+
+  async openTaskBriefing(): Promise<void> {
+    try {
+      const file = await this.workspaceService.refreshBriefingNote();
+      await this.app.workspace.getLeaf("tab").openFile(file);
+    } catch (error) {
+      console.error("[FJG Task Manager] Could not open Task Manager briefing", error);
+      new Notice(
+        `Task briefing could not open: ${error instanceof Error ? error.message : String(error)}`,
+        10000
+      );
+    }
   }
 
   openCreateProjectModal(): void {

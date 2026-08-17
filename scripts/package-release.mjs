@@ -10,6 +10,8 @@ fs.mkdirSync(pluginFolder, { recursive: true });
 for (const file of ["main.js", "manifest.json", "styles.css", "versions.json"]) {
   fs.copyFileSync(path.join("apps/obsidian-plugin", file), path.join(pluginFolder, file));
 }
+fs.cpSync(path.resolve("integrations/claudian"), path.join(pluginFolder, "claudian"), { recursive: true });
+fs.cpSync(path.resolve("integrations/codex/task-manager"), path.join(pluginFolder, "codex-task-manager"), { recursive: true });
 execFileSync("zip", ["-q", "-r", `fjg-task-manager-${manifest.version}.zip`, path.basename(pluginFolder)], { cwd: releaseRoot });
 
 const clipperDist = path.resolve("apps/browser-clipper/dist");

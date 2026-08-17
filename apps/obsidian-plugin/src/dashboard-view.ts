@@ -93,7 +93,17 @@ export class TaskDashboardView extends ItemView {
     const actions = header.createDiv({ cls: "fjg-header-actions" });
     const createButton = actions.createEl("button", { text: "Capture Task", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
+    const briefingButton = actions.createEl("button", {
+      text: "Open Task Briefing",
+      attr: {
+        title: "Refresh and open the Task Manager briefing for Claudian",
+        "aria-label": "Refresh and open Task Manager briefing"
+      }
+    });
+    briefingButton.addEventListener("click", () => void this.taskPlugin.openTaskBriefing());
     const refreshButton = actions.createEl("button", { text: "Refresh" });
+    refreshButton.setAttribute("title", "Refresh tasks and regenerate the Task Manager briefing");
+    refreshButton.setAttribute("aria-label", "Refresh tasks and regenerate Task Manager briefing");
     refreshButton.addEventListener("click", async () => {
       await this.taskPlugin.workspaceService.refresh();
       this.render();

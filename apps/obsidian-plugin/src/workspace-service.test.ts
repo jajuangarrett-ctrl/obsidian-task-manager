@@ -69,6 +69,7 @@ import { createTaskRecord, parseTaskMarkdown, renderTaskMarkdown, renderUpdatesM
 class MockVault {
   private readonly entries = new Map<string, InstanceType<typeof obsidianMock.MockTFile> | InstanceType<typeof obsidianMock.MockTFolder>>();
   failNextRenameTarget = "";
+  failNextWriteTarget = "";
 
   readonly adapter = {
     stat: async (value: string) => {
@@ -101,6 +102,10 @@ class MockVault {
 
   async create(value: string, content: string) {
     const file = new obsidianMock.MockTFile(value, content);
+    if (file.path === this.failNextWriteTarget) {
+      this.failNextWriteTarget = "";
+      throw new Error(`Simulated write failure: ${file.path}`);
+    }
     if (this.entries.has(file.path)) throw new Error(`Already exists: ${file.path}`);
     this.entries.set(file.path, file);
     return file;
@@ -119,6 +124,10 @@ class MockVault {
   }
 
   async modify(file: InstanceType<typeof obsidianMock.MockTFile>, content: string) {
+    if (file.path === this.failNextWriteTarget) {
+      this.failNextWriteTarget = "";
+      throw new Error(`Simulated write failure: ${file.path}`);
+    }
     file.content = content;
     file.stat = { mtime: Date.now(), size: content.length };
   }
@@ -484,5 +493,63 @@ describe("TaskWorkspaceService project-centered moves", () => {
       "Project not found: Deleted Project"
     );
     expect(service.list()).toHaveLength(0);
+  });
+});
+
+describe("TaskWorkspaceService briefing", () => {
+  it("creates a clear empty briefing during refresh", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+
+    const briefing = vault.getAbstractFileByPath(service.briefingPath());
+    expect(briefing).toBeInstanceOf(obsidianMock.MockTFile);
+    expect(await vault.read(briefing as InstanceType<typeof obsidianMock.MockTFile>))
+      .toContain("No tasks or projects are currently indexed by FJG Task Manager.");
+  });
+
+  it("regenerates every dashboard task with scannable title, status, project, details, and history", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Enrollment");
+    const assigned = await service.createTask({
+      taskId: "tsk_briefing_assigned",
+      title: "Prepare weekly enrollment report",
+      details: "Confirm the MIS totals with PRIE.",
+      status: "waiting",
+      due: "2026-08-21",
+      project: "Enrollment",
+      delegatedTo: "Dara"
+    });
+    await service.appendUpdate(assigned.record.task_id, {
+      actor: "Franklin",
+      type: "update",
+      text: "PRIE sent the corrected enrollment extract."
+    });
+    await service.createTask({
+      taskId: "tsk_briefing_unassigned",
+      title: "Review unassigned follow-up",
+      details: "Keep this visible without a project.",
+      status: "do-first"
+    });
+
+    const briefing = await service.refreshBriefingNote(new Date("2026-08-16T20:00:00.000Z"));
+    const markdown = await vault.read(briefing as unknown as InstanceType<typeof obsidianMock.MockTFile>);
+    expect(markdown).toContain("task_count: 2");
+    expect(markdown).toMatch(/#### Prepare weekly enrollment report[\s\S]*Status: \*\*Waiting\*\*[\s\S]*Project: Enrollment/);
+    expect(markdown).toMatch(/#### Review unassigned follow-up[\s\S]*Status: \*\*Do First\*\*[\s\S]*Project: No Project/);
+    expect(markdown).toContain("Due date: 2026-08-21");
+    expect(markdown).toContain("Delegated to: Dara");
+    expect(markdown).toContain("Confirm the MIS totals with PRIE.");
+    expect(markdown).toContain("PRIE sent the corrected enrollment extract.");
+    expect(markdown).toContain("[[08 Tasks/Projects/Enrollment/project|Enrollment]]");
+    expect(markdown).toContain("generated_at: 2026-08-16T20:00:00.000Z");
+  });
+
+  it("surfaces an explicit briefing write failure to the open-note action", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    vault.failNextWriteTarget = service.briefingPath();
+
+    await expect(service.refreshBriefingNote()).rejects.toThrow("Simulated write failure");
   });
 });
