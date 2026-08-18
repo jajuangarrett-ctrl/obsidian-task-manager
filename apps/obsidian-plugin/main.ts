@@ -18,6 +18,7 @@ import {
   TaskFileModal,
   TaskFolderEntry,
   TaskFolderModal,
+  TaskDueDateModal,
   TaskUpdateCaptureModal,
   TextEntryModal
 } from "./src/modals";
@@ -373,6 +374,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
     ).open();
   }
 
+  openTaskDueDateModal(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    new TaskDueDateModal(
+      this.app,
+      task.record.title,
+      task.record.due,
+      async (dueDate) => this.changeDueDate(taskId, dueDate)
+    ).open();
+  }
+
   openArchiveProjectModal(projectName: string, completedTaskCount: number): void {
     new ArchiveProjectModal(this.app, projectName, completedTaskCount, async () => {
       const result = await this.workspaceService.archiveProject(projectName);
@@ -456,6 +467,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
       task.record.project
         ? `Task project set to ${task.record.project}: ${task.record.title}`
         : `Task moved to No project: ${task.record.title}`
+    );
+    this.refreshDashboard();
+  }
+
+  async changeDueDate(taskId: string, dueDate: string): Promise<void> {
+    const task = await this.workspaceService.changeDueDate(taskId, dueDate);
+    new Notice(
+      task.record.due
+        ? `Task due date set to ${task.record.due}: ${task.record.title}`
+        : `Task due date cleared: ${task.record.title}`
     );
     this.refreshDashboard();
   }

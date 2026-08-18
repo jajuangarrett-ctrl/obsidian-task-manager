@@ -27,6 +27,80 @@ export interface DashboardProjectPickerOption {
   name: string;
 }
 
+export class TaskDueDateModal extends Modal {
+  private value: string;
+
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    currentDueDate: string,
+    private readonly submit: (dueDate: string) => Promise<void>
+  ) {
+    super(app);
+    this.value = currentDueDate;
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-due-date-modal");
+    this.setTitle(`Due date: ${this.taskTitle}`);
+    this.contentEl.createEl("p", {
+      text: "Choose a due date for this task, or clear the current date.",
+      cls: "fjg-task-due-date-intro"
+    });
+
+    let input: HTMLInputElement | null = null;
+    new Setting(this.contentEl)
+      .setName("Due date")
+      .addText((text) => {
+        input = text.inputEl;
+        text.inputEl.type = "date";
+        text.inputEl.value = this.value;
+        text.inputEl.setAttribute("aria-label", `Due date for ${this.taskTitle}`);
+        text.onChange((value) => this.value = value);
+      });
+
+    const actions = new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText("Cancel")
+        .onClick(() => this.close()));
+    if (this.value) {
+      actions.addButton((button) => button
+        .setButtonText("Clear due date")
+        .setWarning()
+        .onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await this.submit("");
+            this.close();
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : String(error), 8000);
+          } finally {
+            button.setDisabled(false);
+          }
+        }));
+    }
+    actions.addButton((button) => button
+      .setButtonText("Save")
+      .setCta()
+      .onClick(async () => {
+        button.setDisabled(true);
+        try {
+          await this.submit(this.value);
+          this.close();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error), 8000);
+        } finally {
+          button.setDisabled(false);
+        }
+      }));
+    window.setTimeout(() => input?.focus(), 0);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 /** Search-only picker for dashboard scope; it deliberately cannot create projects. */
 export class DashboardProjectPickerModal extends Modal {
   private query = "";

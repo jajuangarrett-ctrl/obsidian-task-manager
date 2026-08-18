@@ -188,6 +188,48 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("sets, changes, and clears a task due date while recording each change", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const created = await service.createTask({
+      taskId: "tsk_inline_due_date",
+      title: "Schedule the deadline"
+    });
+
+    const added = await service.changeDueDate(created.record.task_id, "2026-08-24");
+    expect(added.record.due).toBe("2026-08-24");
+    expect(parseTaskMarkdown(await vault.read(added.taskFile as never)).record.due).toBe("2026-08-24");
+    expect(await vault.read(added.updatesFile as never)).toContain("Due date set to 2026-08-24.");
+
+    const changed = await service.changeDueDate(created.record.task_id, "2026-08-28");
+    expect(changed.record.due).toBe("2026-08-28");
+    expect(await vault.read(changed.updatesFile as never))
+      .toContain("Due date changed from 2026-08-24 to 2026-08-28.");
+
+    const cleared = await service.changeDueDate(created.record.task_id, "");
+    expect(cleared.record.due).toBe("");
+    expect(parseTaskMarkdown(await vault.read(cleared.taskFile as never)).record.due).toBe("");
+    expect(await vault.read(cleared.updatesFile as never)).toContain("Due date cleared (was 2026-08-28).");
+  });
+
+  it("rejects an invalid inline due date without changing the task or its history", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const created = await service.createTask({
+      taskId: "tsk_invalid_inline_due_date",
+      title: "Keep the current deadline",
+      due: "2026-08-24"
+    });
+    const taskBefore = await vault.read(created.taskFile as never);
+    const updatesBefore = await vault.read(created.updatesFile as never);
+
+    await expect(service.changeDueDate(created.record.task_id, "August 30"))
+      .rejects.toThrow("Invalid date: August 30");
+
+    expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
+    expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
+  });
+
   it("previews and migrates a legacy flat task without moving untracked files", async () => {
     const { service, vault } = createService();
     await service.initialize();

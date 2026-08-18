@@ -72,6 +72,8 @@ Select **New Project** on the Projects screen to create a project before it has 
 
 When a registered project has zero open tasks, its card offers **Archive**. After confirmation, all completed tasks in that project move to `08 Tasks/Archive/` and the project workspace moves to `08 Tasks/Project Archive/`. Nothing is deleted. **Archived Projects** lists the finished project and provides **Reopen**; reopening returns only the project definition to the active list, while its tasks remain archived until explicitly reopened.
 
+Each active task row includes an inline due-date action beside its project, update, and archive controls. It shows the current `YYYY-MM-DD` value or **Add due date**, then opens a native date picker where the date can be saved or cleared. The task note and update history are refreshed immediately after the change.
+
 Each task row shows its two newest task updates without redundantly repeating the task title inside the parent task card. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete update log.
 
 Each task also includes a compact **Related files** section backed by the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** copies the portable vault-relative `Files/` path used by Obsidian Web Clipper; **Open folder** reveals the shared workspace in Obsidian.

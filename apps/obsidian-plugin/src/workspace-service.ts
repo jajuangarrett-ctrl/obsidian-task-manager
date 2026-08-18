@@ -799,6 +799,45 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
+  async changeDueDate(
+    taskId: string,
+    dueDate: string,
+    actor = "Franklin"
+  ): Promise<IndexedTask> {
+    const task = this.getById(taskId);
+    const at = new Date();
+    const oldTaskContent = await this.app.vault.read(task.taskFile);
+    const taskDocument = parseTaskMarkdown(oldTaskContent);
+    const nextRecord = updateTaskFields(taskDocument.record, { due: dueDate }, at);
+    if (nextRecord.due === taskDocument.record.due) return task;
+
+    const updatesFile = await this.ensureUpdatesFile(task);
+    const oldUpdates = await this.app.vault.read(updatesFile);
+    const previous = taskDocument.record.due;
+    const nextUpdates = appendUpdateMarkdown(oldUpdates, {
+      actor,
+      type: "fields-changed",
+      text: !previous
+        ? `Due date set to ${nextRecord.due}.`
+        : !nextRecord.due
+          ? `Due date cleared (was ${previous}).`
+          : `Due date changed from ${previous} to ${nextRecord.due}.`,
+      createdAt: at.toISOString()
+    });
+
+    try {
+      await this.app.vault.modify(updatesFile, nextUpdates);
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+    } catch (error) {
+      await this.app.vault.modify(task.taskFile, oldTaskContent);
+      await this.app.vault.modify(updatesFile, oldUpdates);
+      throw error;
+    }
+
+    await this.refresh();
+    return this.getById(taskId);
+  }
+
   async validateAll(): Promise<Array<{ path: string; issues: string[] }>> {
     const results: Array<{ path: string; issues: string[] }> = [];
     for (const task of this.list({ includeArchived: true })) {

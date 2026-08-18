@@ -752,6 +752,26 @@
   padding-top: 1px;
 }
 
+.fjg-task-dashboard button.fjg-task-due-date-button {
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.fjg-task-dashboard button.fjg-task-due-date-button.is-empty {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.fjg-task-due-date-intro {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.fjg-task-due-date-modal input[type="date"] {
+  min-width: 11rem;
+}
+
 .fjg-related-files {
   margin-top: 13px;
   padding-top: 12px;

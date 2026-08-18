@@ -700,6 +700,17 @@ export class TaskDashboardView extends ItemView {
         attr: { type: "button", "aria-label": `Choose project for ${task.record.title}` }
       });
       project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
+      const dueDate = controls.createEl("button", {
+        cls: `fjg-task-due-date-button${task.record.due ? "" : " is-empty"}`,
+        text: task.record.due ? `Due ${task.record.due}` : "Add due date",
+        attr: {
+          type: "button",
+          "aria-label": task.record.due
+            ? `Change due date for ${task.record.title}, currently ${task.record.due}`
+            : `Add a due date to ${task.record.title}`
+        }
+      });
+      dueDate.addEventListener("click", () => this.taskPlugin.openTaskDueDateModal(task.record.task_id));
       const update = controls.createEl("button", {
         text: "Update",
         attr: { "aria-label": `Add an update to ${task.record.title}` }
