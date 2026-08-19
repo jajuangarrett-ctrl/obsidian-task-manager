@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.11.1 — 2026-08-18
+
+### Added
+
+- Add a clearly labeled **Open file location** action immediately beside each
+  task card's existing **Open folder** action on desktop.
+- Open the task-specific `Files` folder in Finder, using the canonical Inbox
+  destination for unassigned tasks and the matching project destination for
+  assigned tasks.
+- Create the task-specific Files folder on demand when it does not yet exist.
+
+### Validation
+
+- Cover on-demand Inbox and project Files-folder creation with regression tests.
+- Verify the live dashboard renders the labeled action and opens the expected
+  Finder location for both storage models.
+
 ## 0.10.0 — 2026-08-10
 
 ### Changed

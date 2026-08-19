@@ -89,6 +89,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
       if (!checking) void this.openTaskFolder(task.record.task_id);
       return true;
     }});
+    this.addCommand({ id: "open-task-file-location", name: "Open Task File Location", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) void this.openTaskFileLocation(task.record.task_id);
+      return true;
+    }});
     this.addCommand({ id: "copy-task-folder-path", name: "Copy Task Folder Path", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
@@ -553,6 +559,43 @@ export default class FjgTaskManagerPlugin extends Plugin {
     ).open();
   }
 
+  async openTaskFileLocation(taskId: string): Promise<void> {
+    if (!Platform.isDesktopApp) {
+      new Notice("Opening task file locations is only available in the desktop app.");
+      return;
+    }
+
+    try {
+      const task = this.workspaceService.getById(taskId);
+      const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
+      const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
+        getFullPath?: (path: string) => string;
+      };
+      const fullPath = adapter.getFullPath?.(destination.folderPath);
+      if (!fullPath) {
+        new Notice("Full system paths are not available in this Obsidian environment.");
+        return;
+      }
+
+      const shell = getElectronShell();
+      if (!shell) {
+        new Notice("Finder access is not available in this Obsidian environment.");
+        return;
+      }
+
+      const error = await shell.openPath(fullPath);
+      if (error) {
+        new Notice(`Could not open file location: ${error}`);
+        return;
+      }
+
+      new Notice(`Opened file location for ${task.record.title}.`);
+    } catch (error) {
+      console.error("[FJG Task Manager] Could not open task file location", error);
+      new Notice(`Could not open file location: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async copyTaskFolderPath(taskId: string): Promise<void> {
     const destination = this.workspaceService.copyFolderForTask(taskId);
     const path = taskFolderClipboardPath(destination.folderPath);
@@ -740,5 +783,18 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const view = leaf.view;
       if (view instanceof TaskDashboardView) view.clearArchivedProjectSelection(projectName);
     }
+  }
+}
+
+interface ElectronShell {
+  openPath: (fullPath: string) => Promise<string>;
+}
+
+function getElectronShell(): ElectronShell | null {
+  try {
+    const electronRequire = (window as any).require || (globalThis as any).require;
+    return typeof electronRequire === "function" ? electronRequire("electron")?.shell || null : null;
+  } catch {
+    return null;
   }
 }

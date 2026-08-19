@@ -1,4 +1,4 @@
-import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Platform, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
@@ -757,6 +757,15 @@ export class TaskDashboardView extends ItemView {
     copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
     const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task attachment folder for ${task.record.title}`);
     folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
+    if (Platform.isDesktopApp) {
+      const fileLocation = this.iconButton(
+        actions,
+        "external-link",
+        "Open file location",
+        `Open the task Files location in Finder for ${task.record.title}`
+      );
+      fileLocation.addEventListener("click", () => void this.taskPlugin.openTaskFileLocation(task.record.task_id));
+    }
 
     if (!task.relatedFiles.length) {
       section.createEl("p", {

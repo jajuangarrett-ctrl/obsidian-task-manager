@@ -1,7 +1,7 @@
 {
   "id": "fjg-task-manager",
   "name": "FJG Task Manager",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "minAppVersion": "1.5.0",
   "description": "Project-centered task workspaces, live updates, quick voice capture, AI drafting, and browser clipping.",
   "author": "Franklin Garrett",

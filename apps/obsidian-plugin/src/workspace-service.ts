@@ -313,6 +313,12 @@ export class TaskWorkspaceService {
     };
   }
 
+  async ensureFilesFolderForTask(taskId: string): Promise<TaskCopyFolder> {
+    const destination = this.copyFolderForTask(taskId);
+    await this.ensureFolder(destination.folderPath);
+    return destination;
+  }
+
   async archiveProject(name: string): Promise<{ project: IndexedProject; archivedTaskCount: number }> {
     let project = this.getProjectByName(name);
     const projectKey = normalizeSearch(project.record.name);

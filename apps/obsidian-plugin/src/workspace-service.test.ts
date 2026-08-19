@@ -343,6 +343,33 @@ describe("TaskWorkspaceService project-centered moves", () => {
     });
   });
 
+  it("creates the canonical Files location on demand for Inbox and project tasks", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    const inboxTask = await service.createTask({ taskId: "tsk_inbox_location", title: "Inbox location" });
+    const projectTask = await service.createTask({
+      taskId: "tsk_project_location",
+      title: "Project location",
+      project: "Project Alpha"
+    });
+
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Inbox location")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Project location")).toBeNull();
+
+    await expect(service.ensureFilesFolderForTask(inboxTask.record.task_id)).resolves.toEqual({
+      folderPath: "08 Tasks/Inbox/Files/Inbox location",
+      legacy: false
+    });
+    await expect(service.ensureFilesFolderForTask(projectTask.record.task_id)).resolves.toEqual({
+      folderPath: "08 Tasks/Projects/Project Alpha/Files/Project location",
+      legacy: false
+    });
+
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Inbox location")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Project location")).not.toBeNull();
+  });
+
   it("moves task records directly between projects and creates a missing destination Tasks folder", async () => {
     const { service, vault } = createService();
     await service.initialize();
