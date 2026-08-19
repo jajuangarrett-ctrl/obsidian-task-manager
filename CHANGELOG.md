@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.11.2 — 2026-08-18
+
+### Added
+
+- Keep the desktop **Open in Finder** action and add a separate **Show in File
+  Focus** action beside it in each task card.
+- Reveal the canonical task-specific Files destination inside FJG File Focus,
+  using `Inbox/Files/<task>` for unassigned tasks and
+  `Projects/<project>/Files/<task>` for assigned tasks.
+- Create the destination on demand before navigating, matching the existing
+  Finder action's storage rules.
+
+### Changed
+
+- Rename the Finder-facing label from **Open file location** to **Open in
+  Finder** so its external behavior is unambiguous.
+
 ## 0.11.1 — 2026-08-18
 
 ### Added

@@ -89,10 +89,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
       if (!checking) void this.openTaskFolder(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "open-task-file-location", name: "Open Task File Location", checkCallback: (checking) => {
+    this.addCommand({ id: "open-task-file-location", name: "Open Task File Location in Finder", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.openTaskFileLocation(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "show-task-file-location-in-file-focus", name: "Show Task File Location in FJG File Focus", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) void this.showTaskFileLocationInFileFocus(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "copy-task-folder-path", name: "Copy Task Folder Path", checkCallback: (checking) => {
@@ -596,6 +602,29 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }
   }
 
+  async showTaskFileLocationInFileFocus(taskId: string): Promise<void> {
+    try {
+      const task = this.workspaceService.getById(taskId);
+      const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
+      const fileFocus = (this.app as typeof this.app & {
+        plugins?: {
+          getPlugin?: (id: string) => unknown;
+        };
+      }).plugins?.getPlugin?.("fjg-file-focus") as FileFocusPlugin | undefined;
+
+      if (!fileFocus?.revealFolderPath) {
+        new Notice("Enable or update FJG File Focus to reveal task file locations in Obsidian.");
+        return;
+      }
+
+      await fileFocus.revealFolderPath(destination.folderPath);
+      new Notice(`Shown in FJG File Focus: ${task.record.title}.`);
+    } catch (error) {
+      console.error("[FJG Task Manager] Could not reveal task file location in FJG File Focus", error);
+      new Notice(`Could not show file location in FJG File Focus: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async copyTaskFolderPath(taskId: string): Promise<void> {
     const destination = this.workspaceService.copyFolderForTask(taskId);
     const path = taskFolderClipboardPath(destination.folderPath);
@@ -788,6 +817,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
 interface ElectronShell {
   openPath: (fullPath: string) => Promise<string>;
+}
+
+interface FileFocusPlugin {
+  revealFolderPath: (folderPath: string) => Promise<void> | void;
 }
 
 function getElectronShell(): ElectronShell | null {

@@ -761,11 +761,18 @@ export class TaskDashboardView extends ItemView {
       const fileLocation = this.iconButton(
         actions,
         "external-link",
-        "Open file location",
+        "Open in Finder",
         `Open the task Files location in Finder for ${task.record.title}`
       );
       fileLocation.addEventListener("click", () => void this.taskPlugin.openTaskFileLocation(task.record.task_id));
     }
+    const fileFocusLocation = this.iconButton(
+      actions,
+      "folder-tree",
+      "Show in File Focus",
+      `Reveal the task Files location in FJG File Focus for ${task.record.title}`
+    );
+    fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
 
     if (!task.relatedFiles.length) {
       section.createEl("p", {
