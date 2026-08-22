@@ -57,6 +57,12 @@ import {
   relatedFileKind,
   safeRelatedFileName
 } from "./related-files";
+import {
+  filterTaskRelocationDestinations,
+  isTaskRelocationDestination,
+  isTaskRelocationPath,
+  normalizeTaskRelocationDestination
+} from "./task-relocation";
 
 export interface TaskRelatedFile {
   file: TFile;
@@ -151,7 +157,8 @@ export class TaskWorkspaceService {
       const projectTask = file.path.startsWith(projectPrefix) && file.path.includes("/Tasks/");
       const inboxTask = file.path.startsWith(inboxPrefix) && file.path.includes("/Tasks/");
       const archivedTask = file.path.startsWith(archivePrefix) && file.path.includes("/Tasks/");
-      if (legacyWorkspace || projectTask || inboxTask || archivedTask) {
+      const relocatedTask = isTaskRelocationPath(file.path);
+      if (legacyWorkspace || projectTask || inboxTask || archivedTask || relocatedTask) {
         try {
           const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
           if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
@@ -264,6 +271,27 @@ export class TaskWorkspaceService {
       if (name && !projects.has(key)) projects.set(key, name);
     }
     return [...projects.values()].sort((left, right) => left.localeCompare(right));
+  }
+
+  listRelocationDestinations(): string[] {
+    const folderPaths = this.app.vault.getAllLoadedFiles()
+      .filter((entry): entry is TFolder => entry instanceof TFolder)
+      .map((folder) => normalizePath(folder.path));
+    const folderSet = new Set(folderPaths);
+    const internalRoots = folderPaths
+      .filter((path) => path.endsWith("/Tasks"))
+      .filter((path) => {
+        const workspace = path.slice(0, -"/Tasks".length);
+        return isTaskRelocationDestination(workspace)
+          && folderSet.has(`${workspace}/Updates`)
+          && folderSet.has(`${workspace}/Files`);
+      })
+      .flatMap((path) => {
+        const workspace = path.slice(0, -"/Tasks".length);
+        return ["Tasks", "Updates", "Files"].map((collection) => `${workspace}/${collection}`);
+      });
+    return filterTaskRelocationDestinations(folderPaths)
+      .filter((path) => !internalRoots.some((root) => path === root || path.startsWith(`${root}/`)));
   }
 
   async createProject(name: string, description = ""): Promise<IndexedProject> {
@@ -805,6 +833,99 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
+  async relocateTask(
+    taskId: string,
+    destinationPath: string,
+    actor = "Franklin"
+  ): Promise<IndexedTask> {
+    const task = this.getById(taskId);
+    if (task.archived || task.record.status === "archived") {
+      throw new Error("Reopen the task before moving it to Programs or Areas.");
+    }
+    const destination = normalizeTaskRelocationDestination(destinationPath);
+    const destinationFolder = this.app.vault.getAbstractFileByPath(destination);
+    if (!(destinationFolder instanceof TFolder)) {
+      throw new Error(`Destination folder not found: ${destination}`);
+    }
+    if (normalizePath(task.folderPath) === destination) {
+      throw new Error("This task is already in that folder.");
+    }
+
+    const oldTaskContent = await this.app.vault.read(task.taskFile);
+    const taskDocument = parseTaskMarkdown(oldTaskContent);
+    const updatesFile = await this.ensureUpdatesFile(task);
+    const oldUpdates = await this.app.vault.read(updatesFile);
+    const paths = await this.availableRelocationPaths(destination, taskDocument.record);
+    const targetFolderName = artifactFolderFromTaskPath(paths.taskPath);
+    const targetFilesRoot = taskArtifactFilesPath(destination, targetFolderName);
+    const sourceFilesRoot = normalizePath(this.relatedFilesPath(task));
+    const moveWholeFilesFolder = task.legacyWorkspace || usesTaskArtifactLayout(task.taskFile);
+    const sourceFiles = moveWholeFilesFolder
+      ? this.app.vault.getFiles().filter((file) => normalizePath(file.path).startsWith(`${sourceFilesRoot}/`))
+      : task.relatedFiles.map((related) => related.file);
+    const relatedMoves: Array<{ file: TFile; from: string; to: string }> = [];
+    const relatedPaths = new Map<string, string>();
+    for (const file of sourceFiles) {
+      const from = normalizePath(file.path);
+      const sharedWithAnotherTask = this.list({ includeArchived: true }).some((candidate) => {
+        return candidate.record.task_id !== task.record.task_id
+          && candidate.record.related_files.some((path) => normalizePath(path) === from);
+      });
+      if (sharedWithAnotherTask) continue;
+      const relative = moveWholeFilesFolder && from.startsWith(`${sourceFilesRoot}/`)
+        ? from.slice(sourceFilesRoot.length + 1)
+        : file.name;
+      const to = normalizePath(`${targetFilesRoot}/${relative}`);
+      await this.ensureFolder(parentFolderPath(to));
+      if (this.app.vault.getAbstractFileByPath(to) || await this.app.vault.adapter.stat(to)) {
+        throw new Error(`Task file destination already exists: ${to}`);
+      }
+      relatedMoves.push({ file, from, to });
+      relatedPaths.set(from, to);
+    }
+
+    const at = new Date();
+    const nextRecord = updateTaskFields(taskDocument.record, {
+      related_files: taskDocument.record.related_files.map((path) => {
+        return relatedPaths.get(normalizePath(path)) || path;
+      })
+    }, at);
+    const nextUpdates = appendUpdateMarkdown(oldUpdates, {
+      actor,
+      type: "fields-changed",
+      text: `Task relocated from ${task.folderPath} to ${destination}.`,
+      createdAt: at.toISOString()
+    });
+    const moves: Array<{ file: TFile; from: string; to: string }> = [
+      ...relatedMoves,
+      { file: updatesFile, from: updatesFile.path, to: paths.updatesPath },
+      { file: task.taskFile, from: task.taskFile.path, to: paths.taskPath }
+    ];
+    const completed: Array<{ file: TFile; from: string }> = [];
+    try {
+      await this.app.vault.modify(updatesFile, nextUpdates);
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+      for (const move of moves) {
+        await this.app.fileManager.renameFile(move.file, move.to);
+        completed.push({ file: move.file, from: move.from });
+      }
+    } catch (error) {
+      for (const move of completed.reverse()) {
+        try {
+          await this.app.fileManager.renameFile(move.file, move.from);
+        } catch (rollbackError) {
+          console.error("[FJG Task Manager] Task relocation rollback failed", move.file.path, rollbackError);
+        }
+      }
+      await this.app.vault.modify(task.taskFile, oldTaskContent);
+      await this.app.vault.modify(updatesFile, oldUpdates);
+      throw new Error(`Task relocation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    await this.refresh();
+    return this.getById(taskId);
+  }
+
   async changeDueDate(
     taskId: string,
     dueDate: string,
@@ -1075,6 +1196,33 @@ export class TaskWorkspaceService {
       if (!taskEntry && !updatesEntry) return { taskPath, updatesPath };
     }
     throw new Error(`Could not create unique task files for ${record.title}.`);
+  }
+
+  private async availableRelocationPaths(
+    workspace: string,
+    record: TaskRecord
+  ): Promise<{ taskPath: string; updatesPath: string }> {
+    await this.ensureWorkspaceFolders(workspace);
+    for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
+      const folderName = taskArtifactFolderName(record.title, copyNumber);
+      const collectionPaths = ["Tasks", "Updates", "Files"].map((collection) => {
+        return taskArtifactFolderPath(workspace, collection, folderName);
+      });
+      let occupied = false;
+      for (const path of collectionPaths) {
+        if (this.app.vault.getAbstractFileByPath(path) || await this.app.vault.adapter.stat(path)) {
+          occupied = true;
+          break;
+        }
+      }
+      if (occupied) continue;
+      for (const path of collectionPaths) await this.ensureFolder(path);
+      return {
+        taskPath: taskArtifactNotePath(workspace, folderName),
+        updatesPath: taskArtifactUpdatesPath(workspace, folderName)
+      };
+    }
+    throw new Error(`Could not create a unique task folder for ${record.title}.`);
   }
 
   private async availableArtifactFolderName(workspace: string, title: string, currentTaskPath = ""): Promise<string> {
@@ -1395,6 +1543,13 @@ function workspaceRootFromTaskPath(path: string): string {
   const normalized = normalizePath(path);
   const index = normalized.lastIndexOf(marker);
   if (index < 0) throw new Error(`Task note is outside a managed Tasks folder: ${path}`);
+  return normalized.slice(0, index);
+}
+
+function parentFolderPath(path: string): string {
+  const normalized = normalizePath(path);
+  const index = normalized.lastIndexOf("/");
+  if (index < 1) throw new Error(`File path has no parent folder: ${path}`);
   return normalized.slice(0, index);
 }
 

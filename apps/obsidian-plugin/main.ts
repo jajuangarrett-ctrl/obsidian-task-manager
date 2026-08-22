@@ -18,6 +18,7 @@ import {
   TaskFileModal,
   TaskFolderEntry,
   TaskFolderModal,
+  TaskRelocationModal,
   TaskDueDateModal,
   TaskUpdateCaptureModal,
   TextEntryModal
@@ -105,6 +106,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.copyTaskFolderPath(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "move-task-to-program-or-area", name: "Move Task to Program or Area Folder", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task || task.archived) return false;
+      if (!checking) this.openTaskRelocationModal(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "mark-task-completed", name: "Mark Task Completed", checkCallback: (checking) => {
@@ -396,6 +403,17 @@ export default class FjgTaskManagerPlugin extends Plugin {
     ).open();
   }
 
+  openTaskRelocationModal(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    new TaskRelocationModal(
+      this.app,
+      task.record.title,
+      task.folderPath,
+      this.workspaceService.listRelocationDestinations(),
+      async (destination) => this.relocateTask(taskId, destination)
+    ).open();
+  }
+
   openArchiveProjectModal(projectName: string, completedTaskCount: number): void {
     new ArchiveProjectModal(this.app, projectName, completedTaskCount, async () => {
       const result = await this.workspaceService.archiveProject(projectName);
@@ -480,6 +498,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
         ? `Task project set to ${task.record.project}: ${task.record.title}`
         : `Task moved to No project: ${task.record.title}`
     );
+    this.refreshDashboard();
+  }
+
+  async relocateTask(taskId: string, destination: string): Promise<void> {
+    const task = await this.workspaceService.relocateTask(taskId, destination);
+    new Notice(`Task moved to ${task.folderPath}: ${task.record.title}`);
     this.refreshDashboard();
   }
 

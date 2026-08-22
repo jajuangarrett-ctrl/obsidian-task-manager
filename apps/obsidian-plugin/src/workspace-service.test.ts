@@ -93,6 +93,10 @@ class MockVault {
     });
   }
 
+  getAllLoadedFiles() {
+    return [...this.entries.values()];
+  }
+
   async createFolder(value: string) {
     const folder = new obsidianMock.MockTFolder(value);
     if (this.entries.has(folder.path)) throw new Error(`Already exists: ${folder.path}`);
@@ -226,6 +230,181 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await expect(service.changeDueDate(created.record.task_id, "August 30"))
       .rejects.toThrow("Invalid date: August 30");
 
+    expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
+    expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
+  });
+
+  it("lists only visible Program and Area subfolders as relocation destinations", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("02 Programs");
+    await vault.createFolder("02 Programs/CalWORKs");
+    await vault.createFolder("02 Programs/CalWORKs/Operations");
+    await vault.createFolder("02 Programs/CalWORKs/.claude");
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Career");
+    await vault.createFolder("08 Tasks/Other");
+
+    expect(service.listRelocationDestinations()).toEqual([
+      "02 Programs/CalWORKs",
+      "02 Programs/CalWORKs/Operations",
+      "03 Areas/Career"
+    ]);
+  });
+
+  it("relocates the complete task workspace while preserving metadata, history, and files", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("02 Programs");
+    await vault.createFolder("02 Programs/CalWORKs");
+    await vault.createFolder("02 Programs/CalWORKs/Operations");
+    const created = await service.createTask({
+      taskId: "tsk_program_relocation",
+      title: "Prepare program review",
+      details: "Keep this task body intact.",
+      status: "waiting",
+      due: "2026-09-15",
+      delegatedTo: "Dara"
+    });
+    const related = await service.createRelatedNote(
+      created.record.task_id,
+      "Review evidence",
+      "Tracked source material."
+    );
+    const originalRelatedPath = related.path;
+    const sourceFilesFolder = "08 Tasks/Inbox/Files/Prepare program review";
+    await vault.createFolder(`${sourceFilesFolder}/Source bundle`);
+    await vault.create(`${sourceFilesFolder}/Source bundle/untracked.txt`, "Untracked but task-owned.");
+    await service.appendUpdate(created.record.task_id, {
+      actor: "Franklin",
+      text: "Collected the source packet."
+    });
+
+    const moved = await service.relocateTask(
+      created.record.task_id,
+      "02 Programs/CalWORKs/Operations"
+    );
+
+    expect(moved.taskFile.path).toBe(
+      "02 Programs/CalWORKs/Operations/Tasks/Prepare program review/task.md"
+    );
+    expect(moved.updatesFile?.path).toBe(
+      "02 Programs/CalWORKs/Operations/Updates/Prepare program review/updates.md"
+    );
+    expect(moved.record).toMatchObject({
+      task_id: "tsk_program_relocation",
+      status: "waiting",
+      project: "",
+      due: "2026-09-15",
+      delegated_to: "Dara"
+    });
+    expect(moved.notes).toContain("Keep this task body intact.");
+    expect(moved.record.related_files).toEqual([
+      "02 Programs/CalWORKs/Operations/Files/Prepare program review/Review evidence.md"
+    ]);
+    expect(vault.getAbstractFileByPath(originalRelatedPath)).toBeNull();
+    expect(vault.getAbstractFileByPath(
+      "02 Programs/CalWORKs/Operations/Files/Prepare program review/Review evidence.md"
+    )).not.toBeNull();
+    expect(vault.getAbstractFileByPath(
+      "02 Programs/CalWORKs/Operations/Files/Prepare program review/Source bundle/untracked.txt"
+    )).not.toBeNull();
+    expect(await vault.read(moved.updatesFile as never)).toContain("Collected the source packet.");
+    expect(await vault.read(moved.updatesFile as never)).toContain(
+      "Task relocated from 08 Tasks/Inbox to 02 Programs/CalWORKs/Operations."
+    );
+    expect(service.getById(created.record.task_id).folderPath).toBe("02 Programs/CalWORKs/Operations");
+    expect(service.listRelocationDestinations()).not.toContain(
+      "02 Programs/CalWORKs/Operations/Tasks/Prepare program review"
+    );
+  });
+
+  it("keeps project assignment when relocating an assigned task", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Career");
+    const created = await service.createTask({
+      taskId: "tsk_area_relocation",
+      title: "Prepare interview packet",
+      project: "Project Alpha",
+      status: "do-soon"
+    });
+
+    const moved = await service.relocateTask(created.record.task_id, "03 Areas/Career");
+
+    expect(moved.record.project).toBe("Project Alpha");
+    expect(moved.record.status).toBe("do-soon");
+    expect(moved.folderPath).toBe("03 Areas/Career");
+    expect(moved.taskFile.path).toBe("03 Areas/Career/Tasks/Prepare interview packet/task.md");
+  });
+
+  it("leaves a shared related file in place so other task references stay valid", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Fiscal");
+    const first = await service.createTask({ taskId: "tsk_relocate_shared", title: "Move shared packet" });
+    const second = await service.createTask({ taskId: "tsk_keep_shared", title: "Keep shared packet" });
+    const shared = await service.createRelatedNote(first.record.task_id, "Shared packet", "Used twice.");
+    const secondDocument = parseTaskMarkdown(await vault.read(second.taskFile as never));
+    await vault.modify(
+      second.taskFile as never,
+      renderTaskMarkdown(updateTaskFields(secondDocument.record, { related_files: [shared.path] }), secondDocument.body)
+    );
+    await service.refresh();
+
+    const moved = await service.relocateTask(first.record.task_id, "03 Areas/Fiscal");
+
+    expect(moved.record.related_files).toEqual([shared.path]);
+    expect(service.getById(second.record.task_id).record.related_files).toEqual([shared.path]);
+    expect(vault.getAbstractFileByPath(shared.path)).not.toBeNull();
+  });
+
+  it("rejects an ineligible relocation without changing the task", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("10 Misc");
+    await vault.createFolder("10 Misc/Unsorted");
+    const created = await service.createTask({
+      taskId: "tsk_invalid_relocation",
+      title: "Stay in Inbox"
+    });
+    const taskBefore = await vault.read(created.taskFile as never);
+    const updatesBefore = await vault.read(created.updatesFile as never);
+
+    await expect(service.relocateTask(created.record.task_id, "10 Misc/Unsorted"))
+      .rejects.toThrow("Choose a folder inside 02 Programs or 03 Areas.");
+
+    expect(created.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Stay in Inbox/task.md");
+    expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
+    expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
+  });
+
+  it("rolls back content, history, and files when relocation fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("02 Programs");
+    await vault.createFolder("02 Programs/Foundation");
+    const created = await service.createTask({
+      taskId: "tsk_relocation_rollback",
+      title: "Keep relocation atomic",
+      details: "Original task body."
+    });
+    await service.createRelatedNote(created.record.task_id, "Rollback evidence", "Must return.");
+    const taskBefore = await vault.read(created.taskFile as never);
+    const updatesBefore = await vault.read(created.updatesFile as never);
+    vault.failNextRenameTarget = "02 Programs/Foundation/Tasks/Keep relocation atomic/task.md";
+
+    await expect(service.relocateTask(created.record.task_id, "02 Programs/Foundation"))
+      .rejects.toThrow("Task relocation failed: Simulated rename failure");
+
+    expect(created.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Keep relocation atomic/task.md");
+    expect(created.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Keep relocation atomic/updates.md");
+    expect(vault.getAbstractFileByPath(
+      "08 Tasks/Inbox/Files/Keep relocation atomic/Rollback evidence.md"
+    )).not.toBeNull();
     expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
     expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
   });

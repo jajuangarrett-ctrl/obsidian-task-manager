@@ -261,6 +261,119 @@ export class TaskProjectPickerModal extends Modal {
   }
 }
 
+export class TaskRelocationModal extends Modal {
+  private query = "";
+  private selectedDestination = "";
+  private error = "";
+  private moving = false;
+
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    private readonly currentLocation: string,
+    private readonly destinations: readonly string[],
+    private readonly submit: (destination: string) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-task-project-picker-modal");
+    this.setTitle(`Move task: ${this.taskTitle}`);
+    this.render();
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl("p", {
+      text: "Choose a folder inside 02 Programs or 03 Areas. The task note, update history, and task-specific files will move together; status and project stay unchanged.",
+      cls: "fjg-project-picker-intro"
+    });
+    this.contentEl.createEl("p", {
+      text: `Current location: ${this.currentLocation}`,
+      cls: "setting-item-description"
+    });
+    const search = this.contentEl.createEl("input", {
+      type: "search",
+      cls: "fjg-project-picker-search",
+      attr: { placeholder: "Search Programs and Areas", "aria-label": "Search task destination folders" }
+    });
+    search.value = this.query;
+    search.disabled = this.moving;
+    search.addEventListener("input", () => {
+      this.query = search.value;
+      this.error = "";
+      this.render();
+    });
+    if (this.error) this.contentEl.createDiv({ cls: "fjg-project-picker-error", text: this.error });
+
+    const normalizedQuery = normalizeProjectPickerText(this.query);
+    const matches = this.destinations.filter((path) => {
+      return path !== this.currentLocation
+        && normalizeProjectPickerText(path).includes(normalizedQuery);
+    });
+    const choices = this.contentEl.createDiv({
+      cls: "fjg-project-picker-choices",
+      attr: { role: "listbox", "aria-label": "Task destination folders" }
+    });
+    if (!matches.length) {
+      choices.createDiv({
+        cls: "fjg-project-picker-empty",
+        text: this.destinations.length
+          ? "No destination folders match this search."
+          : "No eligible Program or Area folders are available."
+      });
+    } else {
+      for (const path of matches) {
+        const selected = path === this.selectedDestination;
+        const button = choices.createEl("button", {
+          cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
+          text: path,
+          attr: {
+            type: "button",
+            role: "option",
+            "aria-selected": String(selected)
+          }
+        });
+        button.disabled = this.moving;
+        button.addEventListener("click", () => {
+          this.selectedDestination = path;
+          this.error = "";
+          this.render();
+        });
+      }
+    }
+
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText("Cancel")
+        .setDisabled(this.moving)
+        .onClick(() => this.close()))
+      .addButton((button) => button
+        .setButtonText(this.moving ? "Moving…" : "Move task")
+        .setCta()
+        .setDisabled(this.moving || !this.selectedDestination)
+        .onClick(async () => {
+          this.moving = true;
+          this.error = "";
+          this.render();
+          try {
+            await this.submit(this.selectedDestination);
+            this.close();
+          } catch (error) {
+            this.moving = false;
+            this.error = error instanceof Error ? error.message : String(error);
+            this.render();
+          }
+        }));
+    if (!this.moving) window.setTimeout(() => search.focus(), 0);
+  }
+}
+
 export class ArchiveProjectModal extends Modal {
   constructor(
     app: App,

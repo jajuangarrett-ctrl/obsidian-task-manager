@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add a searchable **Move folder** action for active tasks with destinations restricted to existing subfolders of `02 Programs` and `03 Areas`.
+- Relocate the task record, update history, tracked and untracked task-owned files while preserving stable IDs, task metadata, project assignment, and references.
+- Keep relocated tasks indexed by the dashboard and roll back content and file paths together when any part of a relocation fails.
+
+### Validation
+
+- Cover destination restrictions, Inbox and project task relocation, task-owned and shared files, preserved metadata and history, external indexing, and simulated rollback failures.
+
 ## 0.11.2 — 2026-08-18
 
 ### Added
