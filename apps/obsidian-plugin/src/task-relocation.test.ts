@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterTaskRelocationDestinations,
+  isTaskRelocationBundlePath,
   isTaskRelocationDestination,
   isTaskRelocationPath,
   normalizeTaskRelocationDestination
@@ -17,6 +18,9 @@ describe("task relocation paths", () => {
 
   it("recognizes relocated task records without accepting arbitrary notes", () => {
     expect(isTaskRelocationPath("02 Programs/CalWORKs/Tasks/Prepare report/task.md")).toBe(true);
+    expect(isTaskRelocationPath("02 Programs/CalWORKs/Prepare report/task.md")).toBe(true);
+    expect(isTaskRelocationBundlePath("02 Programs/CalWORKs/Prepare report/task.md")).toBe(true);
+    expect(isTaskRelocationBundlePath("02 Programs/CalWORKs/Tasks/Prepare report/task.md")).toBe(false);
     expect(isTaskRelocationPath("03 Areas/Career/Notes/Prepare report.md")).toBe(false);
     expect(isTaskRelocationPath("08 Tasks/Inbox/Tasks/Prepare report/task.md")).toBe(false);
   });

@@ -408,7 +408,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new TaskRelocationModal(
       this.app,
       task.record.title,
-      task.folderPath,
+      this.workspaceService.relocationLocationForTask(taskId),
       this.workspaceService.listRelocationDestinations(),
       async (destination) => this.relocateTask(taskId, destination)
     ).open();
@@ -503,7 +503,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async relocateTask(taskId: string, destination: string): Promise<void> {
     const task = await this.workspaceService.relocateTask(taskId, destination);
-    new Notice(`Task moved to ${task.folderPath}: ${task.record.title}`);
+    new Notice(`Task moved to ${this.workspaceService.relocationLocationForTask(task.record.task_id)}: ${task.record.title}`);
     this.refreshDashboard();
   }
 

@@ -78,7 +78,7 @@ Each task row shows its two newest task updates without redundantly repeating th
 
 Each task also includes a compact **Related files** section backed by the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** copies the portable vault-relative `Files/` path used by Obsidian Web Clipper; **Open folder** reveals the shared workspace in Obsidian.
 
-Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The task note, update history, task-owned files, stable ID, status, project assignment, and file references stay together, and the relocated task remains available in the dashboard. Shared files referenced by another task stay at their original path so the other relationship is not broken.
+Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The selected destination receives one direct child folder named for the task, containing `task.md`, `updates.md`, and `Files/`. The stable ID, status, project assignment, and file references stay together, and the relocated task remains available in the dashboard. Shared files referenced by another task stay at their original path so the other relationship is not broken.
 
 ## Quick capture
 

@@ -5,7 +5,7 @@
 ### Added
 
 - Add a searchable **Move folder** action for active tasks with destinations restricted to existing subfolders of `02 Programs` and `03 Areas`.
-- Relocate the task record, update history, tracked and untracked task-owned files while preserving stable IDs, task metadata, project assignment, and references.
+- Create one task folder directly inside the selected destination, keeping `task.md`, `updates.md`, and `Files/` together while preserving stable IDs, task metadata, project assignment, and references.
 - Keep relocated tasks indexed by the dashboard and roll back content and file paths together when any part of a relocation fails.
 
 ### Validation

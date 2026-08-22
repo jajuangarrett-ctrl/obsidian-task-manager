@@ -23,10 +23,15 @@ export function isTaskRelocationPath(value: string): boolean {
   try {
     const path = normalizeVaultPath(value);
     return TASK_RELOCATION_ROOTS.some((root) => path.startsWith(`${root}/`))
-      && path.includes("/Tasks/");
+      && path.toLocaleLowerCase().endsWith("/task.md");
   } catch {
     return false;
   }
+}
+
+export function isTaskRelocationBundlePath(value: string): boolean {
+  if (!isTaskRelocationPath(value)) return false;
+  return !/\/Tasks\/[^/]+\/task\.md$/i.test(normalizeVaultPath(value));
 }
 
 export function filterTaskRelocationDestinations(paths: readonly string[]): string[] {
