@@ -4,7 +4,8 @@ import {
   isTaskRelocationBundlePath,
   isTaskRelocationDestination,
   isTaskRelocationPath,
-  normalizeTaskRelocationDestination
+  normalizeTaskRelocationDestination,
+  taskRelocationCollectionName
 } from "./task-relocation";
 
 describe("task relocation paths", () => {
@@ -36,5 +37,11 @@ describe("task relocation paths", () => {
       "02 Programs/CalWORKs",
       "03 Areas/Career"
     ]);
+  });
+
+  it("names each relocation collection after its destination", () => {
+    expect(taskRelocationCollectionName("02 Programs/Basic-Needs")).toBe("Basic Needs Tasks");
+    expect(taskRelocationCollectionName("03 Areas/Career")).toBe("Career Tasks");
+    expect(taskRelocationCollectionName("03 Areas/Operations Tasks")).toBe("Operations Tasks");
   });
 });

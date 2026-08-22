@@ -34,6 +34,15 @@ export function isTaskRelocationBundlePath(value: string): boolean {
   return !/\/Tasks\/[^/]+\/task\.md$/i.test(normalizeVaultPath(value));
 }
 
+export function taskRelocationCollectionName(destination: string): string {
+  const path = normalizeTaskRelocationDestination(destination);
+  const folderName = path.slice(path.lastIndexOf("/") + 1)
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /\bTasks$/i.test(folderName) ? folderName : `${folderName} Tasks`;
+}
+
 export function filterTaskRelocationDestinations(paths: readonly string[]): string[] {
   const destinations = new Map<string, string>();
   for (const value of paths) {

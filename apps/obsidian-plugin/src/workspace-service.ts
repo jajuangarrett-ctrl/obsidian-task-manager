@@ -62,7 +62,8 @@ import {
   isTaskRelocationBundlePath,
   isTaskRelocationDestination,
   isTaskRelocationPath,
-  normalizeTaskRelocationDestination
+  normalizeTaskRelocationDestination,
+  taskRelocationCollectionName
 } from "./task-relocation";
 
 export interface TaskRelatedFile {
@@ -296,7 +297,7 @@ export class TaskWorkspaceService {
       });
     internalRoots.push(...this.list({ includeArchived: true })
       .filter((task) => task.relocatedBundle)
-      .map((task) => task.folderPath));
+      .map((task) => this.relocationCollectionPath(task)));
     return filterTaskRelocationDestinations(folderPaths)
       .filter((path) => !internalRoots.some((root) => path === root || path.startsWith(`${root}/`)));
   }
@@ -350,7 +351,13 @@ export class TaskWorkspaceService {
 
   relocationLocationForTask(taskId: string): string {
     const task = this.getById(taskId);
-    return task.relocatedBundle ? parentFolderPath(task.folderPath) : task.folderPath;
+    if (!task.relocatedBundle) return task.folderPath;
+    const collectionPath = parentFolderPath(task.folderPath);
+    const destination = parentFolderPath(collectionPath);
+    return isTaskRelocationDestination(destination)
+      && collectionPath === normalizePath(`${destination}/${taskRelocationCollectionName(destination)}`)
+      ? destination
+      : collectionPath;
   }
 
   async ensureFilesFolderForTask(taskId: string): Promise<TaskCopyFolder> {
@@ -1225,9 +1232,11 @@ export class TaskWorkspaceService {
     record: TaskRecord
   ): Promise<{ taskPath: string; updatesPath: string; filesPath: string }> {
     await this.ensureFolder(workspace);
+    const collectionPath = normalizePath(`${workspace}/${taskRelocationCollectionName(workspace)}`);
+    await this.ensureFolder(collectionPath);
     for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
       const folderName = taskArtifactFolderName(record.title, copyNumber);
-      const bundlePath = normalizePath(`${workspace}/${folderName}`);
+      const bundlePath = normalizePath(`${collectionPath}/${folderName}`);
       if (this.app.vault.getAbstractFileByPath(bundlePath) || await this.app.vault.adapter.stat(bundlePath)) continue;
       await this.ensureFolder(bundlePath);
       const filesPath = normalizePath(`${bundlePath}/Files`);
@@ -1239,6 +1248,15 @@ export class TaskWorkspaceService {
       };
     }
     throw new Error(`Could not create a unique task folder for ${record.title}.`);
+  }
+
+  private relocationCollectionPath(task: IndexedTask): string {
+    const bundleParent = parentFolderPath(task.folderPath);
+    const destination = parentFolderPath(bundleParent);
+    return isTaskRelocationDestination(destination)
+      && bundleParent === normalizePath(`${destination}/${taskRelocationCollectionName(destination)}`)
+      ? bundleParent
+      : task.folderPath;
   }
 
   private async availableArtifactFolderName(workspace: string, title: string, currentTaskPath = ""): Promise<string> {

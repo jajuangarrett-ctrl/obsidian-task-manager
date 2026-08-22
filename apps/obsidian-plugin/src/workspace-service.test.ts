@@ -286,10 +286,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
     );
 
     expect(moved.taskFile.path).toBe(
-      "02 Programs/CalWORKs/Operations/Prepare program review/task.md"
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/task.md"
     );
     expect(moved.updatesFile?.path).toBe(
-      "02 Programs/CalWORKs/Operations/Prepare program review/updates.md"
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/updates.md"
     );
     expect(moved.record).toMatchObject({
       task_id: "tsk_program_relocation",
@@ -300,24 +300,24 @@ describe("TaskWorkspaceService project-centered moves", () => {
     });
     expect(moved.notes).toContain("Keep this task body intact.");
     expect(moved.record.related_files).toEqual([
-      "02 Programs/CalWORKs/Operations/Prepare program review/Files/Review evidence.md"
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Files/Review evidence.md"
     ]);
     expect(vault.getAbstractFileByPath(originalRelatedPath)).toBeNull();
     expect(vault.getAbstractFileByPath(
-      "02 Programs/CalWORKs/Operations/Prepare program review/Files/Review evidence.md"
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Files/Review evidence.md"
     )).not.toBeNull();
     expect(vault.getAbstractFileByPath(
-      "02 Programs/CalWORKs/Operations/Prepare program review/Files/Source bundle/untracked.txt"
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Files/Source bundle/untracked.txt"
     )).not.toBeNull();
     expect(await vault.read(moved.updatesFile as never)).toContain("Collected the source packet.");
     expect(await vault.read(moved.updatesFile as never)).toContain(
       "Task relocated from 08 Tasks/Inbox to 02 Programs/CalWORKs/Operations."
     );
     expect(service.getById(created.record.task_id).folderPath)
-      .toBe("02 Programs/CalWORKs/Operations/Prepare program review");
+      .toBe("02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review");
     expect(service.relocationLocationForTask(created.record.task_id)).toBe("02 Programs/CalWORKs/Operations");
     expect(service.listRelocationDestinations()).not.toContain(
-      "02 Programs/CalWORKs/Operations/Prepare program review"
+      "02 Programs/CalWORKs/Operations/Operations Tasks"
     );
   });
 
@@ -338,11 +338,11 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     expect(moved.record.project).toBe("Project Alpha");
     expect(moved.record.status).toBe("do-soon");
-    expect(moved.folderPath).toBe("03 Areas/Career/Prepare interview packet");
-    expect(moved.taskFile.path).toBe("03 Areas/Career/Prepare interview packet/task.md");
+    expect(moved.folderPath).toBe("03 Areas/Career/Career Tasks/Prepare interview packet");
+    expect(moved.taskFile.path).toBe("03 Areas/Career/Career Tasks/Prepare interview packet/task.md");
   });
 
-  it("consolidates an earlier collection-style relocation into a direct task bundle", async () => {
+  it("consolidates an earlier collection-style relocation into a named task collection", async () => {
     const { service, vault } = createService();
     await service.initialize();
     await vault.createFolder("02 Programs");
@@ -369,9 +369,11 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const moved = await service.relocateTask(created.record.task_id, "02 Programs/Basic-Needs");
 
     expect(moved.relocatedBundle).toBe(true);
-    expect(moved.folderPath).toBe("02 Programs/Basic-Needs/Consolidate live task");
-    expect(moved.taskFile.path).toBe("02 Programs/Basic-Needs/Consolidate live task/task.md");
-    expect(moved.updatesFile?.path).toBe("02 Programs/Basic-Needs/Consolidate live task/updates.md");
+    expect(moved.folderPath).toBe("02 Programs/Basic-Needs/Basic Needs Tasks/Consolidate live task");
+    expect(moved.taskFile.path).toBe("02 Programs/Basic-Needs/Basic Needs Tasks/Consolidate live task/task.md");
+    expect(moved.updatesFile?.path)
+      .toBe("02 Programs/Basic-Needs/Basic Needs Tasks/Consolidate live task/updates.md");
+    expect(service.relocationLocationForTask(created.record.task_id)).toBe("02 Programs/Basic-Needs");
   });
 
   it("leaves a shared related file in place so other task references stay valid", async () => {
@@ -429,7 +431,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await service.createRelatedNote(created.record.task_id, "Rollback evidence", "Must return.");
     const taskBefore = await vault.read(created.taskFile as never);
     const updatesBefore = await vault.read(created.updatesFile as never);
-    vault.failNextRenameTarget = "02 Programs/Foundation/Keep relocation atomic/task.md";
+    vault.failNextRenameTarget = "02 Programs/Foundation/Foundation Tasks/Keep relocation atomic/task.md";
 
     await expect(service.relocateTask(created.record.task_id, "02 Programs/Foundation"))
       .rejects.toThrow("Task relocation failed: Simulated rename failure");
