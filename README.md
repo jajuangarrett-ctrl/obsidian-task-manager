@@ -2,6 +2,8 @@
 
 Project-centered task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
+The repository also includes a macOS-native [Apple Mail capture integration](integrations/apple-mail-capture/README.md). Its Mail Quick Action saves one open or selected message, complete readable body, metadata, and attachments directly into any chosen existing FJG Vault folder, including Task Manager `Files` folders.
+
 ## Architecture
 
 - `apps/obsidian-plugin` — native Obsidian plugin and dashboard

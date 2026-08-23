@@ -4,12 +4,15 @@
 
 ### Added
 
+- Add a macOS-native Apple Mail Quick Action that saves one selected message as readable Markdown in any chosen existing FJG Vault folder, with sender/recipient/date/subject metadata, complete Mail-readable body text, and same-folder attachment links.
+- Save every Apple Mail attachment beside the note with collision-safe filenames, support direct folder arguments for other automations, and reject destinations outside the canonical FJG Vault.
 - Add a searchable **Move folder** action for active tasks with destinations restricted to existing subfolders of `02 Programs` and `03 Areas`.
 - Create a readable task collection named after the selected destination (for example, `Basic Needs Tasks/`), then keep each task's `task.md`, `updates.md`, and `Files/` together in its own child folder while preserving stable IDs, task metadata, project assignment, and references.
 - Keep relocated tasks indexed by the dashboard and roll back content and file paths together when any part of a relocation fails.
 
 ### Validation
 
+- Cover filename safety, collision handling, vault boundaries, Markdown rendering, and explicit folder arguments; verify the native Quick Action registers in Mail and exercise body and attachment access with the Roberto Marin August agenda message.
 - Cover destination restrictions, Inbox and project task relocation, task-owned and shared files, preserved metadata and history, external indexing, and simulated rollback failures.
 
 ## 0.11.2 — 2026-08-18
