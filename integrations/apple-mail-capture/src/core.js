@@ -89,6 +89,14 @@
     return folder === root || folder.startsWith(`${root}/`);
   }
 
+  function isSingleChild(parentFolder, destination) {
+    const parent = String(parentFolder).replace(/\/+$/, "");
+    const folder = String(destination).replace(/\/+$/, "");
+    if (!parent || !folder.startsWith(`${parent}/`)) return false;
+    const child = folder.slice(parent.length + 1);
+    return Boolean(child) && !child.includes("/") && child !== "." && child !== "..";
+  }
+
   function folderPathFromClipboard(value) {
     let path = String(value == null ? "" : value).trim();
     if (!path) throw new Error("The clipboard is empty. Copy one full FJG Vault folder path, then try again.");
@@ -139,6 +147,7 @@
     availableFileName,
     folderPathFromClipboard,
     isInsideVault,
+    isSingleChild,
     normalizeBody,
     parseArguments,
     renderMarkdown,

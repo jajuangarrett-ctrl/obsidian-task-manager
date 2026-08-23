@@ -25,9 +25,13 @@ function environmentValue(name) {
 }
 
 function canonicalPath(value) {
-  const expanded = $(String(value)).stringByExpandingTildeInPath;
-  const standardized = expanded.stringByStandardizingPath;
+  const standardized = $(standardizedPath(value));
   return String(unwrap(standardized.stringByResolvingSymlinksInPath));
+}
+
+function standardizedPath(value) {
+  const expanded = $(String(value)).stringByExpandingTildeInPath;
+  return String(unwrap(expanded.stringByStandardizingPath));
 }
 
 function joinPath(folder, name) {
@@ -54,6 +58,19 @@ function ensureDirectory(path) {
     error
   );
   if (!ok) throw new Error(`Could not create diagnostics folder ${path}: ${error[0]}`);
+}
+
+function createSingleDirectory(path) {
+  const error = Ref();
+  const ok = FILE_MANAGER.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(
+    $(path),
+    false,
+    $.NSDictionary.dictionary,
+    error
+  );
+  if (!ok && !isDirectory(path)) {
+    throw new Error(`Could not create destination folder ${path}: ${error[0]}`);
+  }
 }
 
 function appendUtf8(path, content) {
@@ -157,21 +174,82 @@ function interactiveDestination() {
   }));
 }
 
+function confirmCreateDestination(path) {
+  MAIL.activate();
+  const result = MAIL.displayDialog(
+    `This destination folder does not exist:\n\n${path}\n\nOnly this final folder will be created. Its parent already exists inside the FJG Vault.`,
+    {
+      withTitle: "Create FJG Vault Folder?",
+      buttons: ["Cancel", "Create Folder and Save"],
+      defaultButton: "Create Folder and Save",
+      cancelButton: "Cancel"
+    }
+  );
+  return result.buttonReturned === "Create Folder and Save";
+}
+
 function chooseDestination(folderArgument, pasteFolder) {
   const vault = canonicalPath(VAULT_ROOT);
   const requested = folderArgument
     || (pasteFolder ? FJGMailCaptureCore.folderPathFromClipboard(clipboardText()) : interactiveDestination());
-  const destination = FJGMailCaptureCore.resolveFolderPath(vault, requested);
+  const destination = standardizedPath(FJGMailCaptureCore.resolveFolderPath(vault, requested));
   const canonicalDestination = canonicalPath(destination);
-  if (!isDirectory(canonicalDestination)) {
+
+  if (isDirectory(canonicalDestination)) {
+    if (!FJGMailCaptureCore.isInsideVault(vault, canonicalDestination)) {
+      throw new Error("Choose a folder inside /Users/franklingarrett/FJG Vault.");
+    }
+    return { path: canonicalDestination, created: false };
+  }
+
+  if (fileExists(destination)) {
+    throw new Error(`Destination exists but is not a folder: ${destination}`);
+  }
+
+  const parentRequested = String(unwrap($(destination).stringByDeletingLastPathComponent));
+  const leafName = String(unwrap($(destination).lastPathComponent));
+  const canonicalParent = canonicalPath(parentRequested);
+  if (!isDirectory(canonicalParent)) {
     throw new Error(
-      `Destination folder does not exist: ${canonicalDestination}. Copy an existing FJG Vault folder path, then try again.`
+      `Destination folder does not exist, and its immediate parent is also missing: ${destination}. Only one missing final folder can be created.`
     );
   }
-  if (!FJGMailCaptureCore.isInsideVault(vault, canonicalDestination)) {
+  if (!FJGMailCaptureCore.isInsideVault(vault, canonicalParent)) {
     throw new Error("Choose a folder inside /Users/franklingarrett/FJG Vault.");
   }
-  return canonicalDestination;
+
+  const createPath = joinPath(canonicalParent, leafName);
+  if (
+    !FJGMailCaptureCore.isInsideVault(vault, createPath)
+    || !FJGMailCaptureCore.isSingleChild(canonicalParent, createPath)
+  ) {
+    throw new Error("Only one missing final folder beneath an existing FJG Vault folder can be created.");
+  }
+  if (environmentValue("FJG_MAIL_CAPTURE_NONINTERACTIVE") === "1") {
+    throw new Error(`Destination folder does not exist: ${createPath}`);
+  }
+
+  logStage("confirming-destination-creation", createPath);
+  if (!confirmCreateDestination(createPath)) {
+    throw new Error("User canceled destination folder creation. (-128)");
+  }
+  logStage("creating-destination", createPath);
+  createSingleDirectory(createPath);
+
+  const createdDestination = canonicalPath(createPath);
+  const createdParent = canonicalPath(
+    String(unwrap($(createdDestination).stringByDeletingLastPathComponent))
+  );
+  if (
+    !isDirectory(createdDestination)
+    || createdParent !== canonicalParent
+    || !FJGMailCaptureCore.isInsideVault(vault, createdDestination)
+    || !FJGMailCaptureCore.isSingleChild(canonicalParent, createdDestination)
+  ) {
+    throw new Error("The created destination did not pass the FJG Vault safety check.");
+  }
+  logStage("destination-created", createdDestination);
+  return { path: createdDestination, created: true };
 }
 
 function messageData(message) {
@@ -194,7 +272,8 @@ function capture(argv) {
   logStage("reading-mail-selection");
   const message = selectedMessage();
   logStage("choosing-destination");
-  const destination = chooseDestination(options.folder, options.pasteFolder);
+  const destinationResult = chooseDestination(options.folder, options.pasteFolder);
+  const destination = destinationResult.path;
   logStage("destination-accepted", destination);
   const data = messageData(message);
   logStage("message-read", FJGMailCaptureCore.sanitizeFileName(data.subject, "Email"));

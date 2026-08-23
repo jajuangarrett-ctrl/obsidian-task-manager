@@ -27,6 +27,15 @@ test("accepts the vault root and descendants but rejects sibling prefixes", () =
   assert.equal(core.isInsideVault(root, "/Users/franklingarrett/FJG Vault Old"), false);
 });
 
+test("permits exactly one missing final directory beneath an existing parent", () => {
+  const parent = "/Users/franklingarrett/FJG Vault/08 Tasks/Projects/Meeting/Files";
+  assert.equal(core.isSingleChild(parent, `${parent}/Presentation`), true);
+  assert.equal(core.isSingleChild(parent, `${parent}/Presentation/Assets`), false);
+  assert.equal(core.isSingleChild(parent, parent), false);
+  assert.equal(core.isSingleChild(parent, `${parent} Old/Presentation`), false);
+  assert.equal(core.isSingleChild(parent, `${parent}/..`), false);
+});
+
 test("reads one pasted full folder path and rejects empty or multiline clipboard text", () => {
   const path = "/Users/franklingarrett/FJG Vault/08 Tasks/Projects/Meeting/Files";
   assert.equal(core.folderPathFromClipboard(`  ${path}\n`), path);

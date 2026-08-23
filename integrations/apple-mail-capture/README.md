@@ -46,10 +46,13 @@ and installs the Mail Quick Action at:
    actual FJG Vault hierarchy. For a Task Manager item, choose that task
    workspace's `Files` folder.
 
-An empty clipboard, multiple clipboard lines, a missing folder, or a folder
-outside the canonical FJG Vault is rejected before the email or any attachment
-is written. Errors are brought to the foreground with the failed stage and the
-local diagnostics path. The stage log is stored at
+An empty clipboard, multiple clipboard lines, or a folder outside the canonical
+FJG Vault is rejected before the email or any attachment is written. If exactly
+the final destination folder is missing beneath an existing in-vault parent,
+Mail offers **Create Folder and Save** or **Cancel**; it never creates multiple
+missing levels. Both the existing parent and the new folder are canonicalized
+and checked against the vault boundary. Errors are brought to the foreground
+with the failed stage and the local diagnostics path. The stage log is stored at
 `~/Library/Logs/FJG Task Manager/mail-capture.log`; it never contains the email
 body.
 

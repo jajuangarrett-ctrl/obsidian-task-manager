@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Offer a confirmed **Create Folder and Save** path when only the final Task Manager `Files` destination is missing, while rejecting missing parent levels and canonical or symlink escapes outside the FJG Vault.
 - Accept Obsidian-style vault-relative destination paths, foreground actionable capture errors without a duplicate Automator failure, record local stage diagnostics, and remove any files created by a failed partial capture.
 - Use `NSFileManager`'s direct directory flag instead of interpreting an attributes dictionary, avoiding the Automator Runner bridge mismatch that rejected valid pasted destination folders at runtime.
 - Replace the unreliable Command-Shift-G/Command-V interaction inside the Mail Quick Action's folder panel with an explicit **Paste Folder Path** action that reads one full path directly from the clipboard, while retaining **Browse Folders** and all canonical-vault safety checks.
