@@ -541,36 +541,41 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(service.getById(created.record.task_id).taskFile.path).toBe("08 Tasks/Inbox/Tasks/Move budget packet/task.md");
   });
 
-  it("returns distinct attachment destinations for tasks in the same project", async () => {
-    const { service } = createService();
+  it("eagerly creates collision-safe attachment destinations for duplicate task titles", async () => {
+    const { service, vault } = createService();
     await service.initialize();
     await service.createProject("Project Alpha");
     const first = await service.createTask({ taskId: "tsk_copy_one", title: "Shared project task", project: "Project Alpha" });
-    const second = await service.createTask({ taskId: "tsk_copy_two", title: "Another project task", project: "Project Alpha" });
+    const second = await service.createTask({ taskId: "tsk_copy_two", title: "Shared project task", project: "Project Alpha" });
 
     expect(service.copyFolderForTask(first.record.task_id)).toEqual({
       folderPath: "08 Tasks/Projects/Project Alpha/Files/Shared project task",
       legacy: false
     });
     expect(service.copyFolderForTask(second.record.task_id)).toEqual({
-      folderPath: "08 Tasks/Projects/Project Alpha/Files/Another project task",
+      folderPath: "08 Tasks/Projects/Project Alpha/Files/Shared project task (2)",
       legacy: false
     });
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Shared project task")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Shared project task (2)")).not.toBeNull();
   });
 
-  it("creates the canonical Files location on demand for Inbox and project tasks", async () => {
+  it("eagerly creates canonical Files locations and keeps the compatibility ensure idempotent", async () => {
     const { service, vault } = createService();
     await service.initialize();
     await service.createProject("Project Alpha");
     const inboxTask = await service.createTask({ taskId: "tsk_inbox_location", title: "Inbox location" });
-    const projectTask = await service.createTask({
-      taskId: "tsk_project_location",
-      title: "Project location",
-      project: "Project Alpha"
-    });
+    const [projectTask] = await service.createTasks([{ taskId: "tsk_project_location", title: "Project location", project: "Project Alpha" }]);
 
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Inbox location")).toBeNull();
-    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Project location")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Inbox location/task.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Inbox location/updates.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Inbox location")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Tasks/Project location/task.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Updates/Project location/updates.md")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Project location")).not.toBeNull();
+
+    const related = await service.createRelatedNote(projectTask.record.task_id, "Existing packet", "Keep this content.");
+    const beforeEnsure = await vault.read(related as never);
 
     await expect(service.ensureFilesFolderForTask(inboxTask.record.task_id)).resolves.toEqual({
       folderPath: "08 Tasks/Inbox/Files/Inbox location",
@@ -583,6 +588,9 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Inbox location")).not.toBeNull();
     expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Project location")).not.toBeNull();
+    expect(await vault.read(related as never)).toBe(beforeEnsure);
+    expect(service.copyFolderForTask(projectTask.record.task_id).folderPath)
+      .toBe("08 Tasks/Projects/Project Alpha/Files/Project location");
   });
 
   it("moves task records directly between projects and creates a missing destination Tasks folder", async () => {

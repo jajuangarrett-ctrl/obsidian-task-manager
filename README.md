@@ -23,9 +23,9 @@ task. A project uses this synchronized layout:
 ```text
 08 Tasks/Projects/<Project Name>/
   project.md
-  Tasks/<Task Title>.md
-  Updates/<Task Title>.md
-  Files/
+  Tasks/<Task Title>/task.md
+  Updates/<Task Title>/updates.md
+  Files/<Task Title>/
 ```
 
 Tasks without a project use the same layout under `08 Tasks/Inbox/`. Assigning
@@ -34,9 +34,10 @@ and its update log into the selected project's workspace. Choosing **No
 project** moves them back to Inbox. The stable `task_id` remains in task
 frontmatter and never appears in filenames.
 
-Files are shared project resources. Inbox files added through the dashboard or
-Gmail intake receive a task-title prefix so only the owning Inbox task displays
-them. **Copy path** copies the vault-relative `Files/` destination for Obsidian Web Clipper. Existing
+Every new task immediately receives matching task, update, and Files directories.
+Supporting files added through the dashboard, Gmail intake, Web Clipper, or an
+external capture stay in that task-specific Files directory. **Copy path** ensures
+the directory exists and copies its vault-relative destination. Existing
 per-task workspaces under `08 Tasks/Workspaces/` remain readable during a
 migration but are no longer used for new tasks.
 
@@ -78,7 +79,7 @@ Each active task row includes an inline due-date action beside its project, upda
 
 Each task row shows its two newest task updates without redundantly repeating the task title inside the parent task card. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete update log.
 
-Each task also includes a compact **Related files** section backed by the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** copies the portable vault-relative `Files/` path used by Obsidian Web Clipper; **Open folder** reveals the shared workspace in Obsidian.
+Each task also includes a compact **Related files** section backed by its task-specific directory in the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** ensures and copies the portable vault-relative `Files/<Task Title>/` path used by Obsidian Web Clipper; **Open folder** reveals the task workspace in Obsidian.
 
 Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The selected destination receives a readable task collection named after the folder—for example, `Basic Needs Tasks/`—and each relocated task gets its own child folder containing `task.md`, `updates.md`, and `Files/`. The stable ID, status, project assignment, and file references stay together, and the relocated task remains available in the dashboard. Shared files referenced by another task stay at their original path so the other relationship is not broken.
 
@@ -161,6 +162,18 @@ node tools/taskctl/dist/taskctl.cjs validate --vault "/path/to/vault"
 ```
 
 ## Migration
+
+To preview and then backfill missing task-specific Files directories for active
+canonical Inbox and project tasks:
+
+```bash
+npm run backfill:task-files -- --vault "/path/to/vault"
+npm run backfill:task-files -- --vault "/path/to/vault" --apply
+```
+
+The backfill creates only one missing final directory beneath an existing
+in-vault `Files` parent. It never overwrites, moves, or deletes content, and a
+second applied run is a no-op.
 
 Always begin with a dry run:
 

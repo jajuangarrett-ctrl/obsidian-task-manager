@@ -1,9 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.11.3 — 2026-08-23
 
 ### Fixed
 
+- Create matching `Tasks/<task>/task.md`, `Updates/<task>/updates.md`, and
+  `Files/<task>/` workspaces together for every standard or Quick Capture task,
+  replacing the prior lazy Files-folder behavior.
+- Ensure **Copy Task Folder Path** materializes an older missing destination
+  before copying, while keeping the compatibility helper idempotent.
+- Add a dry-run-first, non-destructive backfill for active canonical tasks that
+  are missing only their task-specific Files directory.
 - Offer a confirmed **Create Folder and Save** path when only the final Task Manager `Files` destination is missing, while rejecting missing parent levels and canonical or symlink escapes outside the FJG Vault.
 - Accept Obsidian-style vault-relative destination paths, foreground actionable capture errors without a duplicate Automator failure, record local stage diagnostics, and remove any files created by a failed partial capture.
 - Use `NSFileManager`'s direct directory flag instead of interpreting an attributes dictionary, avoiding the Automator Runner bridge mismatch that rejected valid pasted destination folders at runtime.

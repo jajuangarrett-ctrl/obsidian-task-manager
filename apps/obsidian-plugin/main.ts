@@ -650,9 +650,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async copyTaskFolderPath(taskId: string): Promise<void> {
-    const destination = this.workspaceService.copyFolderForTask(taskId);
-    const path = taskFolderClipboardPath(destination.folderPath);
     try {
+      const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
+      const path = taskFolderClipboardPath(destination.folderPath);
       await navigator.clipboard.writeText(path);
       new Notice(`${destination.legacy ? "Legacy task attachments" : "Task attachments"} folder copied: ${path}`);
     } catch (error) {

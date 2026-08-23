@@ -570,6 +570,8 @@ export class TaskWorkspaceService {
     const paths = await this.availableTaskPaths(folderPath, record);
     const taskPath = paths.taskPath;
     const updatesPath = paths.updatesPath;
+    const filesPath = taskArtifactFilesPath(folderPath, artifactFolderFromTaskPath(taskPath));
+    await this.ensureFolder(filesPath);
     const body = buildTaskBody(record, input.details || "", input.outcome || "");
     let taskFile: TFile | null = null;
     try {
