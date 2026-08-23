@@ -37,8 +37,16 @@ and installs the Mail Quick Action at:
 
 1. Open Apple Mail and select or open exactly one message.
 2. Choose **Mail > Services > Save Mail to FJG Vault**.
-3. Browse the actual FJG Vault hierarchy and choose the destination folder.
-   For a Task Manager item, choose that task workspace's `Files` folder.
+3. To use an exact path, copy the full folder path before invoking the command,
+   then choose **Paste Folder Path**. The workflow reads the clipboard directly;
+   there is no need to press Command-V in the macOS folder panel.
+4. Alternatively, choose **Browse Folders…** and select a destination in the
+   actual FJG Vault hierarchy. For a Task Manager item, choose that task
+   workspace's `Files` folder.
+
+An empty clipboard, multiple clipboard lines, a missing folder, or a folder
+outside the canonical FJG Vault is rejected before the email or any attachment
+is written.
 
 On first use, macOS may ask whether the Quick Action, Automator Runner, or
 `osascript` may control Mail. Allow that Automation request in **System

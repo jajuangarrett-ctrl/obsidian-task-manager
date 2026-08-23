@@ -89,23 +89,46 @@
     return folder === root || folder.startsWith(`${root}/`);
   }
 
+  function folderPathFromClipboard(value) {
+    let path = String(value == null ? "" : value).trim();
+    if (!path) throw new Error("The clipboard is empty. Copy one full FJG Vault folder path, then try again.");
+    if (/[\r\n]/.test(path)) {
+      throw new Error("The clipboard must contain one folder path, not multiple lines.");
+    }
+    const first = path.charAt(0);
+    const last = path.charAt(path.length - 1);
+    if (path.length >= 2 && ((first === "\"" && last === "\"") || (first === "'" && last === "'"))) {
+      path = path.slice(1, -1).trim();
+    }
+    if (!path) throw new Error("The clipboard is empty. Copy one full FJG Vault folder path, then try again.");
+    return path;
+  }
+
   function parseArguments(argv) {
     const args = Array.isArray(argv) ? argv.map(String) : [];
-    const result = { folder: "" };
+    const result = { folder: "", pasteFolder: false };
     for (let index = 0; index < args.length; index += 1) {
-      if (args[index] === "--folder") {
+      if (args[index] === "--") {
+        continue;
+      } else if (args[index] === "--folder") {
         if (!args[index + 1]) throw new Error("--folder requires an absolute folder path.");
         result.folder = args[index + 1];
         index += 1;
+      } else if (args[index] === "--paste-folder") {
+        result.pasteFolder = true;
       } else {
         throw new Error(`Unknown argument: ${args[index]}`);
       }
+    }
+    if (result.folder && result.pasteFolder) {
+      throw new Error("Use either --folder or --paste-folder, not both.");
     }
     return result;
   }
 
   return {
     availableFileName,
+    folderPathFromClipboard,
     isInsideVault,
     normalizeBody,
     parseArguments,

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Replace the unreliable Command-Shift-G/Command-V interaction inside the Mail Quick Action's folder panel with an explicit **Paste Folder Path** action that reads one full path directly from the clipboard, while retaining **Browse Folders** and all canonical-vault safety checks.
+
 ### Added
 
 - Add a macOS-native Apple Mail Quick Action that saves one selected message as readable Markdown in any chosen existing FJG Vault folder, with sender/recipient/date/subject metadata, complete Mail-readable body text, and same-folder attachment links.

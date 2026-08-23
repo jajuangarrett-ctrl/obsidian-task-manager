@@ -27,6 +27,14 @@ test("accepts the vault root and descendants but rejects sibling prefixes", () =
   assert.equal(core.isInsideVault(root, "/Users/franklingarrett/FJG Vault Old"), false);
 });
 
+test("reads one pasted full folder path and rejects empty or multiline clipboard text", () => {
+  const path = "/Users/franklingarrett/FJG Vault/08 Tasks/Projects/Meeting/Files";
+  assert.equal(core.folderPathFromClipboard(`  ${path}\n`), path);
+  assert.equal(core.folderPathFromClipboard(`"${path}"`), path);
+  assert.throws(() => core.folderPathFromClipboard("   "), /clipboard is empty/i);
+  assert.throws(() => core.folderPathFromClipboard(`${path}\n${path}`), /one folder path/i);
+});
+
 test("renders complete readable mail metadata, body, and attachment links", () => {
   const markdown = core.renderMarkdown({
     subject: "Protect and Progress Meeting: August Agenda",
@@ -49,8 +57,14 @@ test("renders complete readable mail metadata, body, and attachment links", () =
 
 test("parses an explicit destination folder cleanly", () => {
   assert.deepEqual(core.parseArguments(["--folder", "/tmp/FJG Vault/Files"]), {
-    folder: "/tmp/FJG Vault/Files"
+    folder: "/tmp/FJG Vault/Files",
+    pasteFolder: false
   });
+  assert.deepEqual(core.parseArguments(["--", "--paste-folder"]), { folder: "", pasteFolder: true });
   assert.throws(() => core.parseArguments(["--folder"]), /requires an absolute folder path/);
+  assert.throws(
+    () => core.parseArguments(["--folder", "/tmp/FJG Vault/Files", "--paste-folder"]),
+    /either --folder or --paste-folder/
+  );
   assert.throws(() => core.parseArguments(["--unexpected"]), /Unknown argument/);
 });

@@ -2,6 +2,7 @@
 "use strict";
 
 ObjC.import("Foundation");
+ObjC.import("AppKit");
 
 const VAULT_ROOT = "/Users/franklingarrett/FJG Vault";
 const HOST = Application.currentApplication();
@@ -11,6 +12,11 @@ const FILE_MANAGER = $.NSFileManager.defaultManager;
 
 function unwrap(value) {
   return ObjC.unwrap(value);
+}
+
+function environmentValue(name) {
+  const value = $.NSProcessInfo.processInfo.environment.objectForKey($(name));
+  return value ? String(unwrap(value)) : "";
 }
 
 function canonicalPath(value) {
@@ -69,15 +75,35 @@ function selectedMessage() {
   return messages[0];
 }
 
-function chooseDestination(folderArgument) {
-  const vault = canonicalPath(VAULT_ROOT);
-  let destination = folderArgument;
-  if (!destination) {
-    destination = String(HOST.chooseFolder({
-      withPrompt: "Choose an existing FJG Vault folder for this email and its attachments.",
-      defaultLocation: Path(vault)
-    }));
+function clipboardText() {
+  const value = $.NSPasteboard.generalPasteboard.stringForType($.NSPasteboardTypeString);
+  return value ? String(unwrap(value)) : "";
+}
+
+function interactiveDestination() {
+  const choice = HOST.displayDialog(
+    "Copy the full destination folder path before choosing Paste Folder Path, or browse the FJG Vault normally.",
+    {
+      withTitle: "Save Mail to FJG Vault",
+      buttons: ["Cancel", "Browse Folders…", "Paste Folder Path"],
+      defaultButton: "Paste Folder Path",
+      cancelButton: "Cancel"
+    }
+  ).buttonReturned;
+
+  if (choice === "Paste Folder Path") {
+    return FJGMailCaptureCore.folderPathFromClipboard(clipboardText());
   }
+  return String(HOST.chooseFolder({
+    withPrompt: "Choose an existing FJG Vault folder for this email and its attachments.",
+    defaultLocation: Path(canonicalPath(VAULT_ROOT))
+  }));
+}
+
+function chooseDestination(folderArgument, pasteFolder) {
+  const vault = canonicalPath(VAULT_ROOT);
+  const destination = folderArgument
+    || (pasteFolder ? FJGMailCaptureCore.folderPathFromClipboard(clipboardText()) : interactiveDestination());
   const canonicalDestination = canonicalPath(destination);
   if (!isDirectory(canonicalDestination)) {
     throw new Error(`Destination is not an existing folder: ${canonicalDestination}`);
@@ -104,7 +130,7 @@ function messageData(message) {
 function capture(argv) {
   const options = FJGMailCaptureCore.parseArguments(argv || []);
   const message = selectedMessage();
-  const destination = chooseDestination(options.folder);
+  const destination = chooseDestination(options.folder, options.pasteFolder);
   const data = messageData(message);
   const reserved = Object.create(null);
   const isTaken = (name) => reserved[name] || fileExists(joinPath(destination, name));
@@ -149,10 +175,12 @@ function run(argv) {
     if (message.includes("User canceled") || message.includes("-128")) {
       return JSON.stringify({ captured: false, canceled: true });
     }
-    try {
-      HOST.displayAlert("Email was not saved", { message, as: "critical" });
-    } catch (_) {
-      // Automator will still surface the thrown error if the alert cannot open.
+    if (environmentValue("FJG_MAIL_CAPTURE_NONINTERACTIVE") !== "1") {
+      try {
+        HOST.displayAlert("Email was not saved", { message, as: "critical" });
+      } catch (_) {
+        // Automator will still surface the thrown error if the alert cannot open.
+      }
     }
     throw new Error(message);
   }
