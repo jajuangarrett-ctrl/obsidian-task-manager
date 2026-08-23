@@ -33,9 +33,9 @@ function fileExists(path) {
 }
 
 function isDirectory(path) {
-  const attributes = FILE_MANAGER.attributesOfItemAtPathError($(path), null);
-  if (!attributes) return false;
-  return String(unwrap(attributes.objectForKey($.NSFileType))) === String(unwrap($.NSFileTypeDirectory));
+  const directoryFlag = Ref();
+  const exists = FILE_MANAGER.fileExistsAtPathIsDirectory($(path), directoryFlag);
+  return Boolean(exists) && Boolean(directoryFlag[0]);
 }
 
 function writeUtf8(path, content) {

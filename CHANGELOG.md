@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Use `NSFileManager`'s direct directory flag instead of interpreting an attributes dictionary, avoiding the Automator Runner bridge mismatch that rejected valid pasted destination folders at runtime.
 - Replace the unreliable Command-Shift-G/Command-V interaction inside the Mail Quick Action's folder panel with an explicit **Paste Folder Path** action that reads one full path directly from the clipboard, while retaining **Browse Folders** and all canonical-vault safety checks.
 
 ### Added
