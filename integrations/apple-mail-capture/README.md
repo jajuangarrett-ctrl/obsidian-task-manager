@@ -39,14 +39,19 @@ and installs the Mail Quick Action at:
 2. Choose **Mail > Services > Save Mail to FJG Vault**.
 3. To use an exact path, copy the full folder path before invoking the command,
    then choose **Paste Folder Path**. The workflow reads the clipboard directly;
-   there is no need to press Command-V in the macOS folder panel.
+   there is no need to press Command-V in the macOS folder panel. Paths copied
+   from Obsidian may be vault-relative (for example,
+   `08 Tasks/Projects/Meeting/Files`) or absolute.
 4. Alternatively, choose **Browse Folders…** and select a destination in the
    actual FJG Vault hierarchy. For a Task Manager item, choose that task
    workspace's `Files` folder.
 
 An empty clipboard, multiple clipboard lines, a missing folder, or a folder
 outside the canonical FJG Vault is rejected before the email or any attachment
-is written.
+is written. Errors are brought to the foreground with the failed stage and the
+local diagnostics path. The stage log is stored at
+`~/Library/Logs/FJG Task Manager/mail-capture.log`; it never contains the email
+body.
 
 On first use, macOS may ask whether the Quick Action, Automator Runner, or
 `osascript` may control Mail. Allow that Automation request in **System
@@ -85,5 +90,8 @@ destinations outside `/Users/franklingarrett/FJG Vault`.
   not a pixel-perfect HTML export.
 - Mail may need to download a remote body or attachment before the save can
   finish. Exchange latency is controlled by Mail and can delay the Quick Action.
+- Calendar invitation MIME parts that Mail renders as an event banner are not
+  exposed by Mail as ordinary `mail attachments`; only attachments in Mail's
+  scripting attachment collection are saved as separate files.
 - Inline signature images exposed by Mail as attachments are saved and linked
   like other attachments.

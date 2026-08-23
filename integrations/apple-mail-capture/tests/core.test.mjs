@@ -35,6 +35,15 @@ test("reads one pasted full folder path and rejects empty or multiline clipboard
   assert.throws(() => core.folderPathFromClipboard(`${path}\n${path}`), /one folder path/i);
 });
 
+test("resolves Obsidian vault-relative paths against the canonical vault", () => {
+  const root = "/Users/franklingarrett/FJG Vault";
+  const relative = "08 Tasks/Projects/City CE Transfer Day/Files";
+  assert.equal(core.resolveFolderPath(root, relative), `${root}/${relative}`);
+  assert.equal(core.resolveFolderPath(root, `FJG Vault/${relative}`), `${root}/${relative}`);
+  assert.equal(core.resolveFolderPath(root, `${root}/${relative}`), `${root}/${relative}`);
+  assert.equal(core.resolveFolderPath(root, "FJG Vault"), root);
+});
+
 test("renders complete readable mail metadata, body, and attachment links", () => {
   const markdown = core.renderMarkdown({
     subject: "Protect and Progress Meeting: August Agenda",

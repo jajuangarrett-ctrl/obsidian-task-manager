@@ -5,10 +5,15 @@ ObjC.import("Foundation");
 ObjC.import("AppKit");
 
 const VAULT_ROOT = "/Users/franklingarrett/FJG Vault";
+const LOG_DIRECTORY = "/Users/franklingarrett/Library/Logs/FJG Task Manager";
+const LOG_PATH = `${LOG_DIRECTORY}/mail-capture.log`;
 const HOST = Application.currentApplication();
 HOST.includeStandardAdditions = true;
 const MAIL = Application("Mail");
+MAIL.includeStandardAdditions = true;
 const FILE_MANAGER = $.NSFileManager.defaultManager;
+const RUN_ID = `${String(unwrap($.NSProcessInfo.processInfo.processIdentifier))}-${Date.now()}`;
+let currentStage = "starting";
 
 function unwrap(value) {
   return ObjC.unwrap(value);
@@ -20,7 +25,8 @@ function environmentValue(name) {
 }
 
 function canonicalPath(value) {
-  const standardized = $(String(value)).stringByStandardizingPath;
+  const expanded = $(String(value)).stringByExpandingTildeInPath;
+  const standardized = expanded.stringByStandardizingPath;
   return String(unwrap(standardized.stringByResolvingSymlinksInPath));
 }
 
@@ -38,15 +44,66 @@ function isDirectory(path) {
   return Boolean(exists) && Boolean(directoryFlag[0]);
 }
 
-function writeUtf8(path, content) {
+function ensureDirectory(path) {
+  if (isDirectory(path)) return;
   const error = Ref();
-  const ok = $(content).writeToFileAtomicallyEncodingError(
+  const ok = FILE_MANAGER.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(
     $(path),
     true,
-    $.NSUTF8StringEncoding,
+    $.NSDictionary.dictionary,
     error
   );
-  if (!ok) throw new Error(`Could not write ${path}: ${error[0]}`);
+  if (!ok) throw new Error(`Could not create diagnostics folder ${path}: ${error[0]}`);
+}
+
+function appendUtf8(path, content) {
+  const data = $(content).dataUsingEncoding($.NSUTF8StringEncoding);
+  if (!fileExists(path)) {
+    if (!data.writeToFileAtomically($(path), true)) {
+      throw new Error(`Could not create diagnostics log ${path}.`);
+    }
+    return;
+  }
+  const handle = $.NSFileHandle.fileHandleForWritingAtPath($(path));
+  if (!handle) throw new Error(`Could not open diagnostics log ${path}.`);
+  handle.seekToEndOfFile;
+  handle.writeData(data);
+  handle.closeFile;
+}
+
+function logStage(stage, detail) {
+  currentStage = stage;
+  try {
+    ensureDirectory(LOG_DIRECTORY);
+    const safeDetail = String(detail || "").replace(/[\r\n]+/g, " ").trim();
+    appendUtf8(
+      LOG_PATH,
+      `${new Date().toISOString()} run=${RUN_ID} stage=${stage}${safeDetail ? ` detail=${safeDetail}` : ""}\n`
+    );
+  } catch (_) {
+    // Diagnostics must never prevent or replace the requested capture.
+  }
+}
+
+function removeCreatedPath(path) {
+  if (!fileExists(path)) return "";
+  const error = Ref();
+  const ok = FILE_MANAGER.removeItemAtPathError($(path), error);
+  return ok ? "" : `${path}: ${error[0]}`;
+}
+
+function showFailureAlert(message) {
+  MAIL.activate();
+  MAIL.displayAlert("Email was not saved", {
+    message: `${message}\n\nStopped during: ${currentStage}.\nDiagnostics: ${LOG_PATH}`,
+    as: "critical"
+  });
+}
+
+function writeUtf8(path, content) {
+  const data = $(content).dataUsingEncoding($.NSUTF8StringEncoding);
+  const ok = data.writeToFileAtomically($(path), true);
+  if (!ok) throw new Error(`Could not write Markdown file: ${path}`);
 }
 
 function formatAddress(recipient) {
@@ -102,11 +159,14 @@ function interactiveDestination() {
 
 function chooseDestination(folderArgument, pasteFolder) {
   const vault = canonicalPath(VAULT_ROOT);
-  const destination = folderArgument
+  const requested = folderArgument
     || (pasteFolder ? FJGMailCaptureCore.folderPathFromClipboard(clipboardText()) : interactiveDestination());
+  const destination = FJGMailCaptureCore.resolveFolderPath(vault, requested);
   const canonicalDestination = canonicalPath(destination);
   if (!isDirectory(canonicalDestination)) {
-    throw new Error(`Destination is not an existing folder: ${canonicalDestination}`);
+    throw new Error(
+      `Destination folder does not exist: ${canonicalDestination}. Copy an existing FJG Vault folder path, then try again.`
+    );
   }
   if (!FJGMailCaptureCore.isInsideVault(vault, canonicalDestination)) {
     throw new Error("Choose a folder inside /Users/franklingarrett/FJG Vault.");
@@ -115,6 +175,7 @@ function chooseDestination(folderArgument, pasteFolder) {
 }
 
 function messageData(message) {
+  logStage("reading-message-metadata");
   return {
     subject: String(message.subject() || "(No subject)"),
     sender: String(message.sender() || "Unknown sender"),
@@ -128,12 +189,18 @@ function messageData(message) {
 }
 
 function capture(argv) {
+  logStage("started");
   const options = FJGMailCaptureCore.parseArguments(argv || []);
+  logStage("reading-mail-selection");
   const message = selectedMessage();
+  logStage("choosing-destination");
   const destination = chooseDestination(options.folder, options.pasteFolder);
+  logStage("destination-accepted", destination);
   const data = messageData(message);
+  logStage("message-read", FJGMailCaptureCore.sanitizeFileName(data.subject, "Email"));
   const reserved = Object.create(null);
   const isTaken = (name) => reserved[name] || fileExists(joinPath(destination, name));
+  const createdPaths = [];
 
   const noteName = FJGMailCaptureCore.availableFileName(
     `${FJGMailCaptureCore.sanitizeFileName(data.subject, "Email")}.md`,
@@ -141,21 +208,42 @@ function capture(argv) {
   );
   reserved[noteName] = true;
 
-  const attachments = message.mailAttachments();
   const attachmentNames = [];
-  for (let index = 0; index < attachments.length; index += 1) {
-    const requested = FJGMailCaptureCore.sanitizeFileName(
-      attachments[index].name() || `Attachment ${index + 1}`,
-      `Attachment ${index + 1}`
-    );
-    const name = FJGMailCaptureCore.availableFileName(requested, isTaken);
-    reserved[name] = true;
-    MAIL.save(attachments[index], { in: Path(joinPath(destination, name)) });
-    attachmentNames.push(name);
+  let notePath = "";
+  try {
+    logStage("reading-attachments");
+    const attachments = message.mailAttachments();
+    logStage("attachments-found", String(attachments.length));
+    for (let index = 0; index < attachments.length; index += 1) {
+      const requested = FJGMailCaptureCore.sanitizeFileName(
+        attachments[index].name() || `Attachment ${index + 1}`,
+        `Attachment ${index + 1}`
+      );
+      const name = FJGMailCaptureCore.availableFileName(requested, isTaken);
+      reserved[name] = true;
+      const attachmentPath = joinPath(destination, name);
+      createdPaths.push(attachmentPath);
+      logStage("saving-attachment", name);
+      MAIL.save(attachments[index], { in: Path(attachmentPath) });
+      attachmentNames.push(name);
+    }
+
+    notePath = joinPath(destination, noteName);
+    createdPaths.push(notePath);
+    logStage("writing-markdown", noteName);
+    writeUtf8(notePath, FJGMailCaptureCore.renderMarkdown(data, attachmentNames));
+  } catch (error) {
+    logStage("cleaning-partial-files");
+    const cleanupFailures = createdPaths.map(removeCreatedPath).filter(Boolean);
+    if (cleanupFailures.length) {
+      throw new Error(
+        `${String(error && error.message ? error.message : error)} Cleanup also failed: ${cleanupFailures.join("; ")}`
+      );
+    }
+    throw error;
   }
 
-  const notePath = joinPath(destination, noteName);
-  writeUtf8(notePath, FJGMailCaptureCore.renderMarkdown(data, attachmentNames));
+  logStage("completed", notePath);
   HOST.displayNotification(
     `${noteName}${attachmentNames.length ? ` plus ${attachmentNames.length} attachment${attachmentNames.length === 1 ? "" : "s"}` : ""}`,
     { withTitle: "Email saved to FJG Vault" }
@@ -172,16 +260,23 @@ function run(argv) {
     return capture(argv);
   } catch (error) {
     const message = String(error && error.message ? error.message : error);
+    const failedStage = currentStage;
+    logStage("failed", `at=${failedStage} ${message}`);
+    currentStage = failedStage;
     if (message.includes("User canceled") || message.includes("-128")) {
+      logStage("canceled");
       return JSON.stringify({ captured: false, canceled: true });
     }
-    if (environmentValue("FJG_MAIL_CAPTURE_NONINTERACTIVE") !== "1") {
+    if (environmentValue("FJG_MAIL_CAPTURE_NONINTERACTIVE") === "1") {
+      throw new Error(message);
+    }
+    try {
+      showFailureAlert(message);
+    } catch (_) {
       try {
         HOST.displayAlert("Email was not saved", { message, as: "critical" });
-      } catch (_) {
-        // Automator will still surface the thrown error if the alert cannot open.
-      }
+      } catch (_) {}
     }
-    throw new Error(message);
+    return JSON.stringify({ captured: false, error: message });
   }
 }

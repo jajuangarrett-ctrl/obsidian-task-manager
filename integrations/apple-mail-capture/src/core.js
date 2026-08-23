@@ -104,6 +104,15 @@
     return path;
   }
 
+  function resolveFolderPath(vaultRoot, value) {
+    const root = String(vaultRoot == null ? "" : vaultRoot).replace(/\/+$/, "");
+    const path = folderPathFromClipboard(value);
+    if (path.startsWith("/") || path === "~" || path.startsWith("~/")) return path;
+
+    const relative = path.replace(/^FJG Vault(?:\/|$)/, "").replace(/^\/+/, "");
+    return relative ? `${root}/${relative}` : root;
+  }
+
   function parseArguments(argv) {
     const args = Array.isArray(argv) ? argv.map(String) : [];
     const result = { folder: "", pasteFolder: false };
@@ -133,6 +142,7 @@
     normalizeBody,
     parseArguments,
     renderMarkdown,
+    resolveFolderPath,
     sanitizeFileName,
     splitExtension
   };
