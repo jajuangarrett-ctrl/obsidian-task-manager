@@ -25,6 +25,7 @@ import {
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
+import { parseMailTaskReviewPayload } from "./src/mail-review";
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -62,6 +63,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
       this.openQuickCaptureModal(String(params.text || ""));
+    });
+    this.registerObsidianProtocolHandler("fjg-mail-task", (params) => {
+      this.openMailTaskReview(String(params.payload || ""));
     });
     this.registerObsidianProtocolHandler("fjg-task-update", (params) => {
       this.openUpdateCaptureModal(String(params.text || ""));
@@ -432,8 +436,18 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.refreshDashboard();
   }
 
-  openQuickCaptureModal(initialText = ""): void {
-    new QuickCaptureModal(this.app, this, initialText).open();
+  openQuickCaptureModal(initialText = "", initialDraft?: TaskCaptureDraft): void {
+    new QuickCaptureModal(this.app, this, initialText, initialDraft).open();
+  }
+
+  private openMailTaskReview(encoded: string): void {
+    try {
+      const draft = parseMailTaskReviewPayload(encoded, this.projectNames());
+      this.openQuickCaptureModal(draft.details, draft);
+    } catch (error) {
+      console.error("[FJG Task Manager] Mail task review failed", error);
+      new Notice(`Mail task draft failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+    }
   }
 
   projectNames(): string[] {
@@ -452,7 +466,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       project: value.project,
       due: value.due,
       delegatedTo: value.delegatedTo,
-      tags: ["task"]
+      tags: ["task"],
+      source: value.source
     })), { actor: "Franklin" });
     new Notice(
       tasks.length === 1

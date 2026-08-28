@@ -53,11 +53,17 @@ export class QuickCaptureModal extends Modal {
   constructor(
     app: App,
     private readonly taskPlugin: FjgTaskManagerPlugin,
-    initialText = ""
+    initialText = "",
+    initialDraft?: TaskCaptureDraft
   ) {
     super(app);
-    this.rawCapture = initialText.trim();
-    this.drafts[0].details = this.rawCapture;
+    this.rawCapture = initialText.trim() || initialDraft?.details.trim() || "";
+    if (initialDraft) {
+      this.drafts = [{ ...initialDraft }];
+      this.generatedDrafts = true;
+    } else {
+      this.drafts[0].details = this.rawCapture;
+    }
   }
 
   onOpen(): void {
@@ -181,7 +187,8 @@ export class QuickCaptureModal extends Modal {
       });
       this.generatedDrafts = true;
       this.detailsWereEdited.clear();
-      this.drafts = drafts;
+      const source = this.drafts.find((draft) => draft.source)?.source;
+      this.drafts = source ? drafts.map((draft) => ({ ...draft, source })) : drafts;
       this.renderDraftForms();
       new Notice(
         drafts.length === 1

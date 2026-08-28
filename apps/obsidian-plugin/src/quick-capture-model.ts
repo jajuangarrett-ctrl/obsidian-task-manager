@@ -1,4 +1,4 @@
-import { normalizeStatus, TaskStatus } from "@fjg/task-core";
+import { normalizeStatus, TaskSource, TaskStatus } from "@fjg/task-core";
 
 export const CAPTURE_STATUSES: TaskStatus[] = [
   "inbox",
@@ -19,6 +19,7 @@ export interface TaskCaptureDraft {
   project: string;
   due: string;
   delegatedTo: string;
+  source?: TaskSource;
 }
 
 export interface TaskCaptureDraftContext {

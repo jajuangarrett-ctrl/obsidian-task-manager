@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.12.0 — 2026-08-27
+
+### Added
+
+- Add three Apple Mail Quick Actions for drafting a new task, an update to an
+  existing task, or an agenda item from one selected/open Mail message.
+- Use Apple's on-device Foundation Models framework with no cloud API, while
+  capturing Mail subject, sender, recipients, dates, Message-ID, readable body,
+  and attachment names.
+- Let the user explicitly choose the complete email or a copied excerpt, and
+  open structured review-first Obsidian forms instead of writing automatically.
+- Add a structured `fjg-mail-task` protocol that prefills title, details,
+  status, project, due date, delegation, and email source metadata.
+
+### Safety and validation
+
+- Constrain status values and require project, roster, delegation, and due-date
+  output to be supported by current vault data or explicit email evidence.
+- Remove common prompt-injection sentences before model input and keep all
+  generated fields editable before the user confirms a write.
+- Add Swift, TypeScript, installer, live-model, and installed workflow coverage
+  for valid, ambiguous, untrusted, long, empty, and cancellation paths.
+
 ## 0.11.3 — 2026-08-23
 
 ### Fixed

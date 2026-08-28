@@ -1,6 +1,6 @@
 {
   "name": "obsidian-task-manager",
-  "version": "0.11.3",
+  "version": "0.12.0",
   "private": true,
   "description": "FJG Task Manager monorepo for Obsidian task workspaces and browser capture.",
   "workspaces": [
@@ -10,14 +10,16 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @fjg/obsidian-task-manager-plugin && npm run build --workspace @fjg/obsidian-task-clipper && npm run build --workspace @fjg/taskctl && npm run build --workspace @fjg/task-migration && node scripts/sync-plugin-root.mjs",
-    "test": "vitest run && npm run test:mail-capture",
+    "test": "vitest run && npm run test:mail-capture && npm run test:mail-intelligence",
     "test:mail-capture": "node --test integrations/apple-mail-capture/tests/core.test.mjs",
+    "test:mail-intelligence": "swift test --package-path integrations/apple-mail-intelligence",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test && npm run build",
     "backfill:task-files": "tsx scripts/backfill-task-files-folders.ts",
     "migrate:project-layout": "tsx scripts/migrate-project-layout.ts",
     "install:vault": "node scripts/install-vault.mjs",
-    "package:release": "node scripts/package-release.mjs"
+    "package:release": "node scripts/package-release.mjs",
+    "install:mail-intelligence": "integrations/apple-mail-intelligence/scripts/install.sh"
   },
   "dependencies": {
     "ulid": "^3.0.1",
