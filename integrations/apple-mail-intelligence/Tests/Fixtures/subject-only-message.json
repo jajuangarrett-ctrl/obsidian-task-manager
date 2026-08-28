@@ -1,0 +1,11 @@
+{
+  "subject": "Confirm September planning meeting",
+  "sender": "Planning Office <planning@example.edu>",
+  "to": ["Franklin Garrett <franklin@example.edu>"],
+  "cc": [],
+  "dateSent": "2026-08-27T19:00:00Z",
+  "dateReceived": "2026-08-27T19:01:00Z",
+  "messageId": "<subject-only-acceptance@example.edu>",
+  "body": "",
+  "attachments": []
+}

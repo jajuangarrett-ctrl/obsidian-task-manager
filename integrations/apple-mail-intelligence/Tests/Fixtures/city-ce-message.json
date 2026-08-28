@@ -1,0 +1,11 @@
+{
+  "subject": "CE to City Bridge Event - Planning for Coordinators Meeting",
+  "sender": "SSS Team <sss-team@example.edu>",
+  "to": ["Franklin Garrett <franklin@example.edu>"],
+  "cc": [],
+  "dateSent": "2026-08-27T16:00:00Z",
+  "dateReceived": "2026-08-27T16:01:00Z",
+  "messageId": "<city-ce-acceptance@example.edu>",
+  "body": "Franklin, please review the presentation materials for the City CE Transfer Day project and send your coordinator feedback by Friday, August 28, 2026. Add the planning questions to the next SSS Team agenda. The attached outline identifies the decisions needed for the meeting.",
+  "attachments": ["City CE Event Outline.pdf"]
+}
