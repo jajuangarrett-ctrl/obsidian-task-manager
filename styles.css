@@ -1730,6 +1730,21 @@
   outline-offset: 2px;
 }
 
+.fjg-unified-capture-modal {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.fjg-unified-capture-intro {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.fjg-unified-capture-modal textarea {
+  width: min(360px, 100%);
+  min-height: 180px;
+  resize: vertical;
+}
+
 @media (max-width: 520px) {
   .fjg-quick-capture-shell {
     width: calc(100vw - 20px);

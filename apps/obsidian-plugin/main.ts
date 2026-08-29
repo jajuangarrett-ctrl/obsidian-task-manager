@@ -25,7 +25,8 @@ import {
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
-import { parseMailTaskReviewPayload } from "./src/mail-review";
+import { UnifiedCaptureModal } from "./src/unified-capture-modal";
+import type { UnifiedCaptureRequest } from "./src/unified-capture-model";
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -59,21 +60,17 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
     this.addRibbonIcon("list-checks", "Open FJG Task Manager", () => this.activateDashboard());
     this.addRibbonIcon("circle-plus", "Quick capture a task", () => this.openQuickCaptureModal());
+    this.addRibbonIcon("clipboard-paste", "Capture task, agenda, or update", () => this.openUnifiedCaptureModal());
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
       this.openQuickCaptureModal(String(params.text || ""));
     });
-    this.registerObsidianProtocolHandler("fjg-mail-task", (params) => {
-      this.openMailTaskReview(String(params.payload || ""));
-    });
-    this.registerObsidianProtocolHandler("fjg-task-update", (params) => {
-      this.openUpdateCaptureModal(String(params.text || ""));
-    });
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
     this.addCommand({ id: "open-task-briefing", name: "Open Task Briefing", callback: () => void this.openTaskBriefing() });
     this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
+    this.addCommand({ id: "unified-capture", name: "Capture Task, Agenda, or Update", callback: () => this.openUnifiedCaptureModal() });
     this.addCommand({ id: "create-project", name: "Create Project", callback: () => this.openCreateProjectModal() });
     this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
     this.addCommand({ id: "append-task-update", name: "Append Task Update", checkCallback: (checking) => {
@@ -440,14 +437,36 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new QuickCaptureModal(this.app, this, initialText, initialDraft).open();
   }
 
-  private openMailTaskReview(encoded: string): void {
-    try {
-      const draft = parseMailTaskReviewPayload(encoded, this.projectNames());
-      this.openQuickCaptureModal(draft.details, draft);
-    } catch (error) {
-      console.error("[FJG Task Manager] Mail task review failed", error);
-      new Notice(`Mail task draft failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+  openUnifiedCaptureModal(): void {
+    new UnifiedCaptureModal(this.app, (request) => this.continueUnifiedCapture(request)).open();
+  }
+
+  private continueUnifiedCapture(request: UnifiedCaptureRequest): void {
+    if (request.action === "new-task") {
+      this.openQuickCaptureModal(request.text);
+      return;
     }
+    if (request.action === "task-update") {
+      this.openUpdateCaptureModal(request.text);
+      return;
+    }
+    this.openAgendaCaptureModal(request.text);
+  }
+
+  private openAgendaCaptureModal(initialText: string): void {
+    type AgendaCaptureApi = { openCaptureModal?: (text?: string) => void };
+    type PluginHost = {
+      getPlugin?: (id: string) => unknown;
+      plugins?: Record<string, unknown>;
+    };
+    const host = (this.app as typeof this.app & { plugins?: PluginHost }).plugins;
+    const agenda = (host?.getPlugin?.("agenda-capture")
+      ?? host?.plugins?.["agenda-capture"]) as AgendaCaptureApi | undefined;
+    if (typeof agenda?.openCaptureModal !== "function") {
+      new Notice("Enable the Agenda Capture plugin to create an agenda item.", 8000);
+      return;
+    }
+    agenda.openCaptureModal(initialText);
   }
 
   projectNames(): string[] {

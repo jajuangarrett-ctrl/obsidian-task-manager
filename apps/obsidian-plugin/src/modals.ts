@@ -598,7 +598,7 @@ export class TaskUpdateCaptureModal extends Modal {
     this.modalEl.addClass("fjg-task-update-capture-modal");
     this.setTitle("Add Update to Existing Task");
     this.contentEl.createEl("p", {
-      text: "Choose one exact task, review the prefilled email update, then confirm. Opening this form does not change any task.",
+      text: "Choose one exact task, review the prefilled update, then confirm. Opening this form does not change any task.",
       cls: "fjg-task-update-capture-intro"
     });
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.0 — 2026-08-28
+
+### Added
+
+- Add a native **Capture Task, Agenda, or Update** command and ribbon action.
+- Accept typed text or an explicit clipboard paste, then route to the existing
+  reviewed new-task flow, Agenda Capture form, or authoritative-catalog task
+  update picker without writing from the launcher.
+
+### Changed
+
+- Replace the three Mail Intelligence services and their Mail-only protocol
+  adapters with the unified in-Obsidian workflow.
+- Keep the separate **Save Mail to FJG Vault** archive workflow and its tested
+  Apple Mail capture integration unchanged.
+
 ## 0.12.0 — 2026-08-27
 
 ### Added
