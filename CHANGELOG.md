@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.1 — 2026-08-28
+
+### Added
+
+- Add a system-wide macOS Shortcut handoff that prefills the native unified
+  review launcher from selected text or the clipboard without a shell script or
+  custom-URL dispatch.
+- Support selected text from a Quick Action, clipboard text from a global
+  keyboard invocation, and manual text when neither source is available.
+- Restore the readable source text after Task Manager consumes the one-time
+  clipboard marker, and keep every branch review-first.
+
 ## 0.13.0 — 2026-08-28
 
 ### Added

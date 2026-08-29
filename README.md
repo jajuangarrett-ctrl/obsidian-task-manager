@@ -9,6 +9,35 @@ or type source text once, choose the destination workflow, then review it in the
 existing new-task, Agenda Capture, or exact-task update form before anything is
 written. Agenda items require the separate Agenda Capture plugin to be enabled.
 
+The system-wide **Capture to FJG Vault** macOS Shortcut opens the same review
+screen from any app. Text received from a Quick Action is used first; otherwise
+the Shortcut uses the existing clipboard. It places a one-time, URL-encoded
+handoff marker on the clipboard and activates Obsidian. Task Manager consumes
+that marker, restores the readable source text to the clipboard, and opens the
+launcher. This avoids shell scripts and custom-URL stalls while keeping the
+launcher available for manual editing or replacement text.
+The plugin remains the only component that can create or update a task or agenda
+item, and always requires review first.
+
+### System-wide Mac capture
+
+The installed Shortcut is available in the Services menu, Spotlight, and with
+**Control-Option-Command-C**.
+
+1. Select text in Mail, a browser, TextEdit, or another Mac app, then press the
+   keyboard shortcut. If the app cannot supply selected text, copy the source
+   first and press the shortcut.
+2. Obsidian opens **Capture to FJG Vault** with the source text prefilled.
+3. Choose **Create new task**, **Create agenda item**, or **Update existing
+   task**, then select **Continue to Review**.
+4. Review the normal destination form. The update path requires one exact task
+   from Task Manager's authoritative catalog before **Add Update** is enabled.
+
+Opening or cancelling any of these forms writes nothing. The macOS Shortcut uses
+only native **Receive Input**, **Copy to Clipboard**, **URL Encode**, **Text**,
+and **Open App** actions; it does not use Apple Mail automation, Automator, a
+shell script, or Apple Intelligence.
+
 ## Architecture
 
 - `apps/obsidian-plugin` — native Obsidian plugin and dashboard

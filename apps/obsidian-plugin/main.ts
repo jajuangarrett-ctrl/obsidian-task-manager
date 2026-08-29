@@ -34,6 +34,7 @@ import {
   TaskManagerSettingTab
 } from "./src/settings";
 import { legacyOpenAiApiKey } from "./src/settings-migration";
+import { decodeSystemCaptureClipboard } from "./src/system-capture-clipboard";
 import { taskFolderClipboardPath } from "./src/task-folder-path";
 import { TaskWorkspaceService } from "./src/workspace-service";
 import {
@@ -49,6 +50,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private gmailIntakeTimer: number | null = null;
   private gmailIntakeRunning = false;
   private gmailIntakePending = false;
+  private systemCaptureCheckRunning = false;
+  private lastSystemCaptureMarker = "";
 
   async onload(): Promise<void> {
     this.settings = normalizeSettings(await this.loadData() || DEFAULT_SETTINGS);
@@ -66,6 +69,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
       this.openQuickCaptureModal(String(params.text || ""));
     });
+    this.registerObsidianProtocolHandler("fjg-unified-capture", async (params) => {
+      let text = String(params.text || "");
+      if (!text && String(params.clipboard || "") === "1") {
+        try {
+          text = await navigator.clipboard.readText();
+        } catch (error) {
+          console.error("[FJG Task Manager] System-wide clipboard read failed", error);
+          new Notice("Obsidian could not read the clipboard. Paste or type in the capture window.", 8000);
+        }
+      }
+      this.openUnifiedCaptureModal(text);
+    });
+    this.registerDomEvent(window, "focus", () => void this.consumeSystemCaptureClipboard());
+    this.registerInterval(window.setInterval(() => void this.consumeSystemCaptureClipboard(), 400));
 
     this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
     this.addCommand({ id: "open-task-briefing", name: "Open Task Briefing", callback: () => void this.openTaskBriefing() });
@@ -437,8 +454,39 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new QuickCaptureModal(this.app, this, initialText, initialDraft).open();
   }
 
-  openUnifiedCaptureModal(): void {
-    new UnifiedCaptureModal(this.app, (request) => this.continueUnifiedCapture(request)).open();
+  openUnifiedCaptureModal(initialText = ""): void {
+    new UnifiedCaptureModal(
+      this.app,
+      (request) => this.continueUnifiedCapture(request),
+      initialText
+    ).open();
+  }
+
+  private async consumeSystemCaptureClipboard(): Promise<void> {
+    if (this.systemCaptureCheckRunning || !document.hasFocus()) return;
+
+    this.systemCaptureCheckRunning = true;
+    try {
+      const marker = await readSystemClipboardText();
+      const text = decodeSystemCaptureClipboard(marker);
+      if (text === null || marker === this.lastSystemCaptureMarker) return;
+
+      this.lastSystemCaptureMarker = marker;
+      window.setTimeout(() => {
+        if (this.lastSystemCaptureMarker === marker) this.lastSystemCaptureMarker = "";
+      }, 2000);
+
+      try {
+        await writeSystemClipboardText(text);
+      } catch (error) {
+        console.warn("[FJG Task Manager] Could not restore captured clipboard text", error);
+      }
+      this.openUnifiedCaptureModal(text);
+    } catch (error) {
+      console.warn("[FJG Task Manager] Could not inspect the system capture clipboard", error);
+    } finally {
+      this.systemCaptureCheckRunning = false;
+    }
   }
 
   private continueUnifiedCapture(request: UnifiedCaptureRequest): void {
@@ -881,6 +929,11 @@ interface FileFocusPlugin {
   revealFolderPath: (folderPath: string) => Promise<void> | void;
 }
 
+interface ElectronClipboard {
+  readText(): string;
+  writeText(text: string): void;
+}
+
 function getElectronShell(): ElectronShell | null {
   try {
     const electronRequire = (window as any).require || (globalThis as any).require;
@@ -888,4 +941,27 @@ function getElectronShell(): ElectronShell | null {
   } catch {
     return null;
   }
+}
+
+function getElectronClipboard(): ElectronClipboard | null {
+  try {
+    const electronRequire = (window as any).require || (globalThis as any).require;
+    return typeof electronRequire === "function" ? electronRequire("electron")?.clipboard || null : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readSystemClipboardText(): Promise<string> {
+  const clipboard = getElectronClipboard();
+  return clipboard ? clipboard.readText() : navigator.clipboard.readText();
+}
+
+async function writeSystemClipboardText(text: string): Promise<void> {
+  const clipboard = getElectronClipboard();
+  if (clipboard) {
+    clipboard.writeText(text);
+    return;
+  }
+  await navigator.clipboard.writeText(text);
 }

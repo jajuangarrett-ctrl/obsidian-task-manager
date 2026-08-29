@@ -13,9 +13,11 @@ export class UnifiedCaptureModal extends Modal {
 
   constructor(
     app: App,
-    private readonly continueToReview: (request: UnifiedCaptureRequest) => void
+    private readonly continueToReview: (request: UnifiedCaptureRequest) => void,
+    initialText = ""
   ) {
     super(app);
+    this.text = initialText.trim();
   }
 
   onOpen(): void {
@@ -46,6 +48,7 @@ export class UnifiedCaptureModal extends Modal {
         area.inputEl.rows = 10;
         area.inputEl.placeholder = "Paste or type the task, agenda item, or update…";
         area.inputEl.setAttribute("aria-label", "Capture source text");
+        area.setValue(this.text);
         area.onChange((value) => {
           this.text = value;
           this.syncContinueState();
@@ -60,7 +63,7 @@ export class UnifiedCaptureModal extends Modal {
         button
           .setButtonText("Continue to Review")
           .setCta()
-          .setDisabled(true)
+          .setDisabled(!this.text)
           .onClick(() => this.continue());
         this.continueButton = button.buttonEl;
       });
