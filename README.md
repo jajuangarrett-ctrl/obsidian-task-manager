@@ -113,6 +113,8 @@ When a registered project has zero open tasks, its card offers **Archive**. Afte
 
 Each active task row includes an inline due-date action beside its project, update, and archive controls. It shows the current `YYYY-MM-DD` value or **Add due date**, then opens a native date picker where the date can be saved or cleared. The task note and update history are refreshed immediately after the change.
 
+Use **Rename** on a task row to change the task name and its storage paths together. Standard workspaces rename the matching `Tasks`, `Updates`, and `Files` task folders; relocated workspaces rename the complete task bundle. The plugin rejects unsafe or colliding names, updates title, location, heading, and related-file metadata, and restores the original folders and task record if any step fails.
+
 Each task row shows its two newest task updates without redundantly repeating the task title inside the parent task card. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete update log.
 
 Each task also includes a compact **Related files** section backed by its task-specific directory in the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** ensures and copies the portable vault-relative `Files/<Task Title>/` path used by Obsidian Web Clipper; **Open folder** reveals the task workspace in Obsidian.

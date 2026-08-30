@@ -139,6 +139,14 @@ export function updateTaskFields(
   });
 }
 
+export function renameTaskHeading(body: string, previousTitle: string, nextTitle: string): string {
+  const lines = String(body || "").split(/\r?\n/);
+  if (lines[0]?.trim() === `# ${cleanTitle(previousTitle)}`) {
+    lines[0] = `# ${cleanTitle(nextTitle)}`;
+  }
+  return lines.join("\n");
+}
+
 export function renderUpdatesMarkdown(): string {
   return "# Updates\n";
 }

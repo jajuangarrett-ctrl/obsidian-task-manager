@@ -9,6 +9,7 @@ import {
   legacyTaskFolderName,
   numberedTaskFolderName,
   parseTaskMarkdown,
+  renameTaskHeading,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
   sanitizeTitleForPath,
@@ -73,6 +74,14 @@ describe("task core", () => {
     expect(parsed.record.tags).toEqual(["task"]);
     expect(parsed.body).toContain("# Review budget packet");
     expect(validateTaskRecord(parsed.record)).toEqual([]);
+  });
+
+  test("renames the canonical task heading without changing the remaining body", () => {
+    expect(renameTaskHeading(
+      "# Original task\n\n## Details\n\nKeep this context.",
+      "Original task",
+      "Renamed task"
+    )).toBe("# Renamed task\n\n## Details\n\nKeep this context.");
   });
 
   test("marks missing or unrecognized source statuses as unassigned", () => {

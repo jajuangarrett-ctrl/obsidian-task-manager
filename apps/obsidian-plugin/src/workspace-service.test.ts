@@ -192,6 +192,130 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("renames matching task, update, and file folders while preserving task state", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await service.createProject("Project Alpha");
+    const task = await service.createTask({
+      taskId: "tsk_task_rename",
+      title: "Original task name",
+      details: "Keep the original task details.",
+      project: "Project Alpha",
+      status: "waiting",
+      due: "2026-09-15"
+    });
+    const related = await service.createRelatedNote(task.record.task_id, "Rename evidence", "Keep this file.");
+    await service.appendUpdate(task.record.task_id, {
+      actor: "Franklin",
+      text: "Keep this update history."
+    });
+    const before = service.getById(task.record.task_id);
+    const updatesBefore = await vault.read(before.updatesFile as never);
+
+    const renamed = await service.renameTask(task.record.task_id, "Renamed task name");
+
+    expect(renamed).toMatchObject({
+      record: {
+        task_id: task.record.task_id,
+        title: "Renamed task name",
+        location: "08 Tasks/Projects/Project Alpha/Tasks/Renamed task name",
+        project: "Project Alpha",
+        status: "waiting",
+        due: "2026-09-15"
+      },
+      folderPath: "08 Tasks/Projects/Project Alpha"
+    });
+    expect(renamed.taskFile.path)
+      .toBe("08 Tasks/Projects/Project Alpha/Tasks/Renamed task name/task.md");
+    expect(renamed.updatesFile?.path)
+      .toBe("08 Tasks/Projects/Project Alpha/Updates/Renamed task name/updates.md");
+    expect(renamed.record.related_files)
+      .toEqual(["08 Tasks/Projects/Project Alpha/Files/Renamed task name/Rename evidence.md"]);
+    expect(vault.getAbstractFileByPath(related.path.replace("Original task name", "Renamed task name"))).not.toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Tasks/Original task name")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Updates/Original task name")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha/Files/Original task name")).toBeNull();
+    expect(await vault.read(renamed.updatesFile as never)).toBe(updatesBefore);
+    expect(await vault.read(renamed.taskFile as never)).toContain("# Renamed task name");
+    expect(await vault.read(renamed.taskFile as never)).toContain("Keep the original task details.");
+  });
+
+  it("renames one relocated task directory with its update log and Files folder intact", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Career");
+    const task = await service.createTask({
+      taskId: "tsk_relocated_rename",
+      title: "Relocated task",
+      status: "do-soon"
+    });
+    await service.createRelatedNote(task.record.task_id, "Relocated evidence", "Keep this file.");
+    const relocated = await service.relocateTask(task.record.task_id, "03 Areas/Career");
+    const updatesBefore = await vault.read(relocated.updatesFile as never);
+
+    const renamed = await service.renameTask(task.record.task_id, "Renamed relocated task");
+
+    expect(renamed.folderPath)
+      .toBe("03 Areas/Career/Career Tasks/Renamed relocated task");
+    expect(renamed.taskFile.path)
+      .toBe("03 Areas/Career/Career Tasks/Renamed relocated task/task.md");
+    expect(renamed.updatesFile?.path)
+      .toBe("03 Areas/Career/Career Tasks/Renamed relocated task/updates.md");
+    expect(renamed.record.location)
+      .toBe("03 Areas/Career/Career Tasks/Renamed relocated task");
+    expect(renamed.record.related_files)
+      .toEqual(["03 Areas/Career/Career Tasks/Renamed relocated task/Files/Relocated evidence.md"]);
+    expect(vault.getAbstractFileByPath(
+      "03 Areas/Career/Career Tasks/Renamed relocated task/Files/Relocated evidence.md"
+    )).not.toBeNull();
+    expect(await vault.read(renamed.updatesFile as never)).toBe(updatesBefore);
+  });
+
+  it("rejects empty, unsafe, too-long, same, and colliding task names before moving files", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({ taskId: "tsk_rename_validation", title: "Alpha task" });
+    await service.createTask({ taskId: "tsk_rename_collision", title: "Beta task" });
+    const before = await vault.read(task.taskFile as never);
+
+    await expect(service.renameTask(task.record.task_id, "   ")).rejects.toThrow("Enter a task name.");
+    await expect(service.renameTask(task.record.task_id, "Unsafe/task")).rejects.toThrow("Task names cannot contain");
+    await expect(service.renameTask(task.record.task_id, "x".repeat(121))).rejects.toThrow("120 characters or fewer");
+    await expect(service.renameTask(task.record.task_id, "alpha-task")).rejects.toThrow("differs from the current name");
+    await expect(service.renameTask(task.record.task_id, "Beta task"))
+      .rejects.toThrow("A task folder already exists");
+
+    expect(task.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Alpha task/task.md");
+    expect(await vault.read(task.taskFile as never)).toBe(before);
+  });
+
+  it("rolls task folders and metadata back when the rename write fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({
+      taskId: "tsk_task_rename_rollback",
+      title: "Original rollback task",
+      details: "Keep this body."
+    });
+    await service.createRelatedNote(task.record.task_id, "Rollback evidence", "Keep this file.");
+    const taskBefore = await vault.read(task.taskFile as never);
+    const updatesBefore = await vault.read(task.updatesFile as never);
+    vault.failNextWriteTarget = "08 Tasks/Inbox/Tasks/Renamed rollback task/task.md";
+
+    await expect(service.renameTask(task.record.task_id, "Renamed rollback task"))
+      .rejects.toThrow("Task rename failed: Simulated write failure");
+
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Renamed rollback task")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Renamed rollback task")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Files/Renamed rollback task")).toBeNull();
+    expect(task.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Original rollback task/task.md");
+    expect(task.updatesFile?.path).toBe("08 Tasks/Inbox/Updates/Original rollback task/updates.md");
+    expect(await vault.read(task.taskFile as never)).toBe(taskBefore);
+    expect(await vault.read(task.updatesFile as never)).toBe(updatesBefore);
+    expect(service.getById(task.record.task_id).record.title).toBe("Original rollback task");
+  });
+
   it("renames a project folder and synchronizes project and task metadata", async () => {
     const { service, vault } = createService();
     await service.initialize();

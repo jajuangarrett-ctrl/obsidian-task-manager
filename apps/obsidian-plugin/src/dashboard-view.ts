@@ -681,6 +681,12 @@ export class TaskDashboardView extends ItemView {
     }
     if (task.record.delegated_to) meta.createSpan({ text: `Delegated to ${task.record.delegated_to}` });
     const controls = overview.createDiv({ cls: "fjg-task-controls" });
+    const rename = controls.createEl("button", {
+      text: "Rename",
+      cls: "fjg-task-rename-button",
+      attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
+    });
+    rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
     if (task.archived || task.record.status === "archived") {
       const reopen = controls.createEl("button", {
         text: "Reopen to Do First",

@@ -15,6 +15,7 @@ import {
   CreateProjectModal,
   CreateTaskModal,
   RenameProjectModal,
+  RenameTaskModal,
   TaskProjectPickerModal,
   TaskFileModal,
   TaskFolderEntry,
@@ -107,6 +108,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.openTaskFolder(task.record.task_id);
+      return true;
+    }});
+    this.addCommand({ id: "rename-task", name: "Rename Task", checkCallback: (checking) => {
+      const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
+      if (!task) return false;
+      if (!checking) this.openRenameTaskModal(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "open-task-file-location", name: "Open Task File Location in Finder", checkCallback: (checking) => {
@@ -432,6 +439,15 @@ export default class FjgTaskManagerPlugin extends Plugin {
       task.record.due,
       async (dueDate) => this.changeDueDate(taskId, dueDate)
     ).open();
+  }
+
+  openRenameTaskModal(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    new RenameTaskModal(this.app, task.record.title, async (nextTitle) => {
+      const renamed = await this.workspaceService.renameTask(taskId, nextTitle);
+      new Notice(`Task renamed to ${renamed.record.title}.`);
+      this.refreshDashboard();
+    }).open();
   }
 
   openTaskRelocationModal(taskId: string): void {

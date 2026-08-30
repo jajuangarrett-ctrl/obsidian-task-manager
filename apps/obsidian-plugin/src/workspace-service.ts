@@ -1,10 +1,11 @@
-import { App, normalizePath, TAbstractFile, TFile, TFolder } from "obsidian";
+import { App, normalizePath, TFile, TFolder } from "obsidian";
 import {
   appendUpdateMarkdown,
   createTaskRecord,
   NewTaskInput,
   normalizeStatus,
   parseTaskMarkdown,
+  renameTaskHeading,
   renderTaskMarkdown,
   renderUpdatesMarkdown,
   sanitizeTitleForPath,
@@ -130,6 +131,12 @@ export interface TaskArtifactFolderRenamePreview {
 export interface ProjectRenameResult {
   project: IndexedProject;
   updatedTaskCount: number;
+}
+
+interface TaskRenameMove {
+  entry: TFolder;
+  from: string;
+  to: string;
 }
 
 export class TaskWorkspaceService {
@@ -456,6 +463,79 @@ export class TaskWorkspaceService {
       project: this.getProjectByName(nextName),
       updatedTaskCount: affectedTasks.length
     };
+  }
+
+  async renameTask(taskId: string, requestedTitle: string): Promise<IndexedTask> {
+    const task = this.getById(taskId);
+    const nextTitle = normalizeTaskTitle(requestedTitle);
+    if (!nextTitle) throw new Error("Enter a task name.");
+    if (nextTitle.length > 120) throw new Error("Task names must be 120 characters or fewer.");
+    if (sanitizeTitleForPath(nextTitle) !== nextTitle) {
+      throw new Error("Task names cannot contain \\, /, :, *, ?, quotes, angle brackets, pipes, #, ^, or brackets.");
+    }
+    if (normalizeSearch(nextTitle) === normalizeSearch(task.record.title)) {
+      throw new Error("Choose a task name that differs from the current name.");
+    }
+
+    const moves = this.taskRenameMoves(task, nextTitle);
+    for (const move of moves) {
+      const destinationEntry = this.app.vault.getAbstractFileByPath(move.to)
+        || await this.app.vault.adapter.stat(move.to);
+      if (destinationEntry) throw new Error(`A task folder already exists at ${move.to}.`);
+    }
+
+    const oldContent = await this.app.vault.read(task.taskFile);
+    const document = parseTaskMarkdown(oldContent);
+    const at = new Date();
+    const completed: TaskRenameMove[] = [];
+    try {
+      for (const move of moves) {
+        await this.app.vault.rename(move.entry, move.to);
+        completed.push(move);
+      }
+      const location = task.taskFile.parent?.path;
+      if (!location) throw new Error(`Task location could not be resolved: ${task.record.title}`);
+      const relatedFiles = document.record.related_files.map((path) => {
+        return moves.reduce(
+          (current, move) => replaceVaultPathPrefix(current, move.from, move.to),
+          path
+        );
+      });
+      const nextRecord = updateTaskFields(document.record, {
+        title: nextTitle,
+        location,
+        related_files: relatedFiles
+      }, at);
+      await this.app.vault.modify(
+        task.taskFile,
+        renderTaskMarkdown(
+          nextRecord,
+          renameTaskHeading(document.body, document.record.title, nextTitle)
+        )
+      );
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      try {
+        await this.app.vault.modify(task.taskFile, oldContent);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      }
+      for (const move of completed.reverse()) {
+        try {
+          await this.app.vault.rename(move.entry, move.from);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      await this.refresh();
+      if (rollbackErrors.length) {
+        throw new Error(`Task rename failed and rollback needs attention: ${rollbackErrors.join("; ")}`);
+      }
+      throw new Error(`Task rename failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    await this.refresh();
+    return this.getById(taskId);
   }
 
   copyFolderForTask(taskId: string): TaskCopyFolder {
@@ -1155,6 +1235,39 @@ export class TaskWorkspaceService {
     );
   }
 
+  private taskRenameMoves(task: IndexedTask, nextTitle: string): TaskRenameMove[] {
+    if (task.legacyWorkspace || task.relocatedBundle) {
+      const source = this.app.vault.getAbstractFileByPath(task.folderPath);
+      if (!(source instanceof TFolder)) throw new Error(`Task folder not found: ${task.folderPath}`);
+      return [{
+        entry: source,
+        from: normalizePath(task.folderPath),
+        to: normalizePath(`${parentFolderPath(task.folderPath)}/${nextTitle}`)
+      }];
+    }
+    if (!usesTaskArtifactLayout(task.taskFile)) {
+      throw new Error("Migrate this older task to task folders before renaming it.");
+    }
+
+    const currentName = artifactFolderNameForTask(task);
+    const moves: TaskRenameMove[] = [];
+    for (const collection of ["Files", "Updates", "Tasks"]) {
+      const from = taskArtifactFolderPath(task.folderPath, collection, currentName);
+      const entry = this.app.vault.getAbstractFileByPath(from);
+      if (!entry) {
+        if (collection === "Tasks") throw new Error(`Task folder not found: ${from}`);
+        continue;
+      }
+      if (!(entry instanceof TFolder)) throw new Error(`A file blocks the task folder path ${from}.`);
+      moves.push({
+        entry,
+        from,
+        to: taskArtifactFolderPath(task.folderPath, collection, nextTitle)
+      });
+    }
+    return moves;
+  }
+
   private async workspaceForRecord(record: TaskRecord): Promise<string> {
     if (record.status === "archived") return this.archiveWorkspace();
     const projectName = record.project.trim();
@@ -1690,6 +1803,10 @@ function normalizeSearch(value: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeTaskTitle(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function projectIndexKey(name: string, archived: boolean): string {
