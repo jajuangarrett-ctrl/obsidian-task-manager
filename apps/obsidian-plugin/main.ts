@@ -603,11 +603,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async changeProject(taskId: string, projectName: string): Promise<void> {
+    const previousPath = this.workspaceService.getById(taskId).taskFile.path;
     const task = await this.workspaceService.changeProject(taskId, projectName);
+    const workspaceMoved = task.taskFile.path !== previousPath;
+    const assignment = task.record.project
+      ? `Task project set to ${task.record.project}: ${task.record.title}`
+      : `Task moved to No project: ${task.record.title}`;
     new Notice(
-      task.record.project
-        ? `Task project set to ${task.record.project}: ${task.record.title}`
-        : `Task moved to No project: ${task.record.title}`
+      workspaceMoved
+        ? `${assignment}. Workspace moved to ${task.record.location || task.taskFile.parent?.path || task.folderPath}.`
+        : assignment
     );
     this.refreshDashboard();
   }

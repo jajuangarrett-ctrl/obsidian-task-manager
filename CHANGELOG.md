@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-08-30
+
 ### Added
 
 - Add a project-detail **Rename Project** action with path-safe name validation,
@@ -10,6 +12,11 @@
 - Add a task-row **Rename** action that safely renames standard task, update,
   and file folders or a relocated task bundle; synchronize title, location,
   heading, and related-file paths; and roll back every move on failure.
+- Move a task's complete workspace when its project changes: standard
+  `Tasks`, `Files`, and optional `Updates` task folders move as one unit, while
+  relocated bundles return to that standard project layout. Validate project
+  availability and destination collisions, update related-file references,
+  and roll back both storage and metadata on failure.
 
 ## 0.13.1 — 2026-08-28
 
