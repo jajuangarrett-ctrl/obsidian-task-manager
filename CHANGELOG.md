@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add a project-detail **Rename Project** action with path-safe name validation,
+  active/archive collision checks, synchronized project and task metadata, and
+  rollback if any folder or metadata update fails.
+
 ## 0.13.1 — 2026-08-28
 
 ### Added

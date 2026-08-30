@@ -107,6 +107,8 @@ Tasks without a project appear in a separate **No project** group and are physic
 
 Select **New Project** on the Projects screen to create a project before it has tasks. Project definitions are stored as synchronized vault workspaces at `08 Tasks/Projects/<Project Name>/project.md`; they remain visible with zero tasks and become immediately selectable in Quick Capture and the Chrome clipper.
 
+Open a project from the Projects screen and select **Rename Project** to change its name. The plugin validates the new name, prevents collisions, moves the complete project folder, and synchronizes the project and location metadata on its task records while preserving notes, updates, and files.
+
 When a registered project has zero open tasks, its card offers **Archive**. After confirmation, all completed tasks in that project move to `08 Tasks/Archive/` and the project workspace moves to `08 Tasks/Project Archive/`. Nothing is deleted. **Archived Projects** lists the finished project and provides **Reopen**; reopening returns only the project definition to the active list, while its tasks remain archived until explicitly reopened.
 
 Each active task row includes an inline due-date action beside its project, update, and archive controls. It shows the current `YYYY-MM-DD` value or **Add due date**, then opens a native date picker where the date can be saved or cleared. The task note and update history are refreshed immediately after the change.

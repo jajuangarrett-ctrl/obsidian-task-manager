@@ -12,6 +12,8 @@ export interface ProjectRecord {
   created_at: string;
   updated_at: string;
   archived_at: string;
+  /** Vault folder containing project.md, when supplied by Obsidian. */
+  location?: string;
 }
 
 export interface ProjectDocument {
@@ -77,7 +79,8 @@ export function parseProjectDocument(markdown: string): ProjectDocument {
       status,
       created_at: String(value.created_at || ""),
       updated_at: String(value.updated_at || ""),
-      archived_at: status === "archived" ? String(value.archived_at || "") : ""
+      archived_at: status === "archived" ? String(value.archived_at || "") : "",
+      ...(normalizeProjectLocation(value.location) ? { location: normalizeProjectLocation(value.location) } : {})
     },
     body: String(markdown || "").slice(match[0].length).trim()
   };
@@ -100,4 +103,38 @@ export function reopenProjectRecord(record: ProjectRecord, at = new Date()): Pro
     updated_at: at.toISOString(),
     archived_at: ""
   };
+}
+
+export function renameProjectRecord(
+  record: ProjectRecord,
+  name: string,
+  location: string,
+  at = new Date()
+): ProjectRecord {
+  const normalized = normalizeProjectName(name);
+  if (!normalized) throw new Error("Enter a project name.");
+  const normalizedLocation = normalizeProjectLocation(location);
+  if (!normalizedLocation) throw new Error("Project location is required.");
+  return {
+    ...record,
+    name: normalized,
+    location: normalizedLocation,
+    updated_at: at.toISOString()
+  };
+}
+
+export function renameProjectHeading(body: string, previousName: string, nextName: string): string {
+  const lines = String(body || "").split(/\r?\n/);
+  if (lines[0]?.trim() === `# ${normalizeProjectName(previousName)}`) {
+    lines[0] = `# ${normalizeProjectName(nextName)}`;
+  }
+  return lines.join("\n");
+}
+
+function normalizeProjectLocation(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .trim();
 }

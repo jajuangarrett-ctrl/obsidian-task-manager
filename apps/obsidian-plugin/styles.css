@@ -16,7 +16,8 @@
 .fjg-task-controls,
 .fjg-section-heading,
 .fjg-active-project,
-.fjg-back-button {
+.fjg-back-button,
+.fjg-rename-project-button {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -426,10 +427,12 @@
 }
 
 .fjg-active-project {
+  justify-content: space-between;
   margin-bottom: 14px;
 }
 
-.fjg-back-button {
+.fjg-back-button,
+.fjg-rename-project-button {
   min-height: 38px;
   padding: 7px 11px;
   border: 1px solid var(--background-modifier-border);
@@ -441,6 +444,15 @@
 
 .fjg-back-button:hover {
   color: var(--fjg-teal);
+}
+
+.fjg-rename-project-button {
+  color: var(--fjg-teal);
+}
+
+.fjg-rename-project-button:hover {
+  border-color: color-mix(in srgb, var(--fjg-teal) 55%, var(--background-modifier-border));
+  background: var(--fjg-teal-soft);
 }
 
 .fjg-project-heading {

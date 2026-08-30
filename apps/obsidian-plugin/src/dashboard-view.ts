@@ -409,6 +409,23 @@ export class TaskDashboardView extends ItemView {
       this.projectScope = this.view === "archived" ? "archived" : "active";
       this.render();
     });
+    const registered = this.taskPlugin.workspaceService.listProjects()
+      .some((project) => normalize(project.record.name) === normalize(this.project));
+    if (registered) {
+      const rename = banner.createEl("button", {
+        cls: "fjg-rename-project-button",
+        attr: { type: "button", "aria-label": `Rename project ${this.project}` }
+      });
+      const renameIcon = rename.createSpan();
+      setIcon(renameIcon, "pencil");
+      rename.createSpan({ text: "Rename Project" });
+      rename.addEventListener("click", () => {
+        this.taskPlugin.openRenameProjectModal(this.project, (nextName) => {
+          this.project = nextName;
+          this.render();
+        });
+      });
+    }
   }
 
   private renderProjects(root: HTMLElement, projects: ProjectSummary[], tasks: IndexedTask[]): void {

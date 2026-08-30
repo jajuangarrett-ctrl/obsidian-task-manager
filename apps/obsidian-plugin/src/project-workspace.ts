@@ -7,6 +7,8 @@ export {
   PROJECT_DOCUMENT_TYPE,
   PROJECT_SCHEMA_VERSION,
   renderProjectDocument,
+  renameProjectHeading,
+  renameProjectRecord,
   renderProjectMarkdown,
   reopenProjectRecord
 } from "@fjg/task-core";

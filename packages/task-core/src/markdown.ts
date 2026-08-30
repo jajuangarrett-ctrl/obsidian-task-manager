@@ -122,7 +122,7 @@ export function transitionTaskRecord(record: TaskRecord, target: string, at = ne
 
 export function updateTaskFields(
   record: TaskRecord,
-  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "tags">>,
+  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "tags" | "location">>,
   at = new Date()
 ): TaskRecord {
   return normalizeRecord({
@@ -134,6 +134,7 @@ export function updateTaskFields(
     delegated_to: patch.delegated_to === undefined ? record.delegated_to : cleanInline(patch.delegated_to),
     related_files: patch.related_files === undefined ? record.related_files : uniqueStrings(patch.related_files),
     tags: patch.tags === undefined ? record.tags : normalizeTags(patch.tags),
+    location: patch.location === undefined ? record.location : cleanInline(patch.location),
     updated_at: at.toISOString()
   });
 }
@@ -179,7 +180,7 @@ export function renderSource(source: TaskUpdateInput["source"]): string {
 }
 
 function normalizeRecord(record: TaskRecord): TaskRecord {
-  return {
+  const normalized: TaskRecord = {
     schema_version: TASK_SCHEMA_VERSION,
     task_id: cleanInline(record.task_id),
     title: cleanTitle(record.title),
@@ -200,6 +201,9 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     related_files: uniqueStrings(record.related_files),
     tags: normalizeTags(record.tags)
   };
+  const location = cleanInline(record.location);
+  if (location) normalized.location = location;
+  return normalized;
 }
 
 function defaultTaskBody(record: TaskRecord): string {

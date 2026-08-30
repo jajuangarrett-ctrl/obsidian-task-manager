@@ -192,6 +192,92 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("renames a project folder and synchronizes project and task metadata", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const project = await service.createProject("Project Alpha", "Keep this project context.");
+    const task = await service.createTask({
+      taskId: "tsk_project_rename",
+      title: "Rename safely",
+      project: project.record.name
+    });
+    const related = await service.createRelatedNote(task.record.task_id, "Rename evidence", "Keep this file.");
+    await vault.create("08 Tasks/Projects/Project Alpha/Project notes.md", "Keep this project note.");
+    const updatesBefore = await vault.read(task.updatesFile as never);
+
+    const result = await service.renameProject("Project Alpha", "Project Beta");
+
+    expect(result.updatedTaskCount).toBe(1);
+    expect(result.project).toMatchObject({
+      folderPath: "08 Tasks/Projects/Project Beta",
+      record: {
+        name: "Project Beta",
+        location: "08 Tasks/Projects/Project Beta"
+      }
+    });
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta/Project notes.md")).not.toBeNull();
+
+    const renamedTask = service.getById(task.record.task_id);
+    expect(renamedTask.taskFile.path)
+      .toBe("08 Tasks/Projects/Project Beta/Tasks/Rename safely/task.md");
+    expect(renamedTask.record.project).toBe("Project Beta");
+    expect(renamedTask.record.location)
+      .toBe("08 Tasks/Projects/Project Beta/Tasks/Rename safely");
+    expect(renamedTask.record.related_files)
+      .toEqual(["08 Tasks/Projects/Project Beta/Files/Rename safely/Rename evidence.md"]);
+    expect(vault.getAbstractFileByPath(related.path.replace("Project Alpha", "Project Beta"))).not.toBeNull();
+    expect(await vault.read(renamedTask.updatesFile as never)).toBe(updatesBefore);
+
+    const projectMarkdown = await vault.read(result.project.projectFile as never);
+    expect(projectMarkdown).toContain("name: Project Beta");
+    expect(projectMarkdown).toContain("project: Project Beta");
+    expect(projectMarkdown).toContain("location: 08 Tasks/Projects/Project Beta");
+    expect(projectMarkdown).toContain("# Project Beta");
+    expect(projectMarkdown).toContain("Keep this project context.");
+  });
+
+  it("rejects unsafe or colliding project rename targets before moving anything", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const project = await service.createProject("Project Alpha");
+    await service.createProject("Project Beta");
+    const before = await vault.read(project.projectFile as never);
+
+    await expect(service.renameProject("Project Alpha", "Project/Beta"))
+      .rejects.toThrow("Project names cannot contain");
+    await expect(service.renameProject("Project Alpha", "Project Beta"))
+      .rejects.toThrow("Project already exists: Project Beta");
+    await expect(service.renameProject("Project Alpha", "project-alpha"))
+      .rejects.toThrow("differs from the current name");
+
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha")).not.toBeNull();
+    expect(await vault.read(project.projectFile as never)).toBe(before);
+  });
+
+  it("rolls back the project folder and metadata when a rename write fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const project = await service.createProject("Project Alpha", "Original project notes.");
+    const task = await service.createTask({
+      taskId: "tsk_project_rename_rollback",
+      title: "Keep original project",
+      project: project.record.name
+    });
+    const projectBefore = await vault.read(project.projectFile as never);
+    const taskBefore = await vault.read(task.taskFile as never);
+    vault.failNextWriteTarget = "08 Tasks/Projects/Project Beta/Tasks/Keep original project/task.md";
+
+    await expect(service.renameProject("Project Alpha", "Project Beta"))
+      .rejects.toThrow("Project rename failed: Simulated write failure");
+
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Beta")).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Projects/Project Alpha")).not.toBeNull();
+    expect(await vault.read(project.projectFile as never)).toBe(projectBefore);
+    expect(await vault.read(task.taskFile as never)).toBe(taskBefore);
+    expect(service.getById(task.record.task_id).record.project).toBe("Project Alpha");
+  });
+
   it("sets, changes, and clears a task due date while recording each change", async () => {
     const { service, vault } = createService();
     await service.initialize();

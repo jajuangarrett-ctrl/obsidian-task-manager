@@ -37,6 +37,8 @@ export interface TaskRecord {
   /** Explicit vault paths for files attached to this task. */
   related_files: string[];
   tags: string[];
+  /** Vault folder containing the canonical task note, when supplied by Obsidian. */
+  location?: string;
 }
 
 export interface TaskDocument {

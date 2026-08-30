@@ -5,6 +5,8 @@ import {
   normalizeProjectName,
   parseProjectDocument,
   parseProjectMarkdown,
+  renameProjectHeading,
+  renameProjectRecord,
   renderProjectDocument,
   reopenProjectRecord,
   renderProjectMarkdown
@@ -67,5 +69,34 @@ updated_at: 2026-07-28T08:00:00.000Z
       updated_at: "2026-07-28T10:00:00.000Z",
       archived_at: ""
     });
+  });
+
+  it("renames project metadata and its canonical heading while preserving notes", () => {
+    const record = {
+      ...createProjectRecord("Project Alpha", "2026-07-28T08:00:00.000Z"),
+      location: "08 Tasks/Projects/Project Alpha"
+    };
+    const renamed = renameProjectRecord(
+      record,
+      "Project Beta",
+      "08 Tasks/Projects/Project Beta",
+      new Date("2026-07-28T09:00:00.000Z")
+    );
+    const body = renameProjectHeading(
+      "# Project Alpha\n\nKeep this project context.",
+      record.name,
+      renamed.name
+    );
+    const markdown = renderProjectDocument(renamed, body);
+
+    expect(parseProjectDocument(markdown)).toMatchObject({
+      record: {
+        name: "Project Beta",
+        location: "08 Tasks/Projects/Project Beta",
+        updated_at: "2026-07-28T09:00:00.000Z"
+      },
+      body: "# Project Beta\n\nKeep this project context."
+    });
+    expect(markdown).toContain("project: Project Beta");
   });
 });

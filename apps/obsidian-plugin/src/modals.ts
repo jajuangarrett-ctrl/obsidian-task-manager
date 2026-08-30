@@ -480,6 +480,72 @@ export class CreateProjectModal extends Modal {
   }
 }
 
+export class RenameProjectModal extends Modal {
+  private value: string;
+
+  constructor(
+    app: App,
+    private readonly currentName: string,
+    private readonly submit: (name: string) => Promise<void>
+  ) {
+    super(app);
+    this.value = currentName;
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-rename-project-modal");
+    this.setTitle(`Rename ${this.currentName}`);
+    this.contentEl.createEl("p", {
+      text: "The project folder, project metadata, and assigned task metadata will be renamed together. Notes, updates, and files will stay in place inside the project.",
+      cls: "fjg-project-picker-intro"
+    });
+    const error = this.contentEl.createDiv({
+      cls: "fjg-project-picker-error",
+      attr: { role: "alert", "aria-live": "polite" }
+    });
+    let input: HTMLInputElement | null = null;
+    new Setting(this.contentEl)
+      .setName("Project name")
+      .setDesc("Use a unique name without folder-path characters.")
+      .addText((text) => {
+        input = text.inputEl;
+        text.setValue(this.currentName);
+        text.inputEl.setAttribute("aria-label", `New name for ${this.currentName}`);
+        text.onChange((value) => {
+          this.value = value;
+          error.setText("");
+        });
+      });
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText("Cancel")
+        .onClick(() => this.close()))
+      .addButton((button) => button
+        .setButtonText("Rename Project")
+        .setCta()
+        .onClick(async () => {
+          button.setDisabled(true);
+          error.setText("");
+          try {
+            await this.submit(this.value);
+            this.close();
+          } catch (renameError) {
+            error.setText(renameError instanceof Error ? renameError.message : String(renameError));
+          } finally {
+            button.setDisabled(false);
+          }
+        }));
+    window.setTimeout(() => {
+      input?.focus();
+      input?.select();
+    }, 0);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export class CreateTaskModal extends Modal {
   private value: CreateTaskFormValue = {
     title: "",

@@ -44,9 +44,12 @@ import {
 import {
   archiveProjectRecord,
   createProjectRecord,
+  normalizeProjectName,
   parseProjectDocument,
   ProjectRecord,
   renderProjectDocument,
+  renameProjectHeading,
+  renameProjectRecord,
   reopenProjectRecord,
   renderProjectMarkdown
 } from "./project-workspace";
@@ -122,6 +125,11 @@ export interface TaskArtifactFolderRenamePreview {
   to: string;
   eligible: boolean;
   reason?: string;
+}
+
+export interface ProjectRenameResult {
+  project: IndexedProject;
+  updatedTaskCount: number;
 }
 
 export class TaskWorkspaceService {
@@ -318,7 +326,7 @@ export class TaskWorkspaceService {
     const projectPath = `${folderPath}/project.md`;
     let projectFile: TFile | null = null;
     try {
-      projectFile = await this.app.vault.create(projectPath, renderProjectMarkdown(record, description));
+      projectFile = await this.app.vault.create(projectPath, renderProjectMarkdown({ ...record, location: folderPath }, description));
     } catch (error) {
       if (projectFile) await this.app.vault.delete(projectFile, true);
       const folder = this.app.vault.getAbstractFileByPath(folderPath);
@@ -338,6 +346,116 @@ export class TaskWorkspaceService {
       throw new Error(`${archived ? "Archived project" : "Project"} not found: ${name}`);
     }
     return project;
+  }
+
+  async renameProject(currentName: string, requestedName: string): Promise<ProjectRenameResult> {
+    const project = this.getProjectByName(currentName);
+    const nextName = normalizeProjectName(requestedName);
+    if (!nextName) throw new Error("Enter a project name.");
+    if (nextName.length > 120) throw new Error("Project names must be 120 characters or fewer.");
+    if (sanitizeTitleForPath(nextName) !== nextName) {
+      throw new Error("Project names cannot contain \\, /, :, *, ?, quotes, angle brackets, pipes, #, ^, or brackets.");
+    }
+
+    const currentKey = normalizeSearch(project.record.name);
+    const nextKey = normalizeSearch(nextName);
+    if (nextKey === currentKey) {
+      throw new Error("Choose a project name that differs from the current name.");
+    }
+    const conflictingProject = this.listProjects({ includeArchived: true })
+      .find((candidate) => normalizeSearch(candidate.record.name) === nextKey);
+    if (conflictingProject) {
+      throw new Error(
+        `${conflictingProject.archived ? "Archived project" : "Project"} already exists: ${conflictingProject.record.name}`
+      );
+    }
+    const conflictingName = this.projectNames()
+      .find((name) => normalizeSearch(name) === nextKey);
+    if (conflictingName) throw new Error(`Project already exists: ${conflictingName}`);
+
+    const folder = this.app.vault.getAbstractFileByPath(project.folderPath);
+    if (!(folder instanceof TFolder)) throw new Error(`Project folder not found: ${project.folderPath}`);
+    const destination = normalizePath(`${parentFolderPath(project.folderPath)}/${nextName}`);
+    const destinationEntry = this.app.vault.getAbstractFileByPath(destination)
+      || await this.app.vault.adapter.stat(destination);
+    if (destinationEntry) throw new Error(`A folder or file already exists at ${destination}.`);
+
+    const affectedTasks = this.list({ includeArchived: true }).filter((task) => {
+      const path = normalizePath(task.taskFile.path);
+      return normalizeSearch(task.record.project) === currentKey
+        || path.startsWith(`${normalizePath(project.folderPath)}/`);
+    });
+    const originalProjectContent = await this.app.vault.read(project.projectFile);
+    const projectDocument = parseProjectDocument(originalProjectContent);
+    const taskSnapshots = await Promise.all(affectedTasks.map(async (task) => {
+      const content = await this.app.vault.read(task.taskFile);
+      return { task, content, document: parseTaskMarkdown(content) };
+    }));
+    const at = new Date();
+    let folderRenamed = false;
+
+    try {
+      await this.app.vault.rename(folder, destination);
+      folderRenamed = true;
+
+      const nextProjectRecord = renameProjectRecord(projectDocument.record, nextName, destination, at);
+      await this.app.vault.modify(
+        project.projectFile,
+        renderProjectDocument(
+          nextProjectRecord,
+          renameProjectHeading(projectDocument.body, projectDocument.record.name, nextName)
+        )
+      );
+
+      for (const snapshot of taskSnapshots) {
+        const location = snapshot.task.taskFile.parent?.path;
+        if (!location) throw new Error(`Task location could not be resolved: ${snapshot.task.record.title}`);
+        const relatedFiles = snapshot.document.record.related_files.map((path) => {
+          return replaceVaultPathPrefix(path, project.folderPath, destination);
+        });
+        const nextRecord = updateTaskFields(snapshot.document.record, {
+          project: nextName,
+          location,
+          related_files: relatedFiles
+        }, at);
+        await this.app.vault.modify(
+          snapshot.task.taskFile,
+          renderTaskMarkdown(nextRecord, snapshot.document.body)
+        );
+      }
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      for (const snapshot of taskSnapshots) {
+        try {
+          await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      try {
+        await this.app.vault.modify(project.projectFile, originalProjectContent);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      }
+      if (folderRenamed) {
+        try {
+          await this.app.vault.rename(folder, project.folderPath);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      await this.refresh();
+      if (rollbackErrors.length) {
+        throw new Error(`Project rename failed and rollback needs attention: ${rollbackErrors.join("; ")}`);
+      }
+      throw new Error(`Project rename failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    await this.refresh();
+    return {
+      project: this.getProjectByName(nextName),
+      updatedTaskCount: affectedTasks.length
+    };
   }
 
   copyFolderForTask(taskId: string): TaskCopyFolder {
@@ -1177,7 +1295,7 @@ export class TaskWorkspaceService {
     for (const project of this.listProjects({ includeArchived: true })) {
       const current = await this.app.vault.read(project.projectFile);
       const document = parseProjectDocument(current);
-      const next = renderProjectDocument(document.record, document.body);
+      const next = renderProjectDocument({ ...document.record, location: project.folderPath }, document.body);
       if (next === current) continue;
       await this.app.vault.modify(project.projectFile, next);
       changed = true;
@@ -1591,6 +1709,14 @@ function parentFolderPath(path: string): string {
   const index = normalized.lastIndexOf("/");
   if (index < 1) throw new Error(`File path has no parent folder: ${path}`);
   return normalized.slice(0, index);
+}
+
+function replaceVaultPathPrefix(value: string, previousPrefix: string, nextPrefix: string): string {
+  const path = normalizePath(value);
+  const previous = normalizePath(previousPrefix);
+  if (path === previous) return normalizePath(nextPrefix);
+  if (!path.startsWith(`${previous}/`)) return path;
+  return normalizePath(`${nextPrefix}/${path.slice(previous.length + 1)}`);
 }
 
 function usesTaskArtifactLayout(file: TFile): boolean {

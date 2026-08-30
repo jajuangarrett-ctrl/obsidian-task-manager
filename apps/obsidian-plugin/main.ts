@@ -14,6 +14,7 @@ import {
   ArchiveProjectModal,
   CreateProjectModal,
   CreateTaskModal,
+  RenameProjectModal,
   TaskProjectPickerModal,
   TaskFileModal,
   TaskFolderEntry,
@@ -386,6 +387,18 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new CreateProjectModal(this.app, async (value) => {
       const project = await this.workspaceService.createProject(value.name, value.description);
       new Notice(`Project created: ${project.record.name}`);
+      this.refreshDashboard();
+    }).open();
+  }
+
+  openRenameProjectModal(projectName: string, onRenamed?: (name: string) => void): void {
+    new RenameProjectModal(this.app, projectName, async (nextName) => {
+      const result = await this.workspaceService.renameProject(projectName, nextName);
+      new Notice(
+        `Project renamed to ${result.project.record.name}. `
+        + `${result.updatedTaskCount} ${result.updatedTaskCount === 1 ? "task" : "tasks"} updated.`
+      );
+      onRenamed?.(result.project.record.name);
       this.refreshDashboard();
     }).open();
   }
