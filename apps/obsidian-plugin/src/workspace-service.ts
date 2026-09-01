@@ -1154,6 +1154,19 @@ export class TaskWorkspaceService {
     const taskDocument = parseTaskMarkdown(oldTaskContent);
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
+    if (task.legacyWorkspace || task.relocatedBundle || usesTaskArtifactLayout(task.taskFile)) {
+      return this.relocateManagedTaskWorkspace({
+        task,
+        destination,
+        currentLocation,
+        actor,
+        taskDocument,
+        oldTaskContent,
+        updatesFile,
+        oldUpdates
+      });
+    }
+
     const paths = await this.availableRelocationPaths(destination, taskDocument.record);
     const targetFilesRoot = paths.filesPath;
     const sourceFilesRoot = normalizePath(this.relatedFilesPath(task));
@@ -1222,6 +1235,211 @@ export class TaskWorkspaceService {
 
     await this.refresh();
     return this.getById(taskId);
+  }
+
+  private async relocateManagedTaskWorkspace(input: {
+    task: IndexedTask;
+    destination: string;
+    currentLocation: string;
+    actor: string;
+    taskDocument: ReturnType<typeof parseTaskMarkdown>;
+    oldTaskContent: string;
+    updatesFile: TFile;
+    oldUpdates: string;
+  }): Promise<IndexedTask> {
+    const {
+      task,
+      destination,
+      currentLocation,
+      actor,
+      taskDocument,
+      oldTaskContent,
+      updatesFile,
+      oldUpdates
+    } = input;
+    const targetBundle = await this.availableRelocationBundlePath(destination, taskDocument.record);
+    const targetFiles = normalizePath(`${targetBundle}/Files`);
+    const moves: TaskProjectMove[] = [];
+    const pathRewrites: Array<{ from: string; to: string }> = [];
+    let movedUpdatesFolderPath = "";
+
+    if (task.legacyWorkspace || task.relocatedBundle) {
+      const sourceRoot = normalizePath(task.folderPath);
+      const sourceFolder = this.app.vault.getAbstractFileByPath(sourceRoot);
+      if (!(sourceFolder instanceof TFolder)) throw new Error(`Task folder not found: ${sourceRoot}`);
+      moves.push({ entry: sourceFolder, from: sourceRoot, to: targetBundle });
+
+      if (task.legacyWorkspace) {
+        const sourceAttachments = normalizePath(`${sourceRoot}/attachments`);
+        const attachments = this.app.vault.getAbstractFileByPath(sourceAttachments);
+        const sourceFiles = this.app.vault.getAbstractFileByPath(`${sourceRoot}/Files`);
+        if (attachments && !(attachments instanceof TFolder)) {
+          throw new Error(`A file blocks the legacy task attachment folder ${sourceAttachments}.`);
+        }
+        if (attachments instanceof TFolder && sourceFiles) {
+          throw new Error("The legacy task contains both attachments and Files folders; merge them before moving the task.");
+        }
+        if (attachments instanceof TFolder) {
+          moves.push({
+            entry: attachments,
+            from: sourceAttachments,
+            to: targetFiles,
+            rollbackTo: normalizePath(`${targetBundle}/attachments`)
+          });
+          pathRewrites.push({ from: sourceAttachments, to: targetFiles });
+        }
+      }
+      pathRewrites.push({ from: sourceRoot, to: targetBundle });
+    } else {
+      const artifactName = artifactFolderNameForTask(task);
+      const sourceTaskRoot = taskArtifactFolderPath(task.folderPath, "Tasks", artifactName);
+      const sourceUpdatesRoot = taskArtifactFolderPath(task.folderPath, "Updates", artifactName);
+      const sourceFilesRoot = taskArtifactFolderPath(task.folderPath, "Files", artifactName);
+      const taskFolder = this.app.vault.getAbstractFileByPath(sourceTaskRoot);
+      const updatesFolder = this.app.vault.getAbstractFileByPath(sourceUpdatesRoot);
+      const filesFolder = this.app.vault.getAbstractFileByPath(sourceFilesRoot);
+      if (!(taskFolder instanceof TFolder)) throw new Error(`Task folder not found: ${sourceTaskRoot}`);
+      if (updatesFolder && !(updatesFolder instanceof TFolder)) {
+        throw new Error(`A file blocks the task Updates folder path ${sourceUpdatesRoot}.`);
+      }
+      if (filesFolder && !(filesFolder instanceof TFolder)) {
+        throw new Error(`A file blocks the task Files folder path ${sourceFilesRoot}.`);
+      }
+      if (updatesFolder && this.app.vault.getAbstractFileByPath(`${sourceTaskRoot}/Updates`)) {
+        throw new Error("The task folder already contains an Updates item; rename it before moving the task.");
+      }
+      if (filesFolder && this.app.vault.getAbstractFileByPath(`${sourceTaskRoot}/Files`)) {
+        throw new Error("The task folder already contains a Files item; merge or rename it before moving the task.");
+      }
+      if (this.app.vault.getAbstractFileByPath(`${sourceTaskRoot}/${updatesFile.name}`)) {
+        throw new Error(`The task folder already contains ${updatesFile.name}; merge or rename it before moving the task.`);
+      }
+
+      moves.push({ entry: taskFolder, from: sourceTaskRoot, to: targetBundle });
+      pathRewrites.push({ from: sourceTaskRoot, to: targetBundle });
+      if (filesFolder instanceof TFolder) {
+        moves.push({ entry: filesFolder, from: sourceFilesRoot, to: targetFiles });
+        pathRewrites.unshift({ from: sourceFilesRoot, to: targetFiles });
+      }
+      if (updatesFolder instanceof TFolder) {
+        movedUpdatesFolderPath = normalizePath(`${targetBundle}/Updates`);
+        moves.push({ entry: updatesFolder, from: sourceUpdatesRoot, to: movedUpdatesFolderPath });
+        moves.push({
+          entry: updatesFile,
+          from: updatesFile.path,
+          to: normalizePath(`${targetBundle}/${updatesFile.name}`),
+          rollbackTo: normalizePath(`${movedUpdatesFolderPath}/${updatesFile.name}`)
+        });
+        pathRewrites.unshift(
+          { from: updatesFile.path, to: normalizePath(`${targetBundle}/${updatesFile.name}`) },
+          { from: sourceUpdatesRoot, to: movedUpdatesFolderPath }
+        );
+      }
+    }
+
+    const destinations = new Set<string>();
+    for (const move of moves) {
+      const target = normalizePath(move.to);
+      if (destinations.has(target)) throw new Error(`Task destination is ambiguous: ${target}`);
+      destinations.add(target);
+      if (this.app.vault.getAbstractFileByPath(target) || await this.app.vault.adapter.stat(target)) {
+        throw new Error(`Task destination already exists: ${target}`);
+      }
+    }
+
+    const rewritePath = (path: string) => rewriteVaultPath(path, pathRewrites);
+    const at = new Date();
+    const nextRecord = updateTaskFields(taskDocument.record, {
+      location: targetBundle,
+      related_files: taskDocument.record.related_files.map(rewritePath)
+    }, at);
+    const nextUpdates = appendUpdateMarkdown(oldUpdates, {
+      actor,
+      type: "fields-changed",
+      text: `Task relocated from ${currentLocation} to ${destination}.`,
+      createdAt: at.toISOString()
+    });
+    const referenceSnapshots = await this.projectChangeReferenceSnapshots(task.record.task_id, pathRewrites);
+    const completed: TaskProjectMove[] = [];
+    const createdFolders: TFolder[] = [];
+
+    try {
+      await this.app.vault.modify(updatesFile, nextUpdates);
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+      for (const snapshot of referenceSnapshots) {
+        const relatedFiles = snapshot.document.record.related_files.map(rewritePath);
+        await this.app.vault.modify(
+          snapshot.task.taskFile,
+          renderTaskMarkdown(
+            updateTaskFields(snapshot.document.record, { related_files: relatedFiles }, at),
+            snapshot.document.body
+          )
+        );
+      }
+      for (const move of moves) {
+        if (move.entry instanceof TFolder) await this.app.vault.rename(move.entry, move.to);
+        else await this.app.fileManager.renameFile(move.entry, move.to);
+        completed.push(move);
+      }
+      if (!this.app.vault.getAbstractFileByPath(targetFiles)) {
+        await this.ensureFolder(targetFiles);
+        const folder = this.app.vault.getAbstractFileByPath(targetFiles);
+        if (folder instanceof TFolder) createdFolders.push(folder);
+      }
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      for (const folder of createdFolders.reverse()) {
+        try {
+          if (this.folderIsEmpty(folder.path)) await this.app.vault.delete(folder, true);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      for (const move of completed.reverse()) {
+        try {
+          const rollbackTarget = move.rollbackTo || move.from;
+          if (move.entry instanceof TFolder) await this.app.vault.rename(move.entry, rollbackTarget);
+          else await this.app.fileManager.renameFile(move.entry, rollbackTarget);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      for (const snapshot of referenceSnapshots) {
+        try {
+          await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+        }
+      }
+      try {
+        await this.app.vault.modify(task.taskFile, oldTaskContent);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      }
+      try {
+        await this.app.vault.modify(updatesFile, oldUpdates);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      }
+      await this.refresh();
+      if (rollbackErrors.length) {
+        throw new Error(`Task relocation failed and rollback needs attention: ${rollbackErrors.join("; ")}`);
+      }
+      throw new Error(`Task relocation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    if (movedUpdatesFolderPath) {
+      const movedUpdatesFolder = this.app.vault.getAbstractFileByPath(movedUpdatesFolderPath);
+      if (movedUpdatesFolder instanceof TFolder && this.folderIsEmpty(movedUpdatesFolder.path)) {
+        try {
+          await this.app.vault.delete(movedUpdatesFolder, true);
+        } catch (error) {
+          console.warn("[FJG Task Manager] Could not remove empty relocated Updates folder", error);
+        }
+      }
+    }
+    await this.refresh();
+    return this.getById(task.record.task_id);
   }
 
   async changeDueDate(
@@ -1631,6 +1849,18 @@ export class TaskWorkspaceService {
     workspace: string,
     record: TaskRecord
   ): Promise<{ taskPath: string; updatesPath: string; filesPath: string }> {
+    const bundlePath = await this.availableRelocationBundlePath(workspace, record);
+    await this.ensureFolder(bundlePath);
+    const filesPath = normalizePath(`${bundlePath}/Files`);
+    await this.ensureFolder(filesPath);
+    return {
+      taskPath: taskFilePath(bundlePath),
+      updatesPath: updatesFilePath(bundlePath),
+      filesPath
+    };
+  }
+
+  private async availableRelocationBundlePath(workspace: string, record: TaskRecord): Promise<string> {
     await this.ensureFolder(workspace);
     const collectionPath = normalizePath(`${workspace}/${taskRelocationCollectionName(workspace)}`);
     await this.ensureFolder(collectionPath);
@@ -1638,14 +1868,7 @@ export class TaskWorkspaceService {
       const folderName = taskArtifactFolderName(record.title, copyNumber);
       const bundlePath = normalizePath(`${collectionPath}/${folderName}`);
       if (this.app.vault.getAbstractFileByPath(bundlePath) || await this.app.vault.adapter.stat(bundlePath)) continue;
-      await this.ensureFolder(bundlePath);
-      const filesPath = normalizePath(`${bundlePath}/Files`);
-      await this.ensureFolder(filesPath);
-      return {
-        taskPath: taskFilePath(bundlePath),
-        updatesPath: updatesFilePath(bundlePath),
-        filesPath
-      };
+      return bundlePath;
     }
     throw new Error(`Could not create a unique task folder for ${record.title}.`);
   }
