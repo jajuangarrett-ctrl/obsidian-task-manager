@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.1 — 2026-08-31
+
 ### Fixed
 
 - Make **Move folder** relocate the complete task-owned workspace boundary,
