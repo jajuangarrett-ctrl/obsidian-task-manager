@@ -290,7 +290,7 @@ export class TaskRelocationModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Choose a folder inside 02 Programs or 03 Areas. The task note, update history, and task-specific files will move together; status and project stay unchanged.",
+      text: "Choose a folder inside 02 Programs or 03 Areas. The complete task-named workspace, including user-created notes and subfolders inside it, will move together; sibling project material stays in place, and status and project stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     this.contentEl.createEl("p", {

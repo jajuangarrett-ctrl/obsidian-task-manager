@@ -487,9 +487,16 @@ describe("TaskWorkspaceService project-centered moves", () => {
       "Tracked source material."
     );
     const originalRelatedPath = related.path;
+    const sourceTaskFolder = "08 Tasks/Inbox/Tasks/Prepare program review";
+    const sourceUpdatesFolder = "08 Tasks/Inbox/Updates/Prepare program review";
     const sourceFilesFolder = "08 Tasks/Inbox/Files/Prepare program review";
+    await vault.createFolder(`${sourceTaskFolder}/Application Materials`);
+    await vault.create(`${sourceTaskFolder}/Application Materials/draft.docx`, "User-created task material.");
+    await vault.createFolder(`${sourceUpdatesFolder}/Working Notes`);
+    await vault.create(`${sourceUpdatesFolder}/Working Notes/checklist.md`, "Task update working notes.");
     await vault.createFolder(`${sourceFilesFolder}/Source bundle`);
     await vault.create(`${sourceFilesFolder}/Source bundle/untracked.txt`, "Untracked but task-owned.");
+    await vault.create("08 Tasks/Inbox/Project background.md", "Unrelated workspace material.");
     await service.appendUpdate(created.record.task_id, {
       actor: "Franklin",
       text: "Collected the source packet."
@@ -510,6 +517,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
       task_id: "tsk_program_relocation",
       status: "waiting",
       project: "",
+      location: "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review",
       due: "2026-09-15",
       delegated_to: "Dara"
     });
@@ -524,6 +532,16 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(vault.getAbstractFileByPath(
       "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Files/Source bundle/untracked.txt"
     )).not.toBeNull();
+    expect(vault.getAbstractFileByPath(
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Application Materials/draft.docx"
+    )).not.toBeNull();
+    expect(vault.getAbstractFileByPath(
+      "02 Programs/CalWORKs/Operations/Operations Tasks/Prepare program review/Updates/Working Notes/checklist.md"
+    )).not.toBeNull();
+    expect(vault.getAbstractFileByPath(sourceTaskFolder)).toBeNull();
+    expect(vault.getAbstractFileByPath(sourceUpdatesFolder)).toBeNull();
+    expect(vault.getAbstractFileByPath(sourceFilesFolder)).toBeNull();
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Project background.md")).not.toBeNull();
     expect(await vault.read(moved.updatesFile as never)).toContain("Collected the source packet.");
     expect(await vault.read(moved.updatesFile as never)).toContain(
       "Task relocated from 08 Tasks/Inbox to 02 Programs/CalWORKs/Operations."
@@ -591,7 +609,46 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(service.relocationLocationForTask(created.record.task_id)).toBe("02 Programs/Basic-Needs");
   });
 
-  it("leaves a shared related file in place so other task references stay valid", async () => {
+  it("moves an existing relocated bundle from one folder to another without leaving task-owned material behind", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Career");
+    await vault.createFolder("03 Areas/Leadership");
+    const created = await service.createTask({
+      taskId: "tsk_relocate_complete_bundle",
+      title: "Prepare application packet",
+      status: "do-soon",
+      project: ""
+    });
+    const firstMove = await service.relocateTask(created.record.task_id, "03 Areas/Career");
+    await vault.createFolder(`${firstMove.folderPath}/Application Materials`);
+    await vault.create(
+      `${firstMove.folderPath}/Application Materials/letter.docx`,
+      "User-created material beside the managed Files folder."
+    );
+    await vault.create("03 Areas/Career/Program overview.md", "Unrelated project-level material.");
+
+    const moved = await service.relocateTask(created.record.task_id, "03 Areas/Leadership");
+
+    expect(moved.folderPath)
+      .toBe("03 Areas/Leadership/Leadership Tasks/Prepare application packet");
+    expect(moved.record).toMatchObject({
+      task_id: "tsk_relocate_complete_bundle",
+      status: "do-soon",
+      project: "",
+      location: "03 Areas/Leadership/Leadership Tasks/Prepare application packet"
+    });
+    expect(vault.getAbstractFileByPath(firstMove.folderPath)).toBeNull();
+    expect(vault.getAbstractFileByPath(
+      "03 Areas/Leadership/Leadership Tasks/Prepare application packet/Application Materials/letter.docx"
+    )).not.toBeNull();
+    expect(vault.getAbstractFileByPath("03 Areas/Career/Program overview.md")).not.toBeNull();
+    expect(await vault.read(moved.updatesFile as never))
+      .toContain("Task relocated from 03 Areas/Career to 03 Areas/Leadership.");
+  });
+
+  it("moves a task-owned shared file and rewrites the other task reference", async () => {
     const { service, vault } = createService();
     await service.initialize();
     await vault.createFolder("03 Areas");
@@ -599,6 +656,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const first = await service.createTask({ taskId: "tsk_relocate_shared", title: "Move shared packet" });
     const second = await service.createTask({ taskId: "tsk_keep_shared", title: "Keep shared packet" });
     const shared = await service.createRelatedNote(first.record.task_id, "Shared packet", "Used twice.");
+    const originalSharedPath = shared.path;
     const secondDocument = parseTaskMarkdown(await vault.read(second.taskFile as never));
     await vault.modify(
       second.taskFile as never,
@@ -608,9 +666,11 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     const moved = await service.relocateTask(first.record.task_id, "03 Areas/Fiscal");
 
-    expect(moved.record.related_files).toEqual([shared.path]);
-    expect(service.getById(second.record.task_id).record.related_files).toEqual([shared.path]);
-    expect(vault.getAbstractFileByPath(shared.path)).not.toBeNull();
+    const movedSharedPath = "03 Areas/Fiscal/Fiscal Tasks/Move shared packet/Files/Shared packet.md";
+    expect(moved.record.related_files).toEqual([movedSharedPath]);
+    expect(service.getById(second.record.task_id).record.related_files).toEqual([movedSharedPath]);
+    expect(vault.getAbstractFileByPath(originalSharedPath)).toBeNull();
+    expect(vault.getAbstractFileByPath(movedSharedPath)).not.toBeNull();
   });
 
   it("rejects an ineligible relocation without changing the task", async () => {
@@ -646,7 +706,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await service.createRelatedNote(created.record.task_id, "Rollback evidence", "Must return.");
     const taskBefore = await vault.read(created.taskFile as never);
     const updatesBefore = await vault.read(created.updatesFile as never);
-    vault.failNextRenameTarget = "02 Programs/Foundation/Foundation Tasks/Keep relocation atomic/task.md";
+    vault.failNextRenameTarget = "02 Programs/Foundation/Foundation Tasks/Keep relocation atomic";
 
     await expect(service.relocateTask(created.record.task_id, "02 Programs/Foundation"))
       .rejects.toThrow("Task relocation failed: Simulated rename failure");

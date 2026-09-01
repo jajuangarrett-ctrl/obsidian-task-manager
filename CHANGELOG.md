@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Make **Move folder** relocate the complete task-owned workspace boundary,
+  including user-created notes and nested folders beside the generated task
+  files. Keep unrelated project-level siblings in place, rewrite other task
+  references into the moved bundle, and preserve task metadata and history.
+
 ## 0.14.0 — 2026-08-30
 
 ### Added
