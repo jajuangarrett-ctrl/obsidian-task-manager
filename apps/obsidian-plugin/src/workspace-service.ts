@@ -1379,7 +1379,7 @@ export class TaskWorkspaceService {
       updatesFile,
       oldUpdates
     } = input;
-    const targetBundle = await this.availableRelocationBundlePath(destination, taskDocument.record);
+    const targetBundle = (await this.availableRelocationPaths(destination, taskDocument.record)).bundlePath;
     const targetFiles = normalizePath(`${targetBundle}/Files`);
     const moves: TaskProjectMove[] = [];
     const pathRewrites: Array<{ from: string; to: string }> = [];
@@ -1975,23 +1975,7 @@ export class TaskWorkspaceService {
   private async availableRelocationPaths(
     workspace: string,
     record: TaskRecord
-<<<<<<< ours
-  ): Promise<{ taskPath: string; updatesPath: string; filesPath: string }> {
-    const bundlePath = await this.availableRelocationBundlePath(workspace, record);
-    await this.ensureFolder(bundlePath);
-    const filesPath = normalizePath(`${bundlePath}/Files`);
-    await this.ensureFolder(filesPath);
-    return {
-      taskPath: taskFilePath(bundlePath),
-      updatesPath: updatesFilePath(bundlePath),
-      filesPath
-    };
-  }
-
-  private async availableRelocationBundlePath(workspace: string, record: TaskRecord): Promise<string> {
-=======
   ): Promise<{ bundlePath: string; taskPath: string; updatesPath: string; filesPath: string }> {
->>>>>>> theirs
     await this.ensureFolder(workspace);
     const collectionPath = normalizePath(`${workspace}/${taskRelocationCollectionName(workspace)}`);
     await this.ensureFolder(collectionPath);
@@ -1999,9 +1983,6 @@ export class TaskWorkspaceService {
       const folderName = taskArtifactFolderName(record.title, copyNumber);
       const bundlePath = normalizePath(`${collectionPath}/${folderName}`);
       if (this.app.vault.getAbstractFileByPath(bundlePath) || await this.app.vault.adapter.stat(bundlePath)) continue;
-<<<<<<< ours
-      return bundlePath;
-=======
       const filesPath = normalizePath(`${bundlePath}/Files`);
       return {
         bundlePath,
@@ -2009,7 +1990,6 @@ export class TaskWorkspaceService {
         updatesPath: updatesFilePath(bundlePath),
         filesPath
       };
->>>>>>> theirs
     }
     throw new Error(`Could not create a unique task folder for ${record.title}.`);
   }
