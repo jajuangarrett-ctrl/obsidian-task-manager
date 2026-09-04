@@ -1,4 +1,4 @@
-import { ItemView, Notice, Platform, setIcon, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
@@ -21,7 +21,6 @@ import {
   TaskViewKey
 } from "./dashboard-model";
 import type { IndexedProject, IndexedTask } from "./workspace-service";
-import { formatFileSize, RelatedFileKind } from "./related-files";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
 
@@ -32,7 +31,7 @@ export class TaskDashboardView extends ItemView {
   private view: TaskViewKey = "do-first";
   private project = ALL_PROJECTS;
   private projectScope: "active" | "archived" = "active";
-  private readonly expandedFileTasks = new Set<string>();
+  private readonly expandedUpdateTasks = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private readonly taskPlugin: FjgTaskManagerPlugin) {
     super(leaf);
@@ -89,7 +88,7 @@ export class TaskDashboardView extends ItemView {
     const header = root.createDiv({ cls: "fjg-task-header" });
     const titleWrap = header.createDiv();
     titleWrap.createEl("p", { text: "TASK WORKSPACES", cls: "fjg-eyebrow" });
-    titleWrap.createEl("h1", { text: "Task Manager" });
+    titleWrap.createEl("h1", { text: "FJG Task Manager" });
     const actions = header.createDiv({ cls: "fjg-header-actions" });
     const createButton = actions.createEl("button", { text: "Capture Task", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
@@ -474,6 +473,17 @@ export class TaskDashboardView extends ItemView {
       createProject.createSpan({ text: "New Project" });
       createProject.addEventListener("click", () => this.taskPlugin.openCreateProjectModal());
     }
+    const listHeader = root.createDiv({
+      cls: `fjg-project-list-header${showingArchived ? " is-archived" : ""}`,
+      attr: { "aria-hidden": "true" }
+    });
+    listHeader.createSpan({ text: "Project" });
+    listHeader.createSpan({
+      text: showingArchived ? "Archived tasks" : "Open",
+      cls: showingArchived ? "is-wide" : ""
+    });
+    if (!showingArchived) listHeader.createSpan({ text: "Total" });
+    listHeader.createSpan({ text: "Actions" });
     const cards = root.createDiv({
       cls: "fjg-project-grid",
       attr: { "data-fjg-project-grid": "true", "aria-live": "polite" }
@@ -536,22 +546,27 @@ export class TaskDashboardView extends ItemView {
       setIcon(iconEl, project.key === NO_PROJECT ? "inbox" : "folder");
       const copy = button.createSpan({ cls: "fjg-project-copy" });
       copy.createSpan({ text: project.name, cls: "fjg-project-name" });
-      copy.createSpan({
-        text: `${project.openCount} open`,
-        cls: "fjg-project-open"
+      const openCount = card.createSpan({
+        text: String(project.openCount),
+        cls: "fjg-project-open",
+        attr: { "aria-label": `${project.openCount} open ${project.openCount === 1 ? "task" : "tasks"}` }
       });
+      openCount.setAttribute("title", `${project.openCount} open ${project.openCount === 1 ? "task" : "tasks"}`);
+      const total = card.createSpan({
+        text: String(project.totalCount),
+        cls: "fjg-project-total",
+        attr: { "aria-label": `${project.totalCount} total ${project.totalCount === 1 ? "task" : "tasks"}` }
+      });
+      total.setAttribute("title", `${project.totalCount} total ${project.totalCount === 1 ? "task" : "tasks"}`);
       const actions = card.createDiv({ cls: "fjg-project-card-actions" });
-      const total = actions.createSpan({ cls: "fjg-project-total" });
-      total.createSpan({ text: String(project.totalCount) });
-      const chevron = total.createSpan({ cls: "fjg-project-chevron" });
-      setIcon(chevron, "chevron-right");
-      button.addEventListener("click", () => {
+      const openProject = (): void => {
         this.mode = "tasks";
         this.project = project.key;
         this.view = "all-open";
         this.query = "";
         this.render();
-      });
+      };
+      button.addEventListener("click", openProject);
       if (canArchiveProject(project) && registered.has(normalize(project.name))) {
         const archive = actions.createEl("button", {
           text: "Archive",
@@ -565,6 +580,14 @@ export class TaskDashboardView extends ItemView {
           this.taskPlugin.openArchiveProjectModal(project.name, project.totalCount);
         });
       }
+      const open = actions.createEl("button", {
+        cls: "fjg-project-open-button",
+        attr: { type: "button", "aria-label": `Open project ${project.name}` }
+      });
+      open.createSpan({ text: "Open" });
+      const chevron = open.createSpan({ cls: "fjg-project-chevron" });
+      setIcon(chevron, "chevron-right");
+      open.addEventListener("click", openProject);
     }
   }
 
@@ -599,17 +622,18 @@ export class TaskDashboardView extends ItemView {
       setIcon(iconEl, "archive");
       const copy = open.createSpan({ cls: "fjg-project-copy" });
       copy.createSpan({ text: project.record.name, cls: "fjg-project-name" });
-      copy.createSpan({
+      card.createSpan({
         text: countLabel(taskCount, "archived task"),
-        cls: "fjg-project-open"
+        cls: "fjg-project-archived-total"
       });
-      open.addEventListener("click", () => {
+      const openProject = (): void => {
         this.mode = "tasks";
         this.project = project.record.name;
         this.view = "archived";
         this.query = "";
         this.render();
-      });
+      };
+      open.addEventListener("click", openProject);
       const actions = card.createDiv({ cls: "fjg-project-card-actions" });
       const reopen = actions.createEl("button", {
         text: "Reopen",
@@ -631,6 +655,14 @@ export class TaskDashboardView extends ItemView {
           reopen.disabled = false;
         }
       });
+      const view = actions.createEl("button", {
+        cls: "fjg-project-open-button",
+        attr: { type: "button", "aria-label": `View archived tasks for ${project.record.name}` }
+      });
+      view.createSpan({ text: "View" });
+      const chevron = view.createSpan({ cls: "fjg-project-chevron" });
+      setIcon(chevron, "chevron-right");
+      view.addEventListener("click", openProject);
     }
   }
 
@@ -668,41 +700,21 @@ export class TaskDashboardView extends ItemView {
     const title = main.createEl("button", { text: task.record.title, cls: "fjg-task-title" });
     title.addEventListener("click", () => this.taskPlugin.openTask(task.record.task_id));
     const meta = main.createDiv({ cls: "fjg-task-meta" });
-    meta.createSpan({
-      text: statusLabel(task.record.status),
-      cls: `fjg-status-badge is-${task.record.status}`
-    });
-    if (task.record.project) meta.createSpan({ text: task.record.project });
-    if (task.record.due) {
-      meta.createSpan({
-        text: `Due ${task.record.due}`,
-        cls: isDueOrOverdue(task.record) ? "is-overdue" : ""
-      });
-    }
-    if (task.record.delegated_to) meta.createSpan({ text: `Delegated to ${task.record.delegated_to}` });
-    const controls = overview.createDiv({ cls: "fjg-task-controls" });
-    const rename = controls.createEl("button", {
-      text: "Rename",
-      cls: "fjg-task-rename-button",
-      attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
-    });
-    rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
     if (task.archived || task.record.status === "archived") {
-      const reopen = controls.createEl("button", {
-        text: "Reopen to Do First",
-        cls: "mod-cta",
-        attr: { "aria-label": `Reopen ${task.record.title} to Do First` }
+      meta.createSpan({
+        text: statusLabel(task.record.status),
+        cls: `fjg-status-badge is-${task.record.status}`
       });
-      reopen.addEventListener("click", async () => {
-        try {
-          await this.taskPlugin.changeStatus(task.record.task_id, "do-first");
-          this.render();
-        } catch (error) {
-          new Notice(error instanceof Error ? error.message : String(error));
-        }
-      });
+      if (task.record.project) meta.createSpan({ text: task.record.project, cls: "fjg-task-static-meta" });
+      if (task.record.due) {
+        meta.createSpan({
+          text: `Due ${task.record.due}`,
+          cls: `fjg-task-static-meta${isDueOrOverdue(task.record) ? " is-overdue" : ""}`
+        });
+      }
     } else {
-      const status = controls.createEl("select", {
+      const status = meta.createEl("select", {
+        cls: "fjg-task-meta-control fjg-task-status-select",
         attr: { "aria-label": `Status for ${task.record.title}` }
       });
       for (const value of TASK_STATUSES.filter((item) => item !== "archived")) {
@@ -717,22 +729,14 @@ export class TaskDashboardView extends ItemView {
           new Notice(error instanceof Error ? error.message : String(error));
         }
       });
-      const project = controls.createEl("button", {
-        cls: "fjg-task-project-picker-button",
+      const project = meta.createEl("button", {
+        cls: "fjg-task-meta-control fjg-task-project-picker-button",
         text: task.record.project || "No project",
         attr: { type: "button", "aria-label": `Choose project for ${task.record.title}` }
       });
       project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
-      const relocate = controls.createEl("button", {
-        text: "Move folder",
-        attr: {
-          type: "button",
-          "aria-label": `Move ${task.record.title} to a Program or Area folder`
-        }
-      });
-      relocate.addEventListener("click", () => this.taskPlugin.openTaskRelocationModal(task.record.task_id));
-      const dueDate = controls.createEl("button", {
-        cls: `fjg-task-due-date-button${task.record.due ? "" : " is-empty"}`,
+      const dueDate = meta.createEl("button", {
+        cls: `fjg-task-meta-control fjg-task-due-date-button${task.record.due ? "" : " is-empty"}${isDueOrOverdue(task.record) ? " is-overdue" : ""}`,
         text: task.record.due ? `Due ${task.record.due}` : "Add due date",
         attr: {
           type: "button",
@@ -742,14 +746,85 @@ export class TaskDashboardView extends ItemView {
         }
       });
       dueDate.addEventListener("click", () => this.taskPlugin.openTaskDueDateModal(task.record.task_id));
+    }
+    if (task.record.delegated_to) {
+      meta.createSpan({ text: `Delegated to ${task.record.delegated_to}`, cls: "fjg-task-static-meta" });
+    }
+
+    const controls = overview.createDiv({ cls: "fjg-task-controls" });
+    const folder = controls.createEl("button", {
+      cls: "fjg-task-folder-button",
+      attr: { type: "button", "aria-label": `Open task Files folder in Finder for ${task.record.title}` }
+    });
+    const folderIcon = folder.createSpan();
+    setIcon(folderIcon, "folder-open");
+    folder.createSpan({ text: "Folder" });
+    folder.addEventListener("click", () => void this.taskPlugin.openTaskFileLocation(task.record.task_id));
+    if (task.archived || task.record.status === "archived") {
+      const reopen = controls.createEl("button", {
+        text: "Reopen to Do First",
+        cls: "mod-cta",
+        attr: { type: "button", "aria-label": `Reopen ${task.record.title} to Do First` }
+      });
+      reopen.addEventListener("click", async () => {
+        try {
+          await this.taskPlugin.changeStatus(task.record.task_id, "do-first");
+          this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error));
+        }
+      });
+      const rename = controls.createEl("button", {
+        text: "Rename",
+        cls: "fjg-task-rename-button",
+        attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
+      });
+      rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
+    } else {
       const update = controls.createEl("button", {
         text: "Update",
-        attr: { "aria-label": `Add an update to ${task.record.title}` }
+        cls: "mod-cta fjg-task-update-button",
+        attr: { type: "button", "aria-label": `Add an update to ${task.record.title}` }
       });
       update.addEventListener("click", () => this.taskPlugin.openUpdateModal(task.record.task_id));
-      const archive = controls.createEl("button", {
+      const more = controls.createEl("details", { cls: "fjg-task-more" });
+      more.createEl("summary", {
+        text: "More",
+        attr: { "aria-label": `More actions for ${task.record.title}` }
+      });
+      const menu = more.createDiv({ cls: "fjg-task-more-menu" });
+      const rename = menu.createEl("button", {
+        text: "Rename",
+        cls: "fjg-task-rename-button",
+        attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
+      });
+      rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
+      const relocate = menu.createEl("button", {
+        text: "Move folder",
+        attr: {
+          type: "button",
+          "aria-label": `Move ${task.record.title} to a Program or Area folder`
+        }
+      });
+      relocate.addEventListener("click", () => this.taskPlugin.openTaskRelocationModal(task.record.task_id));
+      const addFile = menu.createEl("button", {
+        text: "Add file",
+        attr: { type: "button", "aria-label": `Add a file to ${task.record.title}` }
+      });
+      addFile.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
+      const copyPath = menu.createEl("button", {
+        text: "Copy file path",
+        attr: { type: "button", "aria-label": `Copy the task attachment folder path for ${task.record.title}` }
+      });
+      copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
+      const fileFocusLocation = menu.createEl("button", {
+        text: "Show in File Focus",
+        attr: { type: "button", "aria-label": `Reveal the task Files location in FJG File Focus for ${task.record.title}` }
+      });
+      fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
+      const archive = menu.createEl("button", {
         text: "Archive",
-        attr: { "aria-label": `Archive ${task.record.title}` }
+        attr: { type: "button", "aria-label": `Archive ${task.record.title}` }
       });
       archive.addEventListener("click", async () => {
         try {
@@ -760,134 +835,43 @@ export class TaskDashboardView extends ItemView {
         }
       });
     }
-    this.renderRelatedFiles(row, task);
     this.renderRecentUpdates(row, task);
-  }
-
-  private renderRelatedFiles(parent: HTMLElement, task: IndexedTask): void {
-    const section = parent.createDiv({ cls: "fjg-related-files" });
-    const heading = section.createDiv({ cls: "fjg-related-files-heading" });
-    const title = heading.createDiv({ cls: "fjg-related-files-title" });
-    title.createEl("h3", { text: "Related files" });
-    title.createSpan({
-      text: String(task.relatedFiles.length),
-      cls: "fjg-related-files-count",
-      attr: { "aria-label": `${task.relatedFiles.length} related ${task.relatedFiles.length === 1 ? "file" : "files"}` }
-    });
-    const actions = heading.createDiv({ cls: "fjg-related-file-actions" });
-    if (!task.archived) {
-      const add = this.iconButton(actions, "paperclip", "Add file", `Add a file to ${task.record.title}`);
-      add.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
-    }
-    const copyPath = this.iconButton(
-      actions,
-      "copy",
-      "Copy path",
-      `Copy the task attachment folder path for ${task.record.title}`
-    );
-    copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
-    const folder = this.iconButton(actions, "folder-open", "Open folder", `Open the task attachment folder for ${task.record.title}`);
-    folder.addEventListener("click", () => void this.taskPlugin.openTaskFolder(task.record.task_id));
-    if (Platform.isDesktopApp) {
-      const fileLocation = this.iconButton(
-        actions,
-        "external-link",
-        "Open in Finder",
-        `Open the task Files location in Finder for ${task.record.title}`
-      );
-      fileLocation.addEventListener("click", () => void this.taskPlugin.openTaskFileLocation(task.record.task_id));
-    }
-    const fileFocusLocation = this.iconButton(
-      actions,
-      "folder-tree",
-      "Show in File Focus",
-      `Reveal the task Files location in FJG File Focus for ${task.record.title}`
-    );
-    fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
-
-    if (!task.relatedFiles.length) {
-      section.createEl("p", {
-        text: "No related files yet. Add a note, document, PDF, image, or other supporting file.",
-        cls: "fjg-no-related-files"
-      });
-      return;
-    }
-
-    const expanded = this.expandedFileTasks.has(task.record.task_id);
-    const visible = expanded ? task.relatedFiles : task.relatedFiles.slice(0, 3);
-    const grid = section.createDiv({ cls: "fjg-related-file-grid" });
-    for (const related of visible) {
-      const button = grid.createEl("button", {
-        cls: "fjg-related-file-card",
-        attr: {
-          type: "button",
-          "aria-label": `Open ${related.file.name}`
-        }
-      });
-      if (related.kind === "image") {
-        button.createEl("img", {
-          cls: "fjg-related-file-thumbnail",
-          attr: {
-            src: this.app.vault.getResourcePath(related.file),
-            alt: ""
-          }
-        });
-      } else {
-        const icon = button.createSpan({ cls: `fjg-related-file-icon is-${related.kind}` });
-        setIcon(icon, relatedFileIcon(related.kind));
-      }
-      const copy = button.createSpan({ cls: "fjg-related-file-copy" });
-      copy.createSpan({ text: related.file.basename, cls: "fjg-related-file-name" });
-      if (related.preview) {
-        copy.createSpan({ text: related.preview, cls: "fjg-related-file-preview" });
-      }
-      copy.createSpan({
-        text: relatedFileMeta(task.folderPath, related.file.path, related.file.extension, related.file.stat.size),
-        cls: "fjg-related-file-meta"
-      });
-      button.addEventListener("click", () => void this.taskPlugin.openRelatedFile(task.record.task_id, related.file.path));
-    }
-    if (task.relatedFiles.length > 3) {
-      const toggle = section.createEl("button", {
-        text: expanded ? "Show fewer files" : `Show all ${task.relatedFiles.length} files`,
-        cls: "fjg-related-files-toggle",
-        attr: { type: "button" }
-      });
-      toggle.addEventListener("click", () => {
-        if (expanded) this.expandedFileTasks.delete(task.record.task_id);
-        else this.expandedFileTasks.add(task.record.task_id);
-        this.render();
-      });
-    }
-  }
-
-  private iconButton(
-    parent: HTMLElement,
-    iconName: string,
-    text: string,
-    ariaLabel: string
-  ): HTMLButtonElement {
-    const button = parent.createEl("button", {
-      cls: "fjg-related-file-action",
-      attr: { type: "button", "aria-label": ariaLabel }
-    });
-    const icon = button.createSpan();
-    setIcon(icon, iconName);
-    button.createSpan({ text });
-    return button;
   }
 
   private renderRecentUpdates(parent: HTMLElement, task: IndexedTask): void {
     const updates = task.updates
-      .filter((update) => update.type !== "created")
-      .slice(0, 2);
+      .filter((update) => update.type !== "created");
+    if (!updates.length) return;
+    const expanded = this.expandedUpdateTasks.has(task.record.task_id);
     const section = parent.createDiv({
-      cls: "fjg-recent-updates",
+      cls: `fjg-recent-updates${expanded ? " is-expanded" : ""}`,
       attr: { "aria-live": "polite" }
     });
     const heading = section.createDiv({ cls: "fjg-recent-updates-heading" });
-    heading.createEl("h3", { text: "Recent updates" });
-    const openLog = heading.createEl("button", {
+    const headingTitle = heading.createDiv({ cls: "fjg-recent-updates-title" });
+    headingTitle.createEl("h3", { text: "Recent updates" });
+    headingTitle.createSpan({
+      text: String(updates.length),
+      cls: "fjg-recent-updates-count",
+      attr: { "aria-label": `${updates.length} task ${updates.length === 1 ? "update" : "updates"}` }
+    });
+    const actions = heading.createDiv({ cls: "fjg-recent-updates-actions" });
+    if (updates.length > 1) {
+      const toggle = actions.createEl("button", {
+        text: expanded ? "Collapse" : "Expand",
+        attr: {
+          type: "button",
+          "aria-expanded": String(expanded),
+          "aria-label": `${expanded ? "Collapse" : "Expand"} update history for ${task.record.title}`
+        }
+      });
+      toggle.addEventListener("click", () => {
+        if (expanded) this.expandedUpdateTasks.delete(task.record.task_id);
+        else this.expandedUpdateTasks.add(task.record.task_id);
+        this.render();
+      });
+    }
+    const openLog = actions.createEl("button", {
       text: task.updatesFile ? "View all" : "No update log",
       attr: {
         type: "button",
@@ -897,15 +881,8 @@ export class TaskDashboardView extends ItemView {
     openLog.disabled = !task.updatesFile;
     openLog.addEventListener("click", () => this.taskPlugin.openTaskUpdates(task.record.task_id));
 
-    if (!updates.length) {
-      section.createEl("p", {
-        text: "No task updates yet.",
-        cls: "fjg-no-updates"
-      });
-      return;
-    }
     const list = section.createDiv({ cls: "fjg-update-preview-list" });
-    for (const update of updates) {
+    for (const update of expanded ? updates : updates.slice(0, 1)) {
       const card = list.createEl("button", {
         cls: "fjg-update-preview",
         attr: {
@@ -913,11 +890,11 @@ export class TaskDashboardView extends ItemView {
           "aria-label": `Open task ${task.record.title}`
         }
       });
-      card.createEl("p", {
+      card.createSpan({
         text: updateMeta(update.timestamp, update.actor),
         cls: "fjg-update-preview-meta"
       });
-      card.createEl("p", {
+      card.createSpan({
         text: update.text,
         cls: "fjg-update-preview-text"
       });
@@ -962,20 +939,4 @@ function updateMeta(timestamp: string, actor: string): string {
     }).format(date)
     : timestamp;
   return actor ? `${formatted} · ${actor}` : formatted;
-}
-
-function relatedFileIcon(kind: RelatedFileKind): string {
-  if (kind === "note") return "notebook-pen";
-  if (kind === "pdf") return "file-text";
-  if (kind === "document") return "files";
-  return "file";
-}
-
-function relatedFileMeta(folderPath: string, filePath: string, extension: string, bytes: number): string {
-  const relative = filePath.startsWith(`${folderPath}/`)
-    ? filePath.slice(folderPath.length + 1)
-    : filePath;
-  const folder = relative.includes("/") ? `${relative.slice(0, relative.lastIndexOf("/"))} · ` : "";
-  const type = extension ? extension.toUpperCase() : "FILE";
-  return `${folder}${type} · ${formatFileSize(bytes)}`;
 }

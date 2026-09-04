@@ -59,7 +59,8 @@ import {
   markdownPreview,
   RelatedFileKind,
   relatedFileKind,
-  safeRelatedFileName
+  safeRelatedFileName,
+  workspaceFileBelongsToTask
 } from "./related-files";
 import {
   filterTaskRelocationDestinations,
@@ -252,8 +253,23 @@ export class TaskWorkspaceService {
     const vaultFiles = this.app.vault.getFiles();
     for (const task of next.values()) {
       const referencedPaths = new Set(task.record.related_files.map((path) => normalizePath(path)));
+      const relatedRoot = `${normalizePath(this.relatedFilesPath(task))}/`;
       const related = vaultFiles
-        .filter((file) => referencedPaths.has(normalizePath(file.path)))
+        .filter((file) => {
+          const filePath = normalizePath(file.path);
+          if (referencedPaths.has(filePath)) return true;
+          if (!filePath.startsWith(relatedRoot) || isCanonicalTaskFile(file.name) || file.name.startsWith(".")) {
+            return false;
+          }
+          if (task.relocatedBundle || task.legacyWorkspace || usesTaskArtifactLayout(task.taskFile)) return true;
+          return workspaceFileBelongsToTask(
+            file.name,
+            task.record.title,
+            task.record.project,
+            task.archived,
+            task.legacyWorkspace
+          );
+        })
         .sort((left, right) => right.stat.mtime - left.stat.mtime || left.name.localeCompare(right.name));
       for (const file of related) {
         const kind = relatedFileKind(file.extension);

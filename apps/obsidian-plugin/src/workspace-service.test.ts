@@ -197,6 +197,26 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("discovers files stored in the task-specific Files folder without requiring metadata backfill", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({
+      taskId: "tsk_discover_related_files",
+      title: "Review support packet",
+      status: "do-first"
+    });
+    await vault.create(
+      "08 Tasks/Inbox/Files/Review support packet/Supporting note.md",
+      "# Supporting note\n\nKeep this visible on the task.\n"
+    );
+
+    await service.refresh();
+
+    expect(service.getById(task.record.task_id).record.related_files).toEqual([]);
+    expect(service.getById(task.record.task_id).relatedFiles.map((related) => related.file.path))
+      .toEqual(["08 Tasks/Inbox/Files/Review support packet/Supporting note.md"]);
+  });
+
   it("renames matching task, update, and file folders while preserving task state", async () => {
     const { service, vault } = createService();
     await service.initialize();
