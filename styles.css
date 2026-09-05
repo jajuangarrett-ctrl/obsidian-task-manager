@@ -872,17 +872,20 @@
   font-size: 0.76rem;
 }
 
-.fjg-task-folder-button {
+.fjg-task-folder-button,
+.fjg-task-copy-path-button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.fjg-task-folder-button > span:first-child {
+.fjg-task-folder-button > span:first-child,
+.fjg-task-copy-path-button > span:first-child {
   display: inline-flex;
 }
 
-.fjg-task-folder-button svg {
+.fjg-task-folder-button svg,
+.fjg-task-copy-path-button svg {
   width: 15px;
   height: 15px;
 }

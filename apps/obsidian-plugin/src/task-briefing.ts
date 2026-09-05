@@ -25,7 +25,7 @@ export function renderTaskManagerBriefing(
     "## Summary",
     "",
     `- Tasks represented in the dashboard: **${tasks.length}**`,
-    `- Registered projects represented in the dashboard: **${projects.length}**`,
+    `- Project tags represented in the dashboard: **${projects.length}**`,
     `- Generated: ${generatedAt.toLocaleString()}`,
     "",
     "## Tasks and projects",
@@ -40,17 +40,9 @@ export function renderTaskManagerBriefing(
   for (const group of projectGroups) {
     lines.push(`### ${headingText(group.name)}`, "");
     if (group.project) {
-      lines.push(`- Project status: **${group.project.status === "archived" ? "Archived" : "Active"}**`);
-      if (group.project.path) lines.push(`- Project note: ${wikiLink(group.project.path, group.project.name)}`);
-      if (group.project.notes.trim()) {
-        lines.push("", "#### Project notes", "", blockquote(group.project.notes), "");
-      } else {
-        lines.push("");
-      }
+      lines.push(`- Project tag status: **${group.project.status === "archived" ? "Archived tasks only" : "Active"}**`, "");
     } else if (group.name === "No project") {
       lines.push("Tasks in this section are not assigned to a project.", "");
-    } else {
-      lines.push("This project name is present on task records but has no registered project note.", "");
     }
 
     if (!group.tasks.length) {

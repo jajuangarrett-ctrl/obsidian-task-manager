@@ -51,22 +51,23 @@ Markdown task files are authoritative. The dashboard and Chrome search catalog a
 
 ## Storage layout
 
-Tasks now live inside a project workspace instead of creating one folder per
-task. A project uses this synchronized layout:
+Tasks use a task-specific workspace in Inbox until they are explicitly moved
+to a Program or Area folder:
 
 ```text
-08 Tasks/Projects/<Project Name>/
-  project.md
+08 Tasks/Inbox/
   Tasks/<Task Title>/task.md
   Updates/<Task Title>/updates.md
   Files/<Task Title>/
 ```
 
-Tasks without a project use the same layout under `08 Tasks/Inbox/`. Assigning
-or changing a project from the dashboard physically moves both the task note
-and its update log into the selected project's workspace. Choosing **No
-project** moves them back to Inbox. The stable `task_id` remains in task
-frontmatter and never appears in filenames.
+Project membership is independent of storage. Assigning a project adds one
+nested tag such as `project/Basic_Needs_Expansion` and keeps the readable
+`project` property synchronized for dashboard labels and compatibility.
+Changing or clearing the project tag never moves the task, update history, or
+related files. Legacy folders under `08 Tasks/Projects/` remain untouched but
+are no longer the source of the Projects list. The stable `task_id` remains in
+task frontmatter and never appears in filenames.
 
 Every new task immediately receives matching task, update, and Files directories.
 Supporting files added through the dashboard, Gmail intake, Web Clipper, or an
@@ -83,7 +84,7 @@ The `FJG Task Manager` Google Apps Script saves matching messages into
 note includes versioned intake metadata. FJG Task Manager detects that note,
 creates a normal task with the matching status, writes the stable task ID and
 final file path into the email note, and moves that original Markdown email
-into the task's project or Inbox `Files/` folder.
+into the task's current `Files/` folder.
 
 Only marked notes are imported. Existing historical email files and new emails
 without a supported status prefix remain ordinary notes. The email is moved,
@@ -101,27 +102,29 @@ Live task notes use the readable task title. The stable `task_id` remains inside
 The dashboard keeps **Do First** as the opening view and adds two clear sections:
 
 - **Tasks** — switch among Recent Tasks, Do First, Do Soon, Ongoing, Waiting, Delegated, Inbox, On Hold, Due or Overdue, All Open, and Archived without leaving the dashboard.
-- **Projects** — scan every active project by open and total task counts, search the project list, archive finished projects, and switch to Archived Projects when older work is needed.
+- **Projects** — scan project tags across every Program and Area folder by open and total task counts, then open one tag to see its tasks together.
 
-Tasks without a project appear in a separate **No project** group and are physically stored in Inbox. The Archived task view reads task notes from the configured archive root and provides **Reopen to Do First**.
-
-Select **New Project** on the Projects screen to create a project before it has tasks. Project definitions are stored as synchronized vault workspaces at `08 Tasks/Projects/<Project Name>/project.md`; they remain visible with zero tasks and become immediately selectable in Quick Capture and the Chrome clipper.
-
-Open a project from the Projects screen and select **Rename Project** to change its name. The plugin validates the new name, prevents collisions, moves the complete project folder, and synchronizes the project and location metadata on its task records while preserving notes, updates, and files.
-
-When a registered project has zero open tasks, its card offers **Archive**. After confirmation, all completed tasks in that project move to `08 Tasks/Archive/` and the project workspace moves to `08 Tasks/Project Archive/`. Nothing is deleted. **Archived Projects** lists the finished project and provides **Reopen**; reopening returns only the project definition to the active list, while its tasks remain archived until explicitly reopened.
+Tasks without a project appear in a separate **No project** group. A new
+project tag is created from the project picker on a task; it does not create a
+folder. Existing task files with a readable `project` property are backfilled
+with the matching nested tag during plugin startup without changing their
+paths. The Archived task view reads task notes from the configured archive root
+and provides **Reopen to Do First**.
 
 Each active task row includes an inline due-date action beside its project, update, and archive controls. It shows the current `YYYY-MM-DD` value or **Add due date**, then opens a native date picker where the date can be saved or cleared. The task note and update history are refreshed immediately after the change.
 
 Use **Rename** on a task row to change the task name and its storage paths together. Standard workspaces rename the matching `Tasks`, `Updates`, and `Files` task folders; relocated workspaces rename the complete task bundle. The plugin rejects unsafe or colliding names, updates title, location, heading, and related-file metadata, and restores the original folders and task record if any step fails.
 
-Changing a task's project now relocates its complete project-scoped workspace in the same operation. For standard tasks, the matching `Tasks/<Task Name>/`, `Files/<Task Name>/`, and optional `Updates/<Task Name>/` folders move together to the selected project. Relocated self-contained task bundles are safely converted back to the standard three-folder project layout. The plugin validates the destination and collisions before moving, rewrites task and shared related-file paths, and rolls back folders and metadata together if any write fails.
+Changing a task's project updates only its project tag and readable project
+label. The complete workspace stays exactly where it is, including tasks that
+have already been moved into `02 Programs/` or `03 Areas/`. The task note and
+update history are restored together if a metadata write fails.
 
 Each task row shows its two newest task updates without redundantly repeating the task title inside the parent task card. The cards refresh after an update is saved and when Obsidian reports a task-file change; **View all** opens the task's complete update log.
 
-Each task also includes a compact **Related files** section backed by its task-specific directory in the project or Inbox `Files/` area. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** ensures and copies the portable vault-relative `Files/<Task Title>/` path used by Obsidian Web Clipper; **Open folder** reveals the task workspace in Obsidian.
+Each task also includes a compact **Related files** section backed by its task-specific `Files/` directory. Markdown notes show excerpts, images show thumbnails, and other supporting files show their type, size, and workspace-relative location. **Add file** can create a new working note or import existing files; **Copy path** ensures and copies the portable vault-relative `Files/<Task Title>/` path used by Obsidian Web Clipper; **Open folder** reveals the task workspace in Obsidian.
 
-Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The selected destination receives a readable task collection named after the folder—for example, `Basic Needs Tasks/`—and each relocated task gets its own child folder containing `task.md`, `updates.md`, `Files/`, and any user-created notes or subfolders stored inside that task's bundle. For a standard Inbox or project task, the ownership boundary is the exact matching `Tasks/<Task Name>/`, `Updates/<Task Name>/`, and `Files/<Task Name>/` folders; sibling project-level material is never moved automatically. The stable ID, status, project assignment, metadata, update history, and file references stay together, and references from other tasks are rewritten when they point into the moved task workspace.
+Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The selected destination receives a readable task collection named after the folder—for example, `Basic Needs Tasks/`—and each relocated task gets its own child folder containing `task.md`, `updates.md`, `Files/`, and any user-created notes or subfolders stored inside that task's bundle. For a standard Inbox task, the ownership boundary is the exact matching `Tasks/<Task Name>/`, `Updates/<Task Name>/`, and `Files/<Task Name>/` folders. The stable ID, status, project tag, metadata, update history, and file references stay together, and references from other tasks are rewritten when they point into the moved task workspace.
 
 ## Quick capture
 
@@ -160,7 +163,7 @@ The native modal searches the live task catalog and requires the user to select 
 
 ## Ask Claudian about tasks
 
-Task Manager generates `Task Manager Briefing.md` inside the configured active workspace root. The note is rebuilt from the authoritative Task Manager index whenever the dashboard refreshes. It contains every active and archived dashboard task, registered projects (including projects without tasks), task details and notes, status, due date, delegation, recent update history, and links back to the task, project, and full update notes.
+Task Manager generates `Task Manager Briefing.md` inside the configured active workspace root. The note is rebuilt from the authoritative Task Manager index whenever the dashboard refreshes. It contains every active and archived dashboard task grouped by project tag, plus task details and notes, status, due date, delegation, recent update history, and links back to the task and full update notes.
 
 Click **Open Task Briefing** in the dashboard (or run **FJG Task Manager: Open Task Briefing**) to regenerate and open the note directly in Obsidian. Then ask Claudian a natural-language question such as “What is the status of my projects this week?” while the briefing note is open. The dashboard's **Refresh** button also regenerates the briefing.
 

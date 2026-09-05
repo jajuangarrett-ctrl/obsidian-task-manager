@@ -179,7 +179,7 @@ export class TaskProjectPickerModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle(`Project: ${this.taskTitle}`);
+    this.setTitle(`Project tag: ${this.taskTitle}`);
     this.render();
   }
 
@@ -190,13 +190,13 @@ export class TaskProjectPickerModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Search an existing project, choose No project, or explicitly create and assign a new one.",
+      text: "Search an existing project tag, choose No project, or create a new tag. Project tags never move the task.",
       cls: "fjg-project-picker-intro"
     });
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search projects", "aria-label": "Search projects" }
+      attr: { placeholder: "Search project tags", "aria-label": "Search project tags" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
@@ -210,7 +210,7 @@ export class TaskProjectPickerModal extends Modal {
     this.projectButton(choices, "No project", "", !this.currentProject);
     const options = filterProjectPickerOptions(this.projectNames(), this.query);
     if (!options.length) {
-      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No existing projects match this search." });
+      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No existing project tags match this search." });
     } else {
       for (const project of options) this.projectButton(choices, project, project, project === this.currentProject);
     }
@@ -219,7 +219,7 @@ export class TaskProjectPickerModal extends Modal {
     if (createName) {
       const create = this.contentEl.createEl("button", {
         cls: "mod-cta fjg-project-picker-create",
-        text: `Create project “${createName}” and assign`,
+        text: `Create project tag “${createName}” and assign`,
         attr: { type: "button" }
       });
       create.addEventListener("click", async () => {
@@ -290,7 +290,7 @@ export class TaskRelocationModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Choose a folder inside 02 Programs or 03 Areas. The complete task-named workspace, including user-created notes and subfolders inside it, will move together; sibling project material stays in place, and status and project stay unchanged.",
+      text: "Choose a folder inside 02 Programs or 03 Areas. The complete task-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and project tag stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     this.contentEl.createEl("p", {

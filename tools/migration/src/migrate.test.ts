@@ -18,7 +18,7 @@ describe("legacy migration", () => {
     }], { now: new Date("2026-07-27T16:00:00.000Z") });
     expect(item.record?.task_id).toBe("FJG-1234");
     expect(item.record?.status).toBe("do-first");
-    expect(item.record?.tags).toEqual(["task"]);
+    expect(item.record?.tags).toEqual(["task", "project/Basic_Needs"]);
     expect(item.record?.delegated_to).toBe("Amanda");
     expect(item.updatesMarkdown).toContain("Packet received.");
     expect(item.legacyTags).toEqual(["DoFirst", "legacy-tag"]);

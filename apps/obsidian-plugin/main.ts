@@ -90,7 +90,6 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.addCommand({ id: "open-task-briefing", name: "Open Task Briefing", callback: () => void this.openTaskBriefing() });
     this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
     this.addCommand({ id: "unified-capture", name: "Capture Task, Agenda, or Update", callback: () => this.openUnifiedCaptureModal() });
-    this.addCommand({ id: "create-project", name: "Create Project", callback: () => this.openCreateProjectModal() });
     this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
     this.addCommand({ id: "append-task-update", name: "Append Task Update", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
@@ -418,16 +417,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       task.record.project,
       () => this.projectNames(),
       async (projectName) => this.changeProject(taskId, projectName),
-      async (projectName) => {
-        const project = await this.workspaceService.createProject(projectName);
-        try {
-          await this.changeProject(taskId, project.record.name);
-        } catch (error) {
-          throw new Error(
-            `Project created, but the task could not be assigned: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
+      async (projectName) => this.changeProject(taskId, projectName)
     ).open();
   }
 
@@ -603,17 +593,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async changeProject(taskId: string, projectName: string): Promise<void> {
-    const previousPath = this.workspaceService.getById(taskId).taskFile.path;
     const task = await this.workspaceService.changeProject(taskId, projectName);
-    const workspaceMoved = task.taskFile.path !== previousPath;
     const assignment = task.record.project
-      ? `Task project set to ${task.record.project}: ${task.record.title}`
-      : `Task moved to No project: ${task.record.title}`;
-    new Notice(
-      workspaceMoved
-        ? `${assignment}. Workspace moved to ${task.record.location || task.taskFile.parent?.path || task.folderPath}.`
-        : assignment
-    );
+      ? `Project tag set to ${task.record.project}: ${task.record.title}. Folder unchanged.`
+      : `Project tag removed: ${task.record.title}. Folder unchanged.`;
+    new Notice(assignment);
     this.refreshDashboard();
   }
 

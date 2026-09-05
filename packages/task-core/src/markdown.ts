@@ -1,6 +1,7 @@
 import YAML from "yaml";
 import { createTaskId, createUpdateId } from "./ids";
 import { assertTransition, isRecognizedTaskStatus, normalizeStatus } from "./status";
+import { projectNameFromTags, syncProjectTag } from "./project-tags";
 import {
   NewTaskInput,
   TASK_SCHEMA_VERSION,
@@ -46,6 +47,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
   const status = normalizeStatus(input.status);
   const completedAt = status === "completed" ? input.updatedAt || createdAt : "";
   const archivedAt = status === "archived" ? input.updatedAt || createdAt : "";
+  const project = cleanInline(input.project);
   return {
     schema_version: TASK_SCHEMA_VERSION,
     task_id: input.taskId || createTaskId(),
@@ -57,7 +59,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     updated_at: input.updatedAt || createdAt,
     completed_at: completedAt,
     archived_at: archivedAt,
-    project: cleanInline(input.project),
+    project,
     delegated_to: cleanInline(input.delegatedTo),
     source_type: input.source?.type || "manual",
     source_title: cleanInline(input.source?.title),
@@ -65,7 +67,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     legacy_ids: uniqueStrings(input.legacyIds),
     legacy_status: cleanInline(input.legacyStatus),
     related_files: [],
-    tags: normalizeTags(input.tags)
+    tags: syncProjectTag(normalizeTags(input.tags), project)
   };
 }
 
@@ -125,15 +127,17 @@ export function updateTaskFields(
   patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "tags" | "location">>,
   at = new Date()
 ): TaskRecord {
+  const project = patch.project === undefined ? record.project : cleanInline(patch.project);
+  const tags = patch.tags === undefined ? record.tags : normalizeTags(patch.tags);
   return normalizeRecord({
     ...record,
     ...patch,
     title: patch.title === undefined ? record.title : cleanTitle(patch.title),
     due: patch.due === undefined ? record.due : cleanDate(patch.due),
-    project: patch.project === undefined ? record.project : cleanInline(patch.project),
+    project,
     delegated_to: patch.delegated_to === undefined ? record.delegated_to : cleanInline(patch.delegated_to),
     related_files: patch.related_files === undefined ? record.related_files : uniqueStrings(patch.related_files),
-    tags: patch.tags === undefined ? record.tags : normalizeTags(patch.tags),
+    tags: patch.project === undefined ? tags : syncProjectTag(tags, project),
     location: patch.location === undefined ? record.location : cleanInline(patch.location),
     updated_at: at.toISOString()
   });
@@ -188,6 +192,8 @@ export function renderSource(source: TaskUpdateInput["source"]): string {
 }
 
 function normalizeRecord(record: TaskRecord): TaskRecord {
+  const normalizedTags = normalizeTags(record.tags);
+  const project = cleanInline(record.project) || projectNameFromTags(normalizedTags);
   const normalized: TaskRecord = {
     schema_version: TASK_SCHEMA_VERSION,
     task_id: cleanInline(record.task_id),
@@ -199,7 +205,7 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     updated_at: cleanInline(record.updated_at),
     completed_at: cleanInline(record.completed_at),
     archived_at: cleanInline(record.archived_at),
-    project: cleanInline(record.project),
+    project,
     delegated_to: cleanInline(record.delegated_to),
     source_type: record.source_type === "web" || record.source_type === "email" || record.source_type === "migration" ? record.source_type : "manual",
     source_title: cleanInline(record.source_title),
@@ -207,7 +213,7 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     legacy_ids: uniqueStrings(record.legacy_ids),
     legacy_status: cleanInline(record.legacy_status),
     related_files: uniqueStrings(record.related_files),
-    tags: normalizeTags(record.tags)
+    tags: syncProjectTag(normalizedTags, project)
   };
   const location = cleanInline(record.location);
   if (location) normalized.location = location;
