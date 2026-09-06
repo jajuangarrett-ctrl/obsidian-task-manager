@@ -27,6 +27,50 @@ export interface DashboardProjectPickerOption {
   name: string;
 }
 
+export class ArchiveTaskModal extends Modal {
+  constructor(
+    app: App,
+    private readonly taskTitle: string,
+    private readonly submit: () => Promise<void>
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("fjg-archive-task-modal");
+    this.setTitle("Are you sure?");
+    this.contentEl.createEl("p", {
+      text: `Archive ${this.taskTitle}?`
+    });
+    this.contentEl.createEl("p", {
+      text: "The task will move to Archived. You can reopen it later.",
+      cls: "setting-item-description"
+    });
+    new Setting(this.contentEl)
+      .addButton((button) => button
+        .setButtonText("No")
+        .onClick(() => this.close()))
+      .addButton((button) => button
+        .setButtonText("Yes")
+        .setWarning()
+        .onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await this.submit();
+            this.close();
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : String(error), 8000);
+          } finally {
+            button.setDisabled(false);
+          }
+        }));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export class TaskDueDateModal extends Modal {
   private value: string;
 

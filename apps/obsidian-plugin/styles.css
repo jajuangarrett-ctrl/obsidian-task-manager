@@ -873,6 +873,7 @@
 }
 
 .fjg-task-folder-button,
+.fjg-task-file-focus-button,
 .fjg-task-copy-path-button {
   display: inline-flex;
   align-items: center;

@@ -197,6 +197,32 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("archives a confirmed task and preserves its project tag and identity", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({
+      taskId: "tsk_confirmed_archive",
+      title: "Archive after confirmation",
+      status: "do-first",
+      project: "Basic Needs Expansion"
+    });
+
+    const archived = await service.changeStatus(task.record.task_id, "archived");
+
+    expect(archived).toMatchObject({
+      archived: true,
+      record: {
+        task_id: "tsk_confirmed_archive",
+        title: "Archive after confirmation",
+        status: "archived",
+        project: "Basic Needs Expansion"
+      }
+    });
+    expect(archived.record.tags).toContain("project/Basic_Needs_Expansion");
+    expect(archived.taskFile.path).toBe("08 Tasks/Archive/Tasks/Archive after confirmation/task.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Archive after confirmation/task.md")).toBeNull();
+  });
+
   it("discovers files stored in the task-specific Files folder without requiring metadata backfill", async () => {
     const { service, vault } = createService();
     await service.initialize();

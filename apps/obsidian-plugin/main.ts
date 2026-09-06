@@ -12,6 +12,7 @@ import { TaskCatalogServer } from "./src/catalog-server";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import {
   ArchiveProjectModal,
+  ArchiveTaskModal,
   CreateProjectModal,
   CreateTaskModal,
   RenameProjectModal,
@@ -147,8 +148,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }});
     this.addCommand({ id: "archive-task", name: "Archive Task", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
-      if (!task) return false;
-      if (!checking) this.changeStatus(task.record.task_id, "archived");
+      if (!task || task.archived) return false;
+      if (!checking) this.openArchiveTaskModal(task.record.task_id);
       return true;
     }});
     this.addCommand({ id: "reopen-task-do-first", name: "Reopen Task to Do First", checkCallback: (checking) => {
@@ -437,6 +438,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const renamed = await this.workspaceService.renameTask(taskId, nextTitle);
       new Notice(`Task renamed to ${renamed.record.title}.`);
       this.refreshDashboard();
+    }).open();
+  }
+
+  openArchiveTaskModal(taskId: string): void {
+    const task = this.workspaceService.getById(taskId);
+    if (task.archived || task.record.status === "archived") return;
+    new ArchiveTaskModal(this.app, task.record.title, async () => {
+      await this.changeStatus(taskId, "archived");
     }).open();
   }
 

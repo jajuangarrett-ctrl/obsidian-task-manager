@@ -596,6 +596,15 @@ export class TaskDashboardView extends ItemView {
     setIcon(folderIcon, "folder-open");
     folder.createSpan({ text: "Folder" });
     folder.addEventListener("click", () => void this.taskPlugin.openTaskFileLocation(task.record.task_id));
+    const fileFocusLocation = controls.createEl("button", {
+      text: "Show in file",
+      cls: "fjg-task-file-focus-button",
+      attr: {
+        type: "button",
+        "aria-label": `Reveal the task Files location in FJG File Focus for ${task.record.title}`
+      }
+    });
+    fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
     const copyPath = controls.createEl("button", {
       cls: "fjg-task-copy-path-button",
       attr: { type: "button", "aria-label": `Copy the task attachment folder path for ${task.record.title}` }
@@ -656,22 +665,13 @@ export class TaskDashboardView extends ItemView {
         attr: { type: "button", "aria-label": `Add a file to ${task.record.title}` }
       });
       addFile.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
-      const fileFocusLocation = menu.createEl("button", {
-        text: "Show in File Focus",
-        attr: { type: "button", "aria-label": `Reveal the task Files location in FJG File Focus for ${task.record.title}` }
-      });
-      fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
       const archive = menu.createEl("button", {
         text: "Archive",
         attr: { type: "button", "aria-label": `Archive ${task.record.title}` }
       });
-      archive.addEventListener("click", async () => {
-        try {
-          await this.taskPlugin.changeStatus(task.record.task_id, "archived");
-          this.render();
-        } catch (error) {
-          new Notice(error instanceof Error ? error.message : String(error));
-        }
+      archive.addEventListener("click", () => {
+        more.open = false;
+        this.taskPlugin.openArchiveTaskModal(task.record.task_id);
       });
     }
     this.renderRecentUpdates(row, task);
