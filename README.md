@@ -126,6 +126,34 @@ Each task also includes a compact **Related files** section backed by its task-s
 
 Use **Move folder** on an active task to relocate its complete task workspace into an existing subfolder of `02 Programs/` or `03 Areas/`. The selected destination receives a readable task collection named after the folder—for example, `Basic Needs Tasks/`—and each relocated task gets its own child folder containing `task.md`, `updates.md`, `Files/`, and any user-created notes or subfolders stored inside that task's bundle. For a standard Inbox task, the ownership boundary is the exact matching `Tasks/<Task Name>/`, `Updates/<Task Name>/`, and `Files/<Task Name>/` folders. The stable ID, status, project tag, metadata, update history, and file references stay together, and references from other tasks are rewritten when they point into the moved task workspace.
 
+## Subtasks
+
+Expand **Subtasks** on a task card or Kanban card and select **Add subtask**.
+Each child has a title, status, due date, notes, completion checkbox, file list,
+and **Copy path**. Its attachment folder is created immediately under the
+parent's existing `Files/Subtasks/<Title>/` directory. Paste the copied path into
+Obsidian Clipper to send emails directly to that child. Captured files appear
+when the vault refreshes. **Attach file** imports files or creates notes;
+**From vault** copies an existing vault file, preserving the original.
+
+Paths are stored relative to the parent Files directory, so parent renames and
+**Move folder**, archive, and reopen retain attachment ownership. Copy a fresh
+destination after relocating a parent; paths already pasted into an external
+Clipper template cannot update themselves. Renaming a subtask changes its display
+title while keeping its existing capture destination stable.
+
+Use **More → Convert to subtask** for one existing task or **Convert tasks** in
+the header for a reviewed batch. Choose one parent and the source tasks, review
+the list, then convert. Notes, status, due date, and history carry over; owned
+Files move into the child folder. Original task records are archived. External
+shared references remain in those archived records. A task that already has
+subtasks cannot be converted again. Batches commit one task at a time and stop
+on failure, reporting exactly how many succeeded.
+
+**Promote** creates a full task, moves that child's files into its new Files
+directory, and preserves notes and history. Completing the last child does not
+automatically complete its parent. Existing tasks are never converted on startup.
+
 ## Quick capture
 
 Use **FJG Task Manager: Quick Capture Task**, the circle-plus ribbon icon, or **Capture Task** on the dashboard.

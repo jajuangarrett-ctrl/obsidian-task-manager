@@ -1822,3 +1822,13 @@
     grid-template-columns: minmax(96px, 0.8fr) minmax(0, 1.2fr);
   }
 }
+.fjg-subtasks { margin-top: 10px; padding: 8px 0; border-top: 1px solid var(--background-modifier-border); }
+.fjg-subtasks > summary { cursor: pointer; color: var(--text-muted); font-size: 12px; }
+.fjg-subtask-progress { width: 72px; height: 6px; margin-left: 12px; accent-color: var(--interactive-accent); }
+.fjg-subtask-item { padding: 10px 0 10px 14px; border-bottom: 1px solid var(--background-modifier-border); }
+.fjg-subtask-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.fjg-subtask-title, .fjg-subtask-done { flex: 1 1 160px; }
+.fjg-subtask-done { text-decoration: line-through; color: var(--text-muted); }
+.fjg-subtask-line button { font-size: 11px; padding: 3px 7px; height: auto; }
+.fjg-subtask-notes { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 240px; overflow: auto; }
+.fjg-convert-list { max-height: 260px; overflow-y: auto; }

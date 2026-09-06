@@ -2,6 +2,8 @@ import { App, normalizePath, TFile, TFolder } from "obsidian";
 import {
   appendUpdateMarkdown,
   createTaskRecord,
+  createTaskId,
+  TaskSubtask,
   NewTaskInput,
   normalizeStatus,
   parseTaskMarkdown,
@@ -179,7 +181,10 @@ export class TaskWorkspaceService {
     const next = new Map<string, IndexedTask>();
     const nextProjects = new Map<string, IndexedProject>();
     for (const file of this.app.vault.getMarkdownFiles()) {
+      // Captured emails and preserved source notes inside subtask folders are attachments.
+      if (file.path.includes("/Subtasks/")) continue;
       const legacyWorkspace = file.name === "task.md"
+        && !file.path.includes("/Tasks/")
         && (file.path.startsWith(activePrefix) || file.path.startsWith(archivePrefix));
       const projectTask = file.path.startsWith(projectPrefix) && file.path.includes("/Tasks/");
       const inboxTask = file.path.startsWith(inboxPrefix) && file.path.includes("/Tasks/");
@@ -890,6 +895,175 @@ export class TaskWorkspaceService {
     }
     await this.refresh();
     return this.getById(taskId);
+  }
+
+  subtaskFolder(taskId: string, subtaskId: string): string {
+    const task = this.getById(taskId);
+    const sub = task.record.subtasks.find((item) => item.id === subtaskId);
+    if (!sub) throw new Error("Subtask no longer exists. Refresh the dashboard.");
+    const relative = sub.attachment_folder;
+    if (!/^Subtasks\/[^/\\]+$/.test(relative) || relative.split("/").some((part) => part === "." || part === "..")) {
+      throw new Error("Invalid subtask attachment directory.");
+    }
+    return normalizePath(`${this.relatedFilesPath(task)}/${relative}`);
+  }
+
+  subtaskFiles(taskId: string, subtaskId: string): TFile[] {
+    const prefix = `${this.subtaskFolder(taskId, subtaskId)}/`;
+    return this.app.vault.getFiles().filter((file) => file.path.startsWith(prefix));
+  }
+
+  async ensureSubtaskFolder(taskId: string, subtaskId: string): Promise<string> {
+    const path = this.subtaskFolder(taskId, subtaskId);
+    await this.ensureFolder(path);
+    return path;
+  }
+
+  private async writeSubtasks(taskId: string, change: (items: TaskSubtask[]) => TaskSubtask[]): Promise<void> {
+    const task = this.getById(taskId);
+    const document = parseTaskMarkdown(await this.app.vault.read(task.taskFile));
+    const next = updateTaskFields(document.record, { subtasks: change(document.record.subtasks) });
+    await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
+    await this.refresh();
+  }
+
+  async addSubtask(taskId: string, title: string): Promise<TaskSubtask> {
+    const task = this.getById(taskId);
+    if (task.archived) throw new Error("Reopen the parent task first.");
+    const clean = title.trim();
+    if (!clean) throw new Error("Enter a subtask title.");
+    if ([".", ".."].includes(sanitizeTitleForPath(clean))) throw new Error("Enter a descriptive subtask title.");
+    const id = createTaskId();
+    const base = `Subtasks/${sanitizeTitleForPath(clean)}`;
+    let folder = base;
+    let suffix = 2;
+    while (task.record.subtasks.some((item) => item.attachment_folder.toLowerCase() === folder.toLowerCase())
+      || await this.app.vault.adapter.stat(`${this.relatedFilesPath(task)}/${folder}`)) folder = `${base} (${suffix++})`;
+    const sub: TaskSubtask = { id, title: clean, completed: false, status: "do-soon", due: "", notes: "", history: "", source_task_id: "", attachment_folder: folder };
+    await this.ensureFolder(`${this.relatedFilesPath(task)}/${folder}`);
+    await this.writeSubtasks(taskId, (items) => [...items, sub]);
+    return sub;
+  }
+
+  async updateSubtask(taskId: string, id: string, patch: Partial<Pick<TaskSubtask, "title" | "status" | "due" | "notes">>): Promise<void> {
+    if (!this.getById(taskId).record.subtasks.some((item) => item.id === id)) throw new Error("Subtask not found.");
+    if (patch.title !== undefined && !patch.title.trim()) throw new Error("Enter a subtask title.");
+    await this.writeSubtasks(taskId, (items) => items.map((item) => item.id === id ? {
+      ...item, ...patch, completed: (patch.status || item.status) === "completed"
+    } : item));
+  }
+
+  async addSubtaskNote(taskId: string, id: string, title: string, body: string): Promise<TFile> {
+    const folder = await this.ensureSubtaskFolder(taskId, id);
+    const path = await this.availableFilePath(folder, `${safeRelatedFileName(title, "Note").replace(/\.md$/i, "")}.md`);
+    const file = await this.app.vault.create(path, body);
+    await this.refresh();
+    return file;
+  }
+
+  async importSubtaskFiles(taskId: string, id: string, files: File[]): Promise<void> {
+    const folder = await this.ensureSubtaskFolder(taskId, id);
+    for (const file of files) {
+      const path = await this.availableFilePath(folder, safeRelatedFileName(file.name, "Attachment"));
+      await this.app.vault.createBinary(path, await file.arrayBuffer());
+    }
+    await this.refresh();
+  }
+
+  async copyVaultFileToSubtask(taskId: string, id: string, file: TFile): Promise<void> {
+    const folder = await this.ensureSubtaskFolder(taskId, id);
+    const path = await this.availableFilePath(folder, file.name);
+    await this.app.vault.createBinary(path, await this.app.vault.readBinary(file));
+    await this.refresh();
+  }
+
+  async convertTaskToSubtask(sourceId: string, parentId: string): Promise<void> {
+    if (sourceId === parentId) throw new Error("A task cannot be its own parent.");
+    const source = this.getById(sourceId);
+    const parent = this.getById(parentId);
+    if (source.archived || parent.archived) throw new Error("Select open tasks for conversion.");
+    if (source.record.subtasks.length) throw new Error("Promote or move this task's subtasks before converting it.");
+    if (this.list({ includeArchived: true }).some((task) => task.record.subtasks.some((sub) => sub.source_task_id === sourceId))) {
+      throw new Error("This task has already been converted.");
+    }
+    const sourceContent = await this.app.vault.read(source.taskFile);
+    const parentContent = await this.app.vault.read(parent.taskFile);
+    const sourceFiles = this.relatedFilesPath(source);
+    const sourceFolder = this.app.vault.getAbstractFileByPath(sourceFiles);
+    // Legacy shared Files directories do not have an exclusive ownership boundary.
+    if (!source.legacyWorkspace && !source.relocatedBundle && !usesTaskArtifactLayout(source.taskFile)) {
+      throw new Error("Convert this older workspace to task folders first.");
+    }
+    const sub = await this.addSubtask(parentId, source.record.title);
+    const destination = `${this.subtaskFolder(parentId, sub.id)}/Attachments`;
+    const referenceSnapshots = await this.projectChangeReferenceSnapshots(sourceId, [{ from: sourceFiles, to: destination }]);
+    let moved = false;
+    try {
+      const history = source.updatesFile ? await this.app.vault.read(source.updatesFile) : "";
+      await this.writeSubtasks(parentId, (items) => items.map((item) => item.id === sub.id ? {
+        ...item, status: source.record.status, completed: source.record.status === "completed", due: source.record.due,
+        notes: source.notes, history, source_task_id: sourceId
+      } : item));
+      if (sourceFolder instanceof TFolder) {
+        await this.app.fileManager.renameFile(sourceFolder, destination);
+        moved = true;
+      }
+      for (const snapshot of referenceSnapshots) {
+        const document = parseTaskMarkdown(await this.app.vault.read(snapshot.task.taskFile));
+        await this.app.vault.modify(snapshot.task.taskFile, renderTaskMarkdown(updateTaskFields(document.record, {
+          related_files: document.record.related_files.map((path) => rewriteVaultPath(path, [{ from: sourceFiles, to: destination }]))
+        }), document.body));
+      }
+      // Retain external/shared references in the original archived task.
+      const document = parseTaskMarkdown(await this.app.vault.read(source.taskFile));
+      const references = document.record.related_files.map((path) => path.startsWith(`${sourceFiles}/`) ? destination + path.slice(sourceFiles.length) : path);
+      await this.app.vault.modify(source.taskFile, renderTaskMarkdown(updateTaskFields(document.record, { related_files: references }), document.body));
+      await this.refresh();
+      await this.changeStatus(sourceId, "archived");
+    } catch (error) {
+      if (moved && sourceFolder) await this.app.fileManager.renameFile(sourceFolder, sourceFiles);
+      for (const snapshot of referenceSnapshots) await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
+      await this.app.vault.modify(parent.taskFile, parentContent);
+      await this.app.vault.modify(source.taskFile, sourceContent);
+      await this.refresh();
+      throw error;
+    }
+  }
+
+  async promoteSubtask(parentId: string, subtaskId: string): Promise<IndexedTask> {
+    const parent = this.getById(parentId);
+    const sub = parent.record.subtasks.find((item) => item.id === subtaskId);
+    if (!sub) throw new Error("Subtask not found.");
+    const oldParent = await this.app.vault.read(parent.taskFile);
+    const sourcePath = await this.ensureSubtaskFolder(parentId, subtaskId);
+    const sourceFolder = this.app.vault.getAbstractFileByPath(sourcePath);
+    if (!(sourceFolder instanceof TFolder)) throw new Error("Subtask folder missing.");
+    const created = await this.createTask({ title: sub.title, status: sub.status, due: sub.due, project: parent.record.project, details: sub.notes });
+    const destination = `${this.relatedFilesPath(created)}/Subtask materials`;
+    const referenceSnapshots = await this.projectChangeReferenceSnapshots(created.record.task_id, [{ from: sourcePath, to: destination }]);
+    let moved = false;
+    try {
+      if (sub.history && created.updatesFile) await this.app.vault.modify(created.updatesFile, sub.history);
+      await this.app.fileManager.renameFile(sourceFolder, destination);
+      moved = true;
+      for (const snapshot of referenceSnapshots) {
+        const document = parseTaskMarkdown(await this.app.vault.read(snapshot.task.taskFile));
+        await this.app.vault.modify(snapshot.task.taskFile, renderTaskMarkdown(updateTaskFields(document.record, {
+          related_files: document.record.related_files.map((path) => rewriteVaultPath(path, [{ from: sourcePath, to: destination }]))
+        }), document.body));
+      }
+      await this.writeSubtasks(parentId, (items) => items.filter((item) => item.id !== subtaskId));
+      return this.getById(created.record.task_id);
+    } catch (error) {
+      if (moved) await this.app.fileManager.renameFile(sourceFolder, sourcePath);
+      for (const snapshot of referenceSnapshots) await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
+      await this.app.vault.modify(parent.taskFile, oldParent);
+      // Remove only the newly-created, uncommitted task notes. Attachments were restored above.
+      if (created.updatesFile) await this.app.vault.delete(created.updatesFile, true);
+      await this.app.vault.delete(created.taskFile, true);
+      await this.refresh();
+      throw error;
+    }
   }
 
   async createRelatedNote(taskId: string, title: string, content = ""): Promise<TFile> {
@@ -1608,12 +1782,18 @@ export class TaskWorkspaceService {
         : this.relatedFilesPathForWorkspace(normalizedTarget, record, false, task.legacyWorkspace);
       await this.ensureFolder(filesPath);
       for (const related of task.relatedFiles) {
+        const ownedRoot = `${this.relatedFilesPath(task)}/`;
+        // Explicit references to another workspace are shared, not owned attachments.
+        if (!related.file.path.startsWith(ownedRoot)) continue;
         const prefix = usesTaskArtifactLayout(task.taskFile) || task.relocatedBundle
           ? ""
           : `${sanitizeTitleForPath(record.title)} - `;
-        const name = related.file.name.startsWith(prefix)
+        const name = related.file.path.startsWith(`${ownedRoot}Subtasks/`)
+          ? related.file.path.slice(ownedRoot.length)
+          : related.file.name.startsWith(prefix)
           ? related.file.name
           : `${prefix}${related.file.name}`;
+        await this.ensureFolder(`${filesPath}/${name}`.slice(0, `${filesPath}/${name}`.lastIndexOf("/")));
         moves.unshift({
           file: related.file,
           from: related.file.path,
@@ -1627,6 +1807,10 @@ export class TaskWorkspaceService {
         await this.app.fileManager.renameFile(move.file, move.to);
         completed.push({ file: move.file, from: move.from });
       }
+      const document = parseTaskMarkdown(await this.app.vault.read(task.taskFile));
+      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(updateTaskFields(document.record, {
+        related_files: document.record.related_files.map((path) => moves.find((move) => move.from === path)?.to || path)
+      }), document.body));
     } catch (error) {
       for (const move of completed.reverse()) {
         try {

@@ -67,6 +67,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     legacy_ids: uniqueStrings(input.legacyIds),
     legacy_status: cleanInline(input.legacyStatus),
     related_files: [],
+    subtasks: [],
     tags: syncProjectTag(normalizeTags(input.tags), project)
   };
 }
@@ -124,7 +125,7 @@ export function transitionTaskRecord(record: TaskRecord, target: string, at = ne
 
 export function updateTaskFields(
   record: TaskRecord,
-  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "tags" | "location">>,
+  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "subtasks" | "tags" | "location">>,
   at = new Date()
 ): TaskRecord {
   const project = patch.project === undefined ? record.project : cleanInline(patch.project);
@@ -137,6 +138,7 @@ export function updateTaskFields(
     project,
     delegated_to: patch.delegated_to === undefined ? record.delegated_to : cleanInline(patch.delegated_to),
     related_files: patch.related_files === undefined ? record.related_files : uniqueStrings(patch.related_files),
+    subtasks: patch.subtasks === undefined ? record.subtasks : normalizeSubtasks(patch.subtasks),
     tags: patch.project === undefined ? tags : syncProjectTag(tags, project),
     location: patch.location === undefined ? record.location : cleanInline(patch.location),
     updated_at: at.toISOString()
@@ -213,11 +215,38 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     legacy_ids: uniqueStrings(record.legacy_ids),
     legacy_status: cleanInline(record.legacy_status),
     related_files: uniqueStrings(record.related_files),
+    subtasks: normalizeSubtasks(record.subtasks),
     tags: syncProjectTag(normalizedTags, project)
   };
   const location = cleanInline(record.location);
   if (location) normalized.location = location;
   return normalized;
+}
+
+function normalizeSubtasks(values: unknown): TaskRecord["subtasks"] {
+  if (values === undefined || values === null) return [];
+  if (!Array.isArray(values)) throw new Error("Subtasks must be a list.");
+  const seen = new Set<string>();
+  return values.flatMap((value, index) => {
+    if (!value || typeof value !== "object") throw new Error("Invalid subtask record.");
+    const candidate = value as Record<string, unknown>;
+    const title = cleanInline(candidate.title);
+    if (!title) throw new Error("Subtask title is required.");
+    const id = cleanInline(candidate.id) || `subtask-${index + 1}`;
+    if (seen.has(id)) throw new Error("Duplicate subtask ID.");
+    seen.add(id);
+    return [{
+      id,
+      title,
+      completed: candidate.completed === true || candidate.status === "completed",
+      status: candidate.completed === true ? "completed" : normalizeStatus(candidate.status || "do-soon"),
+      due: cleanDate(candidate.due),
+      notes: String(candidate.notes || ""),
+      history: String(candidate.history || ""),
+      source_task_id: cleanInline(candidate.source_task_id),
+      attachment_folder: cleanInline(candidate.attachment_folder)
+    }];
+  });
 }
 
 function defaultTaskBody(record: TaskRecord): string {

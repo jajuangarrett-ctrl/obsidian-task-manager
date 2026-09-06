@@ -16,6 +16,20 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = "low" | "normal" | "high";
 export type SourceType = "web" | "email" | "manual" | "migration";
 
+/** A lightweight action that remains inside its parent task workspace. */
+export interface TaskSubtask {
+  id: string;
+  title: string;
+  completed: boolean;
+  status: TaskStatus;
+  due: string;
+  notes: string;
+  history: string;
+  source_task_id: string;
+  /** Relative to the parent's Files directory; survives relocation and rename. */
+  attachment_folder: string;
+}
+
 export interface TaskRecord {
   schema_version: typeof TASK_SCHEMA_VERSION;
   task_id: string;
@@ -36,6 +50,8 @@ export interface TaskRecord {
   legacy_status: string;
   /** Explicit vault paths for files attached to this task. */
   related_files: string[];
+  /** Child actions and their dedicated attachment destinations. */
+  subtasks: TaskSubtask[];
   tags: string[];
   /** Vault folder containing the canonical task note, when supplied by Obsidian. */
   location?: string;

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.0 — 2026-09-06
+
+- Add collapsible subtasks to task and Kanban cards, with progress, status, due date, notes, files, and Copy path.
+- Create dedicated subtask attachment folders relative to each parent's Files directory, preserving destinations through rename, relocation, archive and reopen.
+- Add reviewed individual and bulk conversion of existing tasks, preserving notes and history, moving owned attachments, and archiving original records. Nested conversion is rejected.
+- Add promotion to a full task with files and preserved context, and include subtasks in dashboard search and Task Manager Briefing.
+- Preserve nested subtask attachment paths during archiving and correct detection of archived task-folder layouts.
+
 ## 0.14.1 — 2026-08-31
 
 ### Fixed

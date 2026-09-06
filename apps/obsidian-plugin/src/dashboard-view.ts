@@ -20,6 +20,9 @@ import {
   TaskViewKey
 } from "./dashboard-model";
 import type { IndexedTask } from "./workspace-service";
+import { ConvertSubtasksModal, PromoteSubtaskModal, SubtaskEditModal, SubtaskVaultFileModal } from "./subtask-modals";
+import { TaskFileModal } from "./modals";
+import { taskFolderClipboardPath } from "./task-folder-path";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
 
@@ -30,6 +33,7 @@ export class TaskDashboardView extends ItemView {
   private view: TaskViewKey = "do-first";
   private project = ALL_PROJECTS;
   private readonly expandedUpdateTasks = new Set<string>();
+  private readonly expandedSubtasks = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private readonly taskPlugin: FjgTaskManagerPlugin) {
     super(leaf);
@@ -90,6 +94,8 @@ export class TaskDashboardView extends ItemView {
     const actions = header.createDiv({ cls: "fjg-header-actions" });
     const createButton = actions.createEl("button", { text: "Capture Task", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
+    const convert = actions.createEl("button", { text: "Convert tasks" });
+    convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render()).open());
     const briefingButton = actions.createEl("button", {
       text: "Open Task Briefing",
       attr: {
@@ -363,6 +369,7 @@ export class TaskDashboardView extends ItemView {
     if (task.record.delegated_to) meta.createSpan({ text: task.record.delegated_to, cls: "is-delegated" });
     const latestUpdate = task.updates.find((update) => update.type !== "created");
     if (latestUpdate) card.createEl("p", { text: latestUpdate.text, cls: "fjg-kanban-card-update" });
+    this.renderSubtasks(card, task);
 
     const fallback = card.createEl("label", { cls: "fjg-kanban-status-control" });
     fallback.createSpan({ text: "Status" });
@@ -665,6 +672,8 @@ export class TaskDashboardView extends ItemView {
         attr: { type: "button", "aria-label": `Add a file to ${task.record.title}` }
       });
       addFile.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
+      const convert = menu.createEl("button", { text: "Convert to subtask" });
+      convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open());
       const archive = menu.createEl("button", {
         text: "Archive",
         attr: { type: "button", "aria-label": `Archive ${task.record.title}` }
@@ -674,7 +683,68 @@ export class TaskDashboardView extends ItemView {
         this.taskPlugin.openArchiveTaskModal(task.record.task_id);
       });
     }
+    this.renderSubtasks(row, task);
     this.renderRecentUpdates(row, task);
+  }
+
+  private renderSubtasks(parent: HTMLElement, task: IndexedTask): void {
+    const service = this.taskPlugin.workspaceService;
+    const taskId = task.record.task_id;
+    const subs = task.record.subtasks;
+    const section = parent.createEl("details", { cls: "fjg-subtasks" });
+    section.open = this.expandedSubtasks.has(taskId);
+    section.addEventListener("toggle", () => { if (section.open) this.expandedSubtasks.add(taskId); else this.expandedSubtasks.delete(taskId); });
+    const summary = section.createEl("summary", { text: subs.length ? `Subtasks · ${subs.filter((sub) => sub.completed).length} of ${subs.length} complete` : "Subtasks · Add your first step" });
+    if (subs.length) {
+      const progress = summary.createEl("progress", { attr: { max: String(subs.length), value: String(subs.filter((sub) => sub.completed).length), "aria-label": "Subtask completion" } });
+      progress.addClass("fjg-subtask-progress");
+    }
+    const run = async (action: () => Promise<unknown>) => { try { await action(); this.render(); } catch (error) { new Notice(String(error), 8000); } };
+    for (const sub of subs) {
+      const item = section.createDiv({ cls: "fjg-subtask-item" });
+      const line = item.createDiv({ cls: "fjg-subtask-line" });
+      const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete subtask ${sub.title}` } });
+      check.checked = sub.completed; check.disabled = task.archived;
+      check.addEventListener("change", () => void run(() => service.updateSubtask(taskId, sub.id, { status: check.checked ? "completed" : "do-soon" })));
+      line.createSpan({ text: sub.title, cls: sub.completed ? "fjg-subtask-done" : "fjg-subtask-title" });
+      line.createSpan({ text: statusLabel(sub.status), cls: "fjg-task-static-meta" });
+      if (sub.due) line.createSpan({ text: `Due ${sub.due}`, cls: "fjg-task-static-meta" });
+      const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy subtask folder path for ${sub.title}` } });
+      copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Subtask folder path copied."); }));
+      if (!task.archived) {
+        const edit = line.createEl("button", { text: "Edit" });
+        edit.addEventListener("click", () => new SubtaskEditModal(this.app, sub, async (title, due, notes, status) => { await service.updateSubtask(taskId, sub.id, { title, due, notes, status }); this.render(); }).open());
+        const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to subtask ${sub.title}` } });
+        attach.addEventListener("click", () => new TaskFileModal(this.app, sub.title,
+          async (title, body) => { const file = await service.addSubtaskNote(taskId, sub.id, title, body); this.render(); await this.app.workspace.getLeaf("tab").openFile(file); },
+          async (files) => { await service.importSubtaskFiles(taskId, sub.id, files); this.render(); }).open());
+        const existing = line.createEl("button", { text: "From vault" });
+        existing.addEventListener("click", () => new SubtaskVaultFileModal(this.app, async (file) => { await service.copyVaultFileToSubtask(taskId, sub.id, file); this.render(); }).open());
+        const promote = line.createEl("button", { text: "Promote" });
+        promote.addEventListener("click", () => new PromoteSubtaskModal(this.app, sub.title, async () => { await service.promoteSubtask(taskId, sub.id); this.render(); }).open());
+      }
+      if (sub.notes) item.createEl("p", { text: sub.notes, cls: "fjg-subtask-notes" });
+      let files;
+      try { files = service.subtaskFiles(taskId, sub.id); } catch (error) { item.createEl("p", { text: String(error) }); continue; }
+      const attachments = item.createEl("details");
+      attachments.createEl("summary", { text: `${files.length} ${files.length === 1 ? "file" : "files"}` });
+      for (const file of files) {
+        const link = attachments.createEl("button", { text: file.name, attr: { title: file.path } });
+        link.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(file));
+      }
+      if (sub.history) {
+        const history = item.createEl("details"); history.createEl("summary", { text: "Preserved update history" });
+        history.createEl("pre", { text: sub.history, cls: "fjg-subtask-notes" });
+      }
+    }
+    if (!task.archived) {
+      const add = section.createEl("button", { text: "+ Add subtask" });
+      add.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
+        const sub = await service.addSubtask(taskId, title);
+        await service.updateSubtask(taskId, sub.id, { due, notes, status });
+        this.expandedSubtasks.add(taskId); this.render();
+      }).open());
+    }
   }
 
   private renderRecentUpdates(parent: HTMLElement, task: IndexedTask): void {
@@ -749,7 +819,8 @@ function taskMatchesSearch(task: IndexedTask, query: string): boolean {
     task.record.task_id,
     task.record.project,
     task.record.delegated_to,
-    task.record.status
+    task.record.status,
+    ...task.record.subtasks.map((sub) => `${sub.title} ${sub.notes}`)
   ].join(" ")).includes(query);
 }
 

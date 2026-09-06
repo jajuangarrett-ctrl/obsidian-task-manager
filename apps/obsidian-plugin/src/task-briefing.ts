@@ -65,6 +65,14 @@ export function renderTaskManagerBriefing(
       if (task.updatesPath) lines.push(`- Full update history: ${wikiLink(task.updatesPath, `${task.record.title} updates`)}`);
       lines.push("", "##### Details and notes", "");
       lines.push(task.notes.trim() ? blockquote(task.notes) : "_No task details or notes._", "");
+      if (task.record.subtasks?.length) {
+        lines.push("##### Subtasks", "");
+        for (const sub of task.record.subtasks) {
+          lines.push(`- [${sub.completed ? "x" : " "}] ${escapeMarkdown(sub.title)} · ${statusLabel(sub.status)}${sub.due ? ` · Due ${sub.due}` : ""}`);
+          if (sub.notes) lines.push(indent(sub.notes));
+        }
+        lines.push("");
+      }
       lines.push("##### Recent update history", "");
       if (!task.updates.length) {
         lines.push("_No task updates recorded._", "");

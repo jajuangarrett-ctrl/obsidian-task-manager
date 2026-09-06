@@ -180,7 +180,7 @@ function createService() {
   const app = {
     vault,
     fileManager: {
-      renameFile: (file: InstanceType<typeof obsidianMock.MockTFile>, target: string) => vault.renameFile(file, target)
+      renameFile: (file: InstanceType<typeof obsidianMock.MockTFile> | InstanceType<typeof obsidianMock.MockTFolder>, target: string) => file instanceof obsidianMock.MockTFolder ? vault.rename(file, target) : vault.renameFile(file, target)
     }
   };
   const settings = {
@@ -197,6 +197,91 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("keeps subtask destinations and captured emails through parent rename, relocation and archive/reopen", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Subtask parent", status: "do-first" });
+    const id = parent.record.task_id;
+    const sub = await service.addSubtask(id, "Review email");
+    const firstPath = service.subtaskFolder(id, sub.id);
+    await vault.create(`${firstPath}/Email.md`, "Captured email");
+    await service.refresh();
+    await service.updateSubtask(id, sub.id, { status: "completed", due: "2026-09-20" });
+    await service.renameTask(id, "Renamed parent");
+    expect(service.subtaskFiles(id, sub.id)).toHaveLength(1);
+    expect(service.subtaskFolder(id, sub.id)).not.toBe(firstPath);
+    await vault.createFolder("02 Programs/Test");
+    await service.relocateTask(id, "02 Programs/Test");
+    expect(service.subtaskFolder(id, sub.id)).toContain("02 Programs/Test/");
+    expect(service.subtaskFiles(id, sub.id)[0].name).toBe("Email.md");
+    await service.changeStatus(id, "archived");
+    expect(service.subtaskFiles(id, sub.id)).toHaveLength(1);
+    await service.changeStatus(id, "do-first");
+    expect(service.subtaskFiles(id, sub.id)).toHaveLength(1);
+    expect(service.getById(id).record.subtasks[0]).toMatchObject({ completed: true, due: "2026-09-20" });
+  });
+
+  it("converts existing work with files and history, then promotes it without stranding attachments", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Parent" });
+    const source = await service.createTask({ title: "Existing work", details: "Keep the context", due: "2026-09-19", status: "waiting" });
+    await service.addSubtask(parent.record.task_id, "Other action");
+    await service.createRelatedNote(source.record.task_id, "Email", "Keep the email");
+    await service.appendUpdate(source.record.task_id, { actor: "Franklin", text: "Approval requested" });
+    await service.convertTaskToSubtask(source.record.task_id, parent.record.task_id);
+    const sub = service.getById(parent.record.task_id).record.subtasks.find((item) => item.source_task_id === source.record.task_id)!;
+    expect(sub.notes).toContain("Keep the context");
+    expect(sub.history).toContain("Approval requested");
+    expect(sub.status).toBe("waiting");
+    expect(service.getById(source.record.task_id).archived).toBe(true);
+    expect(service.subtaskFiles(parent.record.task_id, sub.id)).toHaveLength(1);
+    const promoted = await service.promoteSubtask(parent.record.task_id, sub.id);
+    expect(promoted.record).toMatchObject({ status: "waiting", due: "2026-09-19" });
+    expect(promoted.relatedFiles.some((file) => file.file.name === "Email.md")).toBe(true);
+    expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(1);
+    expect(await vault.read(promoted.updatesFile as never)).toContain("Approval requested");
+  });
+
+  it("rolls conversion back if archiving the original fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Rollback parent" });
+    const source = await service.createTask({ title: "Rollback source" });
+    const file = await service.createRelatedNote(source.record.task_id, "Evidence", "Keep me");
+    const original = file.path;
+    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Rollback source/task.md";
+    await expect(service.convertTaskToSubtask(source.record.task_id, parent.record.task_id)).rejects.toThrow();
+    expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(0);
+    expect(service.getById(source.record.task_id).archived).toBe(false);
+    expect(vault.getAbstractFileByPath(original)).not.toBeNull();
+  });
+
+  it("rejects self-conversion and unsafe paths, and gives duplicate subtask titles separate destinations", async () => {
+    const { service } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Guard parent" });
+    await expect(service.convertTaskToSubtask(parent.record.task_id, parent.record.task_id)).rejects.toThrow("own parent");
+    const one = await service.addSubtask(parent.record.task_id, "Step");
+    const two = await service.addSubtask(parent.record.task_id, "Step");
+    expect(one.attachment_folder).not.toBe(two.attachment_folder);
+    service.getById(parent.record.task_id).record.subtasks[0].attachment_folder = "../escape";
+    expect(() => service.subtaskFolder(parent.record.task_id, one.id)).toThrow("Invalid subtask");
+  });
+
+  it("restores subtask attachments and removes the new task when promotion fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Promotion rollback" });
+    const sub = await service.addSubtask(parent.record.task_id, "Promoted action");
+    const original = `${service.subtaskFolder(parent.record.task_id, sub.id)}/Evidence.md`;
+    await vault.create(original, "Preserve evidence");
+    vault.failNextWriteTarget = parent.taskFile.path;
+    await expect(service.promoteSubtask(parent.record.task_id, sub.id)).rejects.toThrow();
+    expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(1);
+    expect(vault.getAbstractFileByPath(original)).not.toBeNull();
+    expect(service.list().filter((task) => task.record.title === "Promoted action")).toHaveLength(0);
+  });
   it("archives a confirmed task and preserves its project tag and identity", async () => {
     const { service, vault } = createService();
     await service.initialize();
