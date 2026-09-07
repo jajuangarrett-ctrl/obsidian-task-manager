@@ -1832,3 +1832,8 @@
 .fjg-subtask-line button { font-size: 11px; padding: 3px 7px; height: auto; }
 .fjg-subtask-notes { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 240px; overflow: auto; }
 .fjg-convert-list { max-height: 260px; overflow-y: auto; }
+.fjg-parent-search { width: 100%; margin: 6px 0; }
+.fjg-parent-choice { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.fjg-parent-results { max-height: 210px; overflow-y: auto; margin-bottom: 12px; }
+.fjg-parent-results .fjg-parent-result { display: flex; flex-direction: column; align-items: flex-start; text-align: left; white-space: normal; width: 100%; height: auto; padding: 8px; margin-bottom: 4px; gap: 3px; }
+.fjg-parent-result span, .fjg-parent-result small { color: var(--text-muted); overflow-wrap: anywhere; }

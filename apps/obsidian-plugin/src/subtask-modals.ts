@@ -39,11 +39,37 @@ export class ConvertSubtasksModal extends Modal {
     const tasks = this.service.list().filter((task) => !task.archived).sort((a, b) => a.record.title.localeCompare(b.record.title));
     let parentId = "";
     const selected = new Set(this.initialId ? [this.initialId] : []);
-    new Setting(this.contentEl).setName("Parent task").addDropdown((select) => {
-      select.addOption("", "Choose parent…");
-      for (const task of tasks) select.addOption(task.record.task_id, `${task.record.title} · ${task.record.project || "No project"} · ${task.taskFile.path}`);
-      select.onChange((value) => { parentId = value; selected.delete(value); render(); });
+    const parentLabel = this.contentEl.createEl("label", { text: "Parent task" });
+    const parentSearch = this.contentEl.createEl("input", {
+      type: "search", placeholder: "Search parent tasks by name or project…",
+      cls: "fjg-parent-search", attr: { "aria-label": "Search parent tasks", id: "fjg-parent-search" }
     });
+    parentLabel.htmlFor = "fjg-parent-search";
+    const parentChoice = this.contentEl.createDiv({ cls: "fjg-parent-choice", attr: { "aria-live": "polite" } });
+    const parentResults = this.contentEl.createDiv({ cls: "fjg-parent-results" });
+    const renderParents = () => {
+      parentResults.empty(); parentChoice.empty();
+      if (parentId) {
+        parentChoice.createSpan({ text: `Selected parent: ${tasks.find((task) => task.record.task_id === parentId)?.record.title}` });
+        return;
+      }
+      const terms = parentSearch.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if (!terms.length) { parentChoice.setText("Type to find a parent, then select a result."); return; }
+      const matches = tasks.filter((task) => !selected.has(task.record.task_id) && terms.every((term) =>
+        `${task.record.title} ${task.record.project} ${task.taskFile.path}`.toLowerCase().includes(term)));
+      parentChoice.setText(matches.length ? `${matches.length} matching parents${matches.length > 8 ? "; showing the first 8. Keep typing to narrow the list." : "."}` : "No matching parents. Try another name or project.");
+      for (const task of matches.slice(0, 8)) {
+        const result = parentResults.createEl("button", { cls: "fjg-parent-result", attr: { type: "button" } });
+        result.createEl("strong", { text: task.record.title });
+        result.createEl("span", { text: task.record.project || "No project" });
+        result.createEl("small", { text: task.taskFile.path });
+        result.addEventListener("click", () => {
+          parentId = task.record.task_id; parentSearch.value = task.record.title;
+          renderParents(); render();
+        });
+      }
+    };
+    parentSearch.addEventListener("input", () => { parentId = ""; renderParents(); renderPreview(); });
     const search = this.contentEl.createEl("input", { type: "search", placeholder: "Find tasks to convert", attr: { "aria-label": "Find tasks to convert" } });
     const list = this.contentEl.createDiv({ cls: "fjg-convert-list" });
     const preview = this.contentEl.createDiv();
@@ -53,6 +79,7 @@ export class ConvertSubtasksModal extends Modal {
         new Setting(list).setName(task.record.title).setDesc(task.taskFile.path).addToggle((toggle) => toggle.setValue(selected.has(task.record.task_id)).onChange((value) => {
           if (value) selected.add(task.record.task_id); else selected.delete(task.record.task_id);
           renderPreview();
+          renderParents();
         }));
       }
       renderPreview();
@@ -78,6 +105,7 @@ export class ConvertSubtasksModal extends Modal {
         } catch (error) { new Notice(`${completed} converted. Remaining tasks were not converted: ${String(error)}`, 12000); }
         finally { this.refreshed(); button.setDisabled(false); render(); }
       }));
+    renderParents();
     render();
   }
 }
