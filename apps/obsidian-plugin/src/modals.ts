@@ -43,7 +43,7 @@ export class ArchiveTaskModal extends Modal {
       text: `Archive ${this.taskTitle}?`
     });
     this.contentEl.createEl("p", {
-      text: "The task will move to Archived. You can reopen it later.",
+      text: "The objective will move to Archived. You can reopen it later.",
       cls: "setting-item-description"
     });
     new Setting(this.contentEl)
@@ -88,7 +88,7 @@ export class TaskDueDateModal extends Modal {
     this.modalEl.addClass("fjg-task-due-date-modal");
     this.setTitle(`Due date: ${this.taskTitle}`);
     this.contentEl.createEl("p", {
-      text: "Choose a due date for this task, or clear the current date.",
+      text: "Choose a due date for this objective, or clear the current date.",
       cls: "fjg-task-due-date-intro"
     });
 
@@ -160,7 +160,7 @@ export class DashboardProjectPickerModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle("Filter tasks by project");
+    this.setTitle("Filter objectives by project");
     this.render();
   }
 
@@ -171,7 +171,7 @@ export class DashboardProjectPickerModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Search projects to scope the current task view. Your current view and task search stay in place.",
+      text: "Search projects to scope the current objective view. Your current view and objective search stay in place.",
       cls: "fjg-project-picker-intro"
     });
     const search = this.contentEl.createEl("input", {
@@ -234,7 +234,7 @@ export class TaskProjectPickerModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Search an existing project tag, choose No project, or create a new tag. Project tags never move the task.",
+      text: "Search an existing project tag, choose No project, or create a new tag. Project tags never move the objective.",
       cls: "fjg-project-picker-intro"
     });
     const search = this.contentEl.createEl("input", {
@@ -323,7 +323,7 @@ export class TaskRelocationModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle(`Move task: ${this.taskTitle}`);
+    this.setTitle(`Move objective: ${this.taskTitle}`);
     this.render();
   }
 
@@ -334,7 +334,7 @@ export class TaskRelocationModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Choose a folder inside 02 Programs or 03 Areas. The complete task-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and project tag stay unchanged.",
+      text: "Choose a folder inside 02 Programs or 03 Areas. The complete objective-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and project tag stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     this.contentEl.createEl("p", {
@@ -344,7 +344,7 @@ export class TaskRelocationModal extends Modal {
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search Programs and Areas", "aria-label": "Search task destination folders" }
+      attr: { placeholder: "Search Programs and Areas", "aria-label": "Search objective destination folders" }
     });
     search.value = this.query;
     search.disabled = this.moving;
@@ -362,7 +362,7 @@ export class TaskRelocationModal extends Modal {
     });
     const choices = this.contentEl.createDiv({
       cls: "fjg-project-picker-choices",
-      attr: { role: "listbox", "aria-label": "Task destination folders" }
+      attr: { role: "listbox", "aria-label": "Objective destination folders" }
     });
     if (!matches.length) {
       choices.createDiv({
@@ -398,7 +398,7 @@ export class TaskRelocationModal extends Modal {
         .setDisabled(this.moving)
         .onClick(() => this.close()))
       .addButton((button) => button
-        .setButtonText(this.moving ? "Moving…" : "Move task")
+        .setButtonText(this.moving ? "Moving…" : "Move objective")
         .setCta()
         .setDisabled(this.moving || !this.selectedDestination)
         .onClick(async () => {
@@ -438,13 +438,13 @@ export class ArchiveProjectModal extends Modal {
       text: `Move the project folder to Project Archive.`
     });
     list.createEl("li", {
-      text: `Move ${this.completedTaskCount} completed ${this.completedTaskCount === 1 ? "task" : "tasks"} to the task Archive.`
+      text: `Move ${this.completedTaskCount} completed ${this.completedTaskCount === 1 ? "objective" : "objectives"} to the objective Archive.`
     });
     list.createEl("li", {
-      text: "Keep every task update, related file, attachment, and project note."
+      text: "Keep every objective update, related file, attachment, and project note."
     });
     this.contentEl.createEl("p", {
-      text: "You can reopen the project later from Archived Projects. Its tasks stay archived until you reopen them individually.",
+      text: "You can reopen the project later from Archived Projects. Its objectives stay archived until you reopen them individually.",
       cls: "setting-item-description"
     });
     new Setting(this.contentEl)
@@ -540,7 +540,7 @@ export class RenameProjectModal extends Modal {
     this.modalEl.addClass("fjg-rename-project-modal");
     this.setTitle(`Rename ${this.currentName}`);
     this.contentEl.createEl("p", {
-      text: "The project folder, project metadata, and assigned task metadata will be renamed together. Notes, updates, and files will stay in place inside the project.",
+      text: "The project folder, project metadata, and assigned objective metadata will be renamed together. Notes, updates, and files will stay in place inside the project.",
       cls: "fjg-project-picker-intro"
     });
     const error = this.contentEl.createDiv({
@@ -606,7 +606,7 @@ export class RenameTaskModal extends Modal {
     this.modalEl.addClass("fjg-rename-task-modal");
     this.setTitle(`Rename ${this.currentTitle}`);
     this.contentEl.createEl("p", {
-      text: "The task record and its matching task, update, and file folders will be renamed together. Project, status, due date, update history, and files will stay unchanged.",
+      text: "The objective record and its matching objective, update, and file folders will be renamed together. Project, status, due date, update history, and files will stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     const error = this.contentEl.createDiv({
@@ -615,7 +615,7 @@ export class RenameTaskModal extends Modal {
     });
     let input: HTMLInputElement | null = null;
     new Setting(this.contentEl)
-      .setName("Task name")
+      .setName("Objective name")
       .setDesc("Use a unique name without folder-path characters.")
       .addText((text) => {
         input = text.inputEl;
@@ -631,7 +631,7 @@ export class RenameTaskModal extends Modal {
         .setButtonText("Cancel")
         .onClick(() => this.close()))
       .addButton((button) => button
-        .setButtonText("Rename Task")
+        .setButtonText("Rename Objective")
         .setCta()
         .onClick(async () => {
           button.setDisabled(true);
@@ -675,7 +675,7 @@ export class CreateTaskModal extends Modal {
   }
 
   onOpen(): void {
-    this.setTitle("Create Task Workspace");
+    this.setTitle("Create Objective Workspace");
     new Setting(this.contentEl).setName("Title").addText((text) => text.onChange((value) => this.value.title = value));
     new Setting(this.contentEl).setName("Details").addTextArea((area) => {
       area.inputEl.rows = 6;
@@ -697,7 +697,7 @@ export class CreateTaskModal extends Modal {
     new Setting(this.contentEl).setName("Due date").setDesc("YYYY-MM-DD").addText((text) => text.onChange((value) => this.value.due = value));
     new Setting(this.contentEl).setName("Delegated to").addText((text) => text.onChange((value) => this.value.delegatedTo = value));
     new Setting(this.contentEl).addButton((button) => button
-      .setButtonText("Create Task")
+      .setButtonText("Create Objective")
       .setCta()
       .onClick(async () => {
         button.setDisabled(true);
@@ -772,16 +772,16 @@ export class TaskUpdateCaptureModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-update-capture-modal");
-    this.setTitle("Add Update to Existing Task");
+    this.setTitle("Add Update to Existing Objective");
     this.contentEl.createEl("p", {
-      text: "Choose one exact task, review the prefilled update, then confirm. Opening this form does not change any task.",
+      text: "Choose one exact objective, review the prefilled update, then confirm. Opening this form does not change any objective.",
       cls: "fjg-task-update-capture-intro"
     });
 
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-task-update-capture-search",
-      attr: { placeholder: "Search task title, project, person, or ID", "aria-label": "Search existing tasks" }
+      attr: { placeholder: "Search objective title, project, person, or ID", "aria-label": "Search existing objectives" }
     });
     search.addEventListener("input", () => {
       this.query = search.value;
@@ -790,7 +790,7 @@ export class TaskUpdateCaptureModal extends Modal {
 
     this.resultsEl = this.contentEl.createDiv({
       cls: "fjg-task-update-capture-results",
-      attr: { role: "listbox", "aria-label": "Matching tasks" }
+      attr: { role: "listbox", "aria-label": "Matching objectives" }
     });
     this.renderResults();
 
@@ -828,7 +828,7 @@ export class TaskUpdateCaptureModal extends Modal {
     this.resultsEl.empty();
     const matches = filterTaskUpdateOptions(this.tasks, this.query, 20);
     if (!matches.length) {
-      this.resultsEl.createDiv({ cls: "fjg-task-update-capture-empty", text: "No tasks match this search." });
+      this.resultsEl.createDiv({ cls: "fjg-task-update-capture-empty", text: "No objectives match this search." });
       return;
     }
     for (const task of matches) {
@@ -839,7 +839,7 @@ export class TaskUpdateCaptureModal extends Modal {
           type: "button",
           role: "option",
           "aria-selected": String(selected),
-          title: `Task ID: ${task.task_id}`
+          title: `Objective ID: ${task.task_id}`
         }
       });
       button.createEl("strong", { text: task.title });
@@ -870,7 +870,8 @@ export class TaskFileModal extends Modal {
     app: App,
     private readonly taskTitle: string,
     private readonly createNote: (title: string, body: string) => Promise<void>,
-    private readonly attachFiles: (files: File[]) => Promise<void>
+    private readonly attachFiles: (files: File[]) => Promise<void>,
+    private readonly entityLabel: "objective" | "action" = "objective"
   ) {
     super(app);
   }
@@ -879,7 +880,7 @@ export class TaskFileModal extends Modal {
     this.modalEl.addClass("fjg-task-file-modal-shell");
     this.setTitle(`Add file to ${this.taskTitle}`);
     const intro = this.contentEl.createEl("p", {
-      text: "Create a working note or attach an existing document. It will stay inside this task workspace.",
+      text: `Create a working note or attach an existing document. It will stay in this ${this.entityLabel}'s attachment folder.`,
       cls: "fjg-task-file-intro"
     });
     intro.setAttr("data-mode", this.mode);
@@ -980,7 +981,7 @@ export class TaskFileModal extends Modal {
       selection.setText(fileSelectionLabel(this.attachments));
     }
     const submit = panel.createEl("button", {
-      text: "Add to task",
+      text: `Add to ${this.entityLabel}`,
       cls: "mod-cta"
     });
     submit.disabled = !this.attachments.length;
@@ -1031,7 +1032,7 @@ export class TaskFolderModal extends Modal {
     this.modalEl.addClass("fjg-task-folder-modal-shell");
     this.setTitle(this.taskTitle);
     this.contentEl.createEl("p", {
-      text: "Task attachments folder",
+      text: "Objective attachments folder",
       cls: "fjg-task-folder-eyebrow"
     });
     this.contentEl.createEl("code", {

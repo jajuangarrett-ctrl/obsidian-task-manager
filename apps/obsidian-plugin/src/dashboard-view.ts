@@ -44,7 +44,7 @@ export class TaskDashboardView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "FJG Task Manager";
+    return "FJG Objective Manager";
   }
 
   getIcon(): string {
@@ -77,9 +77,7 @@ export class TaskDashboardView extends ItemView {
       this.taskPlugin.workspaceService.projectNames()
     );
     this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.length);
-    if (this.mode === "projects") {
-      this.renderProjects(root, projects, allTasks);
-    } else if (this.mode === "kanban") {
+    if (this.mode === "kanban") {
       this.renderKanban(root, allTasks.filter((task) => task.record.status !== "archived"));
     } else {
       this.renderTasks(root, allTasks, projects);
@@ -89,24 +87,32 @@ export class TaskDashboardView extends ItemView {
   private renderHeader(root: HTMLElement): void {
     const header = root.createDiv({ cls: "fjg-task-header" });
     const titleWrap = header.createDiv();
-    titleWrap.createEl("p", { text: "TASK WORKSPACES", cls: "fjg-eyebrow" });
-    titleWrap.createEl("h1", { text: "FJG Task Manager" });
+    titleWrap.createEl("p", { text: "OBJECTIVE WORKSPACES", cls: "fjg-eyebrow" });
+    titleWrap.createEl("h1", { text: "FJG Objective Manager" });
     const actions = header.createDiv({ cls: "fjg-header-actions" });
-    const createButton = actions.createEl("button", { text: "Capture Task", cls: "mod-cta" });
+    const createButton = actions.createEl("button", { text: "Capture objective", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
-    const convert = actions.createEl("button", { text: "Convert tasks" });
+    const captureAction = actions.createEl("button", { text: "Capture action" });
+    captureAction.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status, parentId) => {
+      if (!parentId) throw new Error("Choose a parent objective.");
+      await this.taskPlugin.workspaceService.addSubtask(parentId, title, { due, notes, status });
+      this.expandedSubtasks.add(parentId);
+      this.render();
+      new Notice("Action captured.");
+    }, this.taskPlugin.workspaceService).open());
+    const convert = actions.createEl("button", { text: "Convert objectives to actions" });
     convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render()).open());
     const briefingButton = actions.createEl("button", {
-      text: "Open Task Briefing",
+      text: "Open objective briefing",
       attr: {
-        title: "Refresh and open the Task Manager briefing for Claudian",
-        "aria-label": "Refresh and open Task Manager briefing"
+        title: "Refresh and open the Objective Manager briefing for Claudian",
+        "aria-label": "Refresh and open Objective Manager briefing"
       }
     });
     briefingButton.addEventListener("click", () => void this.taskPlugin.openTaskBriefing());
     const refreshButton = actions.createEl("button", { text: "Refresh" });
-    refreshButton.setAttribute("title", "Refresh tasks and regenerate the Task Manager briefing");
-    refreshButton.setAttribute("aria-label", "Refresh tasks and regenerate Task Manager briefing");
+    refreshButton.setAttribute("title", "Refresh objectives and regenerate the Objective Manager briefing");
+    refreshButton.setAttribute("aria-label", "Refresh objectives and regenerate Objective Manager briefing");
     refreshButton.addEventListener("click", async () => {
       await this.taskPlugin.workspaceService.refresh();
       this.render();
@@ -116,11 +122,10 @@ export class TaskDashboardView extends ItemView {
   private renderSectionTabs(root: HTMLElement, projectCount: number, taskCount: number): void {
     const tabs = root.createDiv({
       cls: "fjg-dashboard-tabs",
-      attr: { role: "tablist", "aria-label": "Task Manager sections" }
+      attr: { role: "tablist", "aria-label": "Objective Manager sections" }
     });
-    this.sectionTab(tabs, "tasks", "Tasks", "list-checks");
+    this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
-    this.sectionTab(tabs, "projects", "Projects", "tags", projectCount);
   }
 
   private sectionTab(
@@ -158,7 +163,7 @@ export class TaskDashboardView extends ItemView {
     const heading = root.createDiv({ cls: "fjg-section-heading" });
     const headingCopy = heading.createDiv();
     headingCopy.createEl("h2", {
-      text: this.project === ALL_PROJECTS ? "Task Views" : (activeProject?.name || selectedName)
+      text: this.project === ALL_PROJECTS ? "Objective Views" : (activeProject?.name || selectedName)
     });
     headingCopy.createEl("p", {
       text: this.project !== ALL_PROJECTS
@@ -168,7 +173,7 @@ export class TaskDashboardView extends ItemView {
 
     const viewNav = root.createDiv({
       cls: "fjg-view-grid",
-      attr: { "aria-label": "Task views" }
+      attr: { "aria-label": "Objective views" }
     });
     const scopedTasks = tasks.filter((task) => matchesProject(task.record, this.project));
     for (const definition of TASK_VIEWS) {
@@ -205,7 +210,7 @@ export class TaskDashboardView extends ItemView {
     const search = filters.createEl("input", {
       type: "search",
       placeholder: "Search the current view",
-      attr: { "aria-label": "Search tasks in the current view" }
+      attr: { "aria-label": "Search objectives in the current view" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
@@ -242,7 +247,7 @@ export class TaskDashboardView extends ItemView {
     const projectPicker = filters.createEl("button", {
       cls: "fjg-dashboard-project-filter",
       text: this.project === ALL_PROJECTS ? "All projects" : (projectOptions.find((option) => option.key === this.project)?.name || selectedName),
-      attr: { type: "button", "aria-label": "Filter tasks by project" }
+      attr: { type: "button", "aria-label": "Filter objectives by project" }
     });
     projectPicker.addEventListener("click", () => {
       new DashboardProjectPickerModal(
@@ -274,7 +279,7 @@ export class TaskDashboardView extends ItemView {
     const headingCopy = heading.createDiv();
     headingCopy.createEl("h2", { text: "Kanban" });
     headingCopy.createEl("p", {
-      text: "Scan every task by status. Drag cards between columns or use the status menu on a card."
+      text: "Scan every objective by status. Drag cards between columns or use the status menu on a card."
     });
     heading.createSpan({
       text: taskCountLabel(tasks.length),
@@ -283,7 +288,7 @@ export class TaskDashboardView extends ItemView {
 
     const board = root.createDiv({
       cls: "fjg-kanban-board",
-      attr: { "aria-label": "Tasks grouped by status" }
+      attr: { "aria-label": "Objectives grouped by status" }
     });
     for (const column of groupTasksForKanban(tasks)) {
       const section = board.createEl("section", {
@@ -323,7 +328,7 @@ export class TaskDashboardView extends ItemView {
         void this.moveKanbanTask(taskId, column.status);
       });
       if (!column.tasks.length) {
-        cards.createDiv({ text: "Drop tasks here", cls: "fjg-kanban-empty" });
+        cards.createDiv({ text: "Drop objectives here", cls: "fjg-kanban-empty" });
         continue;
       }
       for (const task of column.tasks) this.renderKanbanCard(cards, task);
@@ -461,7 +466,7 @@ export class TaskDashboardView extends ItemView {
     if (!visible.length) {
       parent.createDiv({
         cls: "fjg-empty",
-        text: projects.length ? "No project tags match this search." : "Assign a project tag to a task to get started."
+        text: projects.length ? "No project tags match this search." : "Assign a project tag to an objective to get started."
       });
       return;
     }
@@ -527,7 +532,7 @@ export class TaskDashboardView extends ItemView {
       : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned));
     const tasks = viewTasks.filter((task) => taskMatchesSearch(task, query));
     if (!tasks.length) {
-      rows.createDiv({ cls: "fjg-empty", text: "No tasks match this view." });
+      rows.createDiv({ cls: "fjg-empty", text: "No objectives match this view." });
       return;
     }
     for (const task of tasks) this.renderTask(rows, task);
@@ -597,7 +602,7 @@ export class TaskDashboardView extends ItemView {
     const controls = overview.createDiv({ cls: "fjg-task-controls" });
     const folder = controls.createEl("button", {
       cls: "fjg-task-folder-button",
-      attr: { type: "button", "aria-label": `Open task Files folder in Finder for ${task.record.title}` }
+      attr: { type: "button", "aria-label": `Open objective Files folder in Finder for ${task.record.title}` }
     });
     const folderIcon = folder.createSpan();
     setIcon(folderIcon, "folder-open");
@@ -608,13 +613,13 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-task-file-focus-button",
       attr: {
         type: "button",
-        "aria-label": `Reveal the task Files location in FJG File Focus for ${task.record.title}`
+        "aria-label": `Reveal the objective Files location in FJG File Focus for ${task.record.title}`
       }
     });
     fileFocusLocation.addEventListener("click", () => void this.taskPlugin.showTaskFileLocationInFileFocus(task.record.task_id));
     const copyPath = controls.createEl("button", {
       cls: "fjg-task-copy-path-button",
-      attr: { type: "button", "aria-label": `Copy the task attachment folder path for ${task.record.title}` }
+      attr: { type: "button", "aria-label": `Copy the objective attachment folder path for ${task.record.title}` }
     });
     const copyPathIcon = copyPath.createSpan();
     setIcon(copyPathIcon, "copy");
@@ -637,7 +642,7 @@ export class TaskDashboardView extends ItemView {
       const rename = controls.createEl("button", {
         text: "Rename",
         cls: "fjg-task-rename-button",
-        attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
+        attr: { type: "button", "aria-label": `Rename objective ${task.record.title}` }
       });
       rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
     } else {
@@ -656,7 +661,7 @@ export class TaskDashboardView extends ItemView {
       const rename = menu.createEl("button", {
         text: "Rename",
         cls: "fjg-task-rename-button",
-        attr: { type: "button", "aria-label": `Rename task ${task.record.title}` }
+        attr: { type: "button", "aria-label": `Rename objective ${task.record.title}` }
       });
       rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
       const relocate = menu.createEl("button", {
@@ -672,7 +677,7 @@ export class TaskDashboardView extends ItemView {
         attr: { type: "button", "aria-label": `Add a file to ${task.record.title}` }
       });
       addFile.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
-      const convert = menu.createEl("button", { text: "Convert to subtask" });
+      const convert = menu.createEl("button", { text: "Convert to action" });
       convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open());
       const archive = menu.createEl("button", {
         text: "Archive",
@@ -694,36 +699,36 @@ export class TaskDashboardView extends ItemView {
     const section = parent.createEl("details", { cls: "fjg-subtasks" });
     section.open = this.expandedSubtasks.has(taskId);
     section.addEventListener("toggle", () => { if (section.open) this.expandedSubtasks.add(taskId); else this.expandedSubtasks.delete(taskId); });
-    const summary = section.createEl("summary", { text: subs.length ? `Subtasks · ${subs.filter((sub) => sub.completed).length} of ${subs.length} complete` : "Subtasks · Add your first step" });
+    const summary = section.createEl("summary", { text: subs.length ? `Actions · ${subs.filter((sub) => sub.completed).length} of ${subs.length} complete` : "Actions · Add your first step" });
     if (subs.length) {
-      const progress = summary.createEl("progress", { attr: { max: String(subs.length), value: String(subs.filter((sub) => sub.completed).length), "aria-label": "Subtask completion" } });
+      const progress = summary.createEl("progress", { attr: { max: String(subs.length), value: String(subs.filter((sub) => sub.completed).length), "aria-label": "Action completion" } });
       progress.addClass("fjg-subtask-progress");
     }
     const run = async (action: () => Promise<unknown>) => { try { await action(); this.render(); } catch (error) { new Notice(String(error), 8000); } };
     for (const sub of subs) {
       const item = section.createDiv({ cls: "fjg-subtask-item" });
       const line = item.createDiv({ cls: "fjg-subtask-line" });
-      const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete subtask ${sub.title}` } });
+      const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete action ${sub.title}` } });
       check.checked = sub.completed; check.disabled = task.archived;
       check.addEventListener("change", () => void run(() => service.updateSubtask(taskId, sub.id, { status: check.checked ? "completed" : "do-soon" })));
       line.createSpan({ text: sub.title, cls: sub.completed ? "fjg-subtask-done" : "fjg-subtask-title" });
       line.createSpan({ text: statusLabel(sub.status), cls: "fjg-task-static-meta" });
       if (sub.due) line.createSpan({ text: `Due ${sub.due}`, cls: "fjg-task-static-meta" });
-      const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy subtask folder path for ${sub.title}` } });
-      copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Subtask folder path copied."); }));
+      const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy action folder path for ${sub.title}` } });
+      copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Action folder path copied."); }));
       if (!task.archived) {
         const edit = line.createEl("button", { text: "Edit" });
         edit.addEventListener("click", () => new SubtaskEditModal(this.app, sub, async (title, due, notes, status) => { await service.updateSubtask(taskId, sub.id, { title, due, notes, status }); this.render(); }).open());
-        const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to subtask ${sub.title}` } });
+        const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to action ${sub.title}` } });
         attach.addEventListener("click", () => new TaskFileModal(this.app, sub.title,
           async (title, body) => { const file = await service.addSubtaskNote(taskId, sub.id, title, body); this.render(); await this.app.workspace.getLeaf("tab").openFile(file); },
-          async (files) => { await service.importSubtaskFiles(taskId, sub.id, files); this.render(); }).open());
+          async (files) => { await service.importSubtaskFiles(taskId, sub.id, files); this.render(); }, "action").open());
         const existing = line.createEl("button", { text: "From vault" });
         existing.addEventListener("click", () => new SubtaskVaultFileModal(this.app, async (file) => { await service.copyVaultFileToSubtask(taskId, sub.id, file); this.render(); }).open());
         const promote = line.createEl("button", { text: "Promote" });
         promote.addEventListener("click", () => new PromoteSubtaskModal(this.app, sub.title, async () => { await service.promoteSubtask(taskId, sub.id); this.render(); }).open());
       }
-      if (sub.notes) item.createEl("p", { text: sub.notes, cls: "fjg-subtask-notes" });
+      // Keep preserved notes in Edit/promotion, not in the compact Action display.
       let files;
       try { files = service.subtaskFiles(taskId, sub.id); } catch (error) { item.createEl("p", { text: String(error) }); continue; }
       const attachments = item.createEl("details");
@@ -738,10 +743,9 @@ export class TaskDashboardView extends ItemView {
       }
     }
     if (!task.archived) {
-      const add = section.createEl("button", { text: "+ Add subtask" });
+      const add = section.createEl("button", { text: "+ Add action" });
       add.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
-        const sub = await service.addSubtask(taskId, title);
-        await service.updateSubtask(taskId, sub.id, { due, notes, status });
+        await service.addSubtask(taskId, title, { due, notes, status });
         this.expandedSubtasks.add(taskId); this.render();
       }).open());
     }
@@ -762,7 +766,7 @@ export class TaskDashboardView extends ItemView {
     headingTitle.createSpan({
       text: String(updates.length),
       cls: "fjg-recent-updates-count",
-      attr: { "aria-label": `${updates.length} task ${updates.length === 1 ? "update" : "updates"}` }
+      attr: { "aria-label": `${updates.length} objective ${updates.length === 1 ? "update" : "updates"}` }
     });
     const actions = heading.createDiv({ cls: "fjg-recent-updates-actions" });
     if (updates.length > 1) {
@@ -796,7 +800,7 @@ export class TaskDashboardView extends ItemView {
         cls: "fjg-update-preview",
         attr: {
           type: "button",
-          "aria-label": `Open task ${task.record.title}`
+          "aria-label": `Open objective ${task.record.title}`
         }
       });
       card.createSpan({
@@ -829,7 +833,7 @@ function normalize(value: string): string {
 }
 
 function taskCountLabel(count: number): string {
-  return countLabel(count, "task");
+  return countLabel(count, "objective");
 }
 
 function countLabel(count: number, noun: string): string {

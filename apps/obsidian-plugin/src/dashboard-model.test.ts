@@ -51,7 +51,7 @@ describe("dashboard task views", () => {
     }));
     const recent = mostRecentlyModifiedTasks(records.map((record) => ({ record })));
 
-    expect(TASK_VIEWS[0]).toMatchObject({ key: "recent", label: "Recent Tasks" });
+    expect(TASK_VIEWS[0]).toMatchObject({ key: "recent", label: "Recent Objectives" });
     expect(recent).toHaveLength(30);
     expect(recent[0].record.task_id).toBe("task-30");
     expect(recent.at(-1)?.record.task_id).toBe("task-01");

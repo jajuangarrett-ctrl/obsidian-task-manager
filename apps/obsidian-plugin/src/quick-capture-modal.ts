@@ -72,8 +72,8 @@ export class QuickCaptureModal extends Modal {
     this.contentEl.empty();
 
     const header = this.contentEl.createDiv({ cls: "fjg-capture-header" });
-    header.createEl("p", { text: "FJG TASK MANAGER", cls: "fjg-capture-eyebrow" });
-    header.createEl("h2", { text: "Capture Tasks" });
+    header.createEl("p", { text: "FJG OBJECTIVE MANAGER", cls: "fjg-capture-eyebrow" });
+    header.createEl("h2", { text: "Capture objective" });
 
     const captureSection = this.contentEl.createDiv({ cls: "fjg-capture-section" });
     captureSection.createEl("h3", { text: "Capture" });
@@ -82,7 +82,7 @@ export class QuickCaptureModal extends Modal {
       placeholder: "Type what you need to do, or dictate it.",
       attr: {
         rows: "5",
-        "aria-label": "Task capture text"
+        "aria-label": "Objective capture text"
       }
     });
     this.rawInput.value = this.rawCapture;
@@ -97,18 +97,18 @@ export class QuickCaptureModal extends Modal {
     const captureActions = captureCard.createDiv({ cls: "fjg-capture-actions" });
     this.recordButton = this.iconButton(captureActions, "microphone", "Dictate", () => this.toggleRecording());
     this.recordButton.addClass("fjg-dictate-button");
-    this.draftButton = this.iconButton(captureActions, "sparkles", "Draft Tasks", () => this.draftTasks());
+    this.draftButton = this.iconButton(captureActions, "sparkles", "Draft Objectives", () => this.draftTasks());
     this.draftButton.addClass("fjg-draft-button");
 
     const formSection = this.contentEl.createDiv({ cls: "fjg-capture-section" });
-    this.formHeading = formSection.createEl("h3", { text: "New Task" });
+    this.formHeading = formSection.createEl("h3", { text: "New Objective" });
     this.formsContainer = formSection.createDiv({ cls: "fjg-draft-list" });
     this.renderDraftForms();
 
     this.createButton = this.iconButton(
       this.contentEl,
       "circle-plus",
-      "Create Task",
+      "Create Objective",
       () => this.createTasks()
     );
     this.createButton.addClass("fjg-create-task-button", "mod-cta");
@@ -122,7 +122,7 @@ export class QuickCaptureModal extends Modal {
     if (!this.recording) {
       const apiKey = await this.taskPlugin.resolveOpenAiApiKey();
       if (!apiKey) {
-        new Notice("Add an OpenAI API key in FJG Task Manager settings before dictating.");
+        new Notice("Add an OpenAI API key in FJG Objective Manager settings before dictating.");
         return;
       }
       try {
@@ -163,17 +163,17 @@ export class QuickCaptureModal extends Modal {
   private async draftTasks(showFailure = true): Promise<void> {
     if (this.busy) return;
     if (!this.rawCapture.trim()) {
-      new Notice("Type or dictate the task before drafting.");
+      new Notice("Type or dictate the objective before drafting.");
       return;
     }
     const apiKey = await this.taskPlugin.resolveOpenAiApiKey();
     if (!apiKey) {
-      new Notice("Add an OpenAI API key in FJG Task Manager settings to draft task fields.");
+      new Notice("Add an OpenAI API key in FJG Objective Manager settings to draft objective fields.");
       return;
     }
     await this.withBusy(async () => {
       await this.requestDraft(apiKey);
-    }, showFailure ? "Task drafting failed" : "Voice capture failed");
+    }, showFailure ? "Objective drafting failed" : "Voice capture failed");
   }
 
   private async requestDraft(apiKey: string): Promise<void> {
@@ -192,11 +192,11 @@ export class QuickCaptureModal extends Modal {
       this.renderDraftForms();
       new Notice(
         drafts.length === 1
-          ? "Drafted 1 task. Review it before creating."
-          : `Drafted ${drafts.length} tasks. Review each task before creating.`
+          ? "Drafted 1 objective. Review it before creating."
+          : `Drafted ${drafts.length} objectives. Review each objective before creating.`
       );
     } finally {
-      if (this.draftButton) this.setButton(this.draftButton, "sparkles", "Draft Tasks");
+      if (this.draftButton) this.setButton(this.draftButton, "sparkles", "Draft Objectives");
     }
   }
 
@@ -206,20 +206,20 @@ export class QuickCaptureModal extends Modal {
     this.formsContainer.classList.toggle("is-multiple", this.drafts.length > 1);
     this.formControls = [];
     if (this.formHeading) {
-      this.formHeading.setText(this.drafts.length === 1 ? "New Task" : `New Tasks (${this.drafts.length})`);
+      this.formHeading.setText(this.drafts.length === 1 ? "New Objective" : `New Objectives (${this.drafts.length})`);
     }
 
     this.drafts.forEach((draft, index) => {
       const formCard = this.formsContainer!.createDiv({ cls: "fjg-task-form-card" });
       if (this.drafts.length > 1) {
         const taskHeader = formCard.createDiv({ cls: "fjg-draft-item-header" });
-        taskHeader.createEl("h4", { text: `Task ${index + 1}` });
+        taskHeader.createEl("h4", { text: `Objective ${index + 1}` });
         const removeButton = this.iconButton(taskHeader, "trash-2", "Remove", () => this.removeDraft(index));
         removeButton.addClass("fjg-remove-draft-button");
-        removeButton.setAttribute("aria-label", `Remove task ${index + 1}`);
+        removeButton.setAttribute("aria-label", `Remove objective ${index + 1}`);
       }
 
-      const title = this.inputRow(formCard, "Task title", "text");
+      const title = this.inputRow(formCard, "Objective title", "text");
       title.placeholder = "What needs to be done?";
       title.value = draft.title;
       title.addEventListener("input", () => this.drafts[index].title = title.value);
@@ -256,9 +256,9 @@ export class QuickCaptureModal extends Modal {
       summary.createSpan({ text: "More details" });
 
       const moreFields = detailsSection.createDiv({ cls: "fjg-capture-more-fields" });
-      const detailsLabel = moreFields.createEl("label", { text: "Task details" });
+      const detailsLabel = moreFields.createEl("label", { text: "Objective details" });
       const details = moreFields.createEl("textarea", {
-        attr: { rows: "4", "aria-label": `Task ${index + 1} details` }
+        attr: { rows: "4", "aria-label": `Objective ${index + 1} details` }
       });
       detailsLabel.htmlFor = this.assignId(details, `details-${index + 1}`);
       details.value = draft.details;
@@ -317,14 +317,14 @@ export class QuickCaptureModal extends Modal {
     }
     const missingTitle = drafts.findIndex((draft) => !draft.title);
     if (missingTitle >= 0) {
-      new Notice(`Add a title for task ${missingTitle + 1} before creating the tasks.`);
+      new Notice(`Add a title for objective ${missingTitle + 1} before creating the objectives.`);
       this.formControls[missingTitle]?.title.focus();
       return;
     }
     await this.withBusy(async () => {
       await this.taskPlugin.createCapturedTasks(drafts);
       this.close();
-    }, drafts.length === 1 ? "Task creation failed" : "Task creation failed; no tasks were kept");
+    }, drafts.length === 1 ? "Objective creation failed" : "Objective creation failed; no objectives were kept");
   }
 
   private updateCreateButton(): void {
@@ -333,7 +333,7 @@ export class QuickCaptureModal extends Modal {
     this.setButton(
       this.createButton,
       count === 1 ? "circle-plus" : "list-plus",
-      count === 1 ? "Create Task" : `Create ${count} Tasks`
+      count === 1 ? "Create Objective" : `Create ${count} Objectives`
     );
   }
 

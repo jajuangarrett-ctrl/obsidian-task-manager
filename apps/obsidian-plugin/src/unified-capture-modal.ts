@@ -32,9 +32,9 @@ export class UnifiedCaptureModal extends Modal {
       .setName("Action")
       .setDesc("Choose the reviewed workflow to open.")
       .addDropdown((dropdown) => dropdown
-        .addOption("new-task", "Create new task")
+        .addOption("new-task", "Create new objective")
         .addOption("agenda-item", "Create agenda item")
-        .addOption("task-update", "Update existing task")
+        .addOption("task-update", "Update existing objective")
         .setValue(this.action)
         .onChange((value) => {
           this.action = value as UnifiedCaptureAction;
@@ -46,7 +46,7 @@ export class UnifiedCaptureModal extends Modal {
       .addTextArea((area) => {
         this.textArea = area.inputEl;
         area.inputEl.rows = 10;
-        area.inputEl.placeholder = "Paste or type the task, agenda item, or update…";
+        area.inputEl.placeholder = "Paste or type the objective, agenda item, or update…";
         area.inputEl.setAttribute("aria-label", "Capture source text");
         area.setValue(this.text);
         area.onChange((value) => {
@@ -88,7 +88,7 @@ export class UnifiedCaptureModal extends Modal {
       this.syncContinueState();
       this.textArea.focus();
     } catch (error) {
-      console.error("[FJG Task Manager] Clipboard read failed", error);
+      console.error("[FJG Objective Manager] Clipboard read failed", error);
       new Notice("Obsidian could not read the clipboard. Paste into the text box with Command-V.", 8000);
     }
   }

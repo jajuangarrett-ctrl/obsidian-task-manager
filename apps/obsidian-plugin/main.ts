@@ -64,9 +64,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.workspaceService.initialize();
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
-    this.addRibbonIcon("list-checks", "Open FJG Task Manager", () => this.activateDashboard());
-    this.addRibbonIcon("circle-plus", "Quick capture a task", () => this.openQuickCaptureModal());
-    this.addRibbonIcon("clipboard-paste", "Capture task, agenda, or update", () => this.openUnifiedCaptureModal());
+    this.addRibbonIcon("list-checks", "Open FJG Objective Manager", () => this.activateDashboard());
+    this.addRibbonIcon("circle-plus", "Quick capture an objective", () => this.openQuickCaptureModal());
+    this.addRibbonIcon("clipboard-paste", "Capture objective, agenda, or update", () => this.openUnifiedCaptureModal());
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
@@ -78,7 +78,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         try {
           text = await navigator.clipboard.readText();
         } catch (error) {
-          console.error("[FJG Task Manager] System-wide clipboard read failed", error);
+          console.error("[FJG Objective Manager] System-wide clipboard read failed", error);
           new Notice("Obsidian could not read the clipboard. Paste or type in the capture window.", 8000);
         }
       }
@@ -87,91 +87,91 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerDomEvent(window, "focus", () => void this.consumeSystemCaptureClipboard());
     this.registerInterval(window.setInterval(() => void this.consumeSystemCaptureClipboard(), 400));
 
-    this.addCommand({ id: "open-dashboard", name: "Open Task Dashboard", callback: () => this.activateDashboard() });
-    this.addCommand({ id: "open-task-briefing", name: "Open Task Briefing", callback: () => void this.openTaskBriefing() });
-    this.addCommand({ id: "quick-capture", name: "Quick Capture Task", callback: () => this.openQuickCaptureModal() });
-    this.addCommand({ id: "unified-capture", name: "Capture Task, Agenda, or Update", callback: () => this.openUnifiedCaptureModal() });
-    this.addCommand({ id: "create-task-workspace", name: "Create Task Workspace", callback: () => this.openCreateModal() });
-    this.addCommand({ id: "append-task-update", name: "Append Task Update", checkCallback: (checking) => {
+    this.addCommand({ id: "open-dashboard", name: "Open Objective Dashboard", callback: () => this.activateDashboard() });
+    this.addCommand({ id: "open-task-briefing", name: "Open Objective Briefing", callback: () => void this.openTaskBriefing() });
+    this.addCommand({ id: "quick-capture", name: "Quick Capture Objective", callback: () => this.openQuickCaptureModal() });
+    this.addCommand({ id: "unified-capture", name: "Capture Objective, Agenda, or Update", callback: () => this.openUnifiedCaptureModal() });
+    this.addCommand({ id: "create-task-workspace", name: "Create Objective Workspace", callback: () => this.openCreateModal() });
+    this.addCommand({ id: "append-task-update", name: "Append Objective Update", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) this.openUpdateModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "add-task-file", name: "Add File to Task Workspace", checkCallback: (checking) => {
+    this.addCommand({ id: "add-task-file", name: "Add File to Objective Workspace", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) this.openTaskFileModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "open-task-folder", name: "Open Task Folder", checkCallback: (checking) => {
+    this.addCommand({ id: "open-task-folder", name: "Open Objective Folder", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.openTaskFolder(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "rename-task", name: "Rename Task", checkCallback: (checking) => {
+    this.addCommand({ id: "rename-task", name: "Rename Objective", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) this.openRenameTaskModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "open-task-file-location", name: "Open Task File Location in Finder", checkCallback: (checking) => {
+    this.addCommand({ id: "open-task-file-location", name: "Open Objective File Location in Finder", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.openTaskFileLocation(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "show-task-file-location-in-file-focus", name: "Show Task File Location in FJG File Focus", checkCallback: (checking) => {
+    this.addCommand({ id: "show-task-file-location-in-file-focus", name: "Show Objective File Location in FJG File Focus", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.showTaskFileLocationInFileFocus(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "copy-task-folder-path", name: "Copy Task Folder Path", checkCallback: (checking) => {
+    this.addCommand({ id: "copy-task-folder-path", name: "Copy Objective Folder Path", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) void this.copyTaskFolderPath(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "move-task-to-program-or-area", name: "Move Task to Program or Area Folder", checkCallback: (checking) => {
+    this.addCommand({ id: "move-task-to-program-or-area", name: "Move Objective to Program or Area Folder", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task || task.archived) return false;
       if (!checking) this.openTaskRelocationModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "mark-task-completed", name: "Mark Task Completed", checkCallback: (checking) => {
+    this.addCommand({ id: "mark-task-completed", name: "Mark Objective Completed", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
       if (!checking) this.changeStatus(task.record.task_id, "completed");
       return true;
     }});
-    this.addCommand({ id: "archive-task", name: "Archive Task", checkCallback: (checking) => {
+    this.addCommand({ id: "archive-task", name: "Archive Objective", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task || task.archived) return false;
       if (!checking) this.openArchiveTaskModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "reopen-task-do-first", name: "Reopen Task to Do First", checkCallback: (checking) => {
+    this.addCommand({ id: "reopen-task-do-first", name: "Reopen Objective to Do First", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task?.archived) return false;
       if (!checking) this.changeStatus(task.record.task_id, "do-first");
       return true;
     }});
-    this.addCommand({ id: "copy-task-id", name: "Copy Task ID", checkCallback: (checking) => {
+    this.addCommand({ id: "copy-task-id", name: "Copy Objective ID", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task) return false;
-      if (!checking) navigator.clipboard.writeText(task.record.task_id).then(() => new Notice("Task ID copied."));
+      if (!checking) navigator.clipboard.writeText(task.record.task_id).then(() => new Notice("Objective ID copied."));
       return true;
     }});
-    this.addCommand({ id: "validate-task-workspaces", name: "Validate Task Workspaces", callback: () => this.validateWorkspaces() });
-    this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Task Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
-    this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Task Artifacts to Task Folders", callback: () => this.migrateTaskArtifacts() });
-    this.addCommand({ id: "preview-readable-task-folders", name: "Preview Readable Task Folder Rename", callback: () => this.previewReadableTaskFolders() });
-    this.addCommand({ id: "rename-readable-task-folders", name: "Rename Task Folders to Readable Titles", callback: () => this.renameReadableTaskFolders() });
-    this.addCommand({ id: "rebuild-task-index", name: "Rebuild Task Index", callback: async () => {
+    this.addCommand({ id: "validate-task-workspaces", name: "Validate Objective Workspaces", callback: () => this.validateWorkspaces() });
+    this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Objective Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
+    this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Objective Artifacts to Objective Folders", callback: () => this.migrateTaskArtifacts() });
+    this.addCommand({ id: "preview-readable-task-folders", name: "Preview Readable Objective Folder Rename", callback: () => this.previewReadableTaskFolders() });
+    this.addCommand({ id: "rename-readable-task-folders", name: "Rename Objective Folders to Readable Titles", callback: () => this.renameReadableTaskFolders() });
+    this.addCommand({ id: "rebuild-task-index", name: "Rebuild Objective Index", callback: async () => {
       await this.workspaceService.refresh();
-      new Notice(`Task index rebuilt: ${this.workspaceService.list({ includeArchived: true }).length} tasks.`);
+      new Notice(`Objective index rebuilt: ${this.workspaceService.list({ includeArchived: true }).length} objectives.`);
     }});
 
     this.registerEvent(this.app.vault.on("create", (file) => {
@@ -187,7 +187,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       if (importedLegacyKey) {
-        new Notice("FJG Task Manager reused the OpenAI key already saved by Task Capture.");
+        new Notice("FJG Objective Manager reused the OpenAI key already saved by Task Capture.");
       }
       void this.finishStartupAfterLayoutReady();
     });
@@ -217,7 +217,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
     if (await this.restoreOpenAiApiKey()) {
       await this.saveSettings();
-      new Notice("FJG Task Manager recovered your saved OpenAI key.");
+      new Notice("FJG Objective Manager recovered your saved OpenAI key.");
       return this.settings.openAiApiKey;
     }
     return "";
@@ -263,7 +263,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
           if (intake.importedTaskId && intake.importedTaskId !== task.record.task_id) {
             throw new Error(
-              `Gmail intake task ID ${intake.importedTaskId} does not match ${task.record.task_id}.`
+              `Gmail intake objective ID ${intake.importedTaskId} does not match ${task.record.task_id}.`
             );
           }
 
@@ -271,7 +271,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
             const existingAttachment = this.app.vault.getAbstractFileByPath(normalizePath(intake.attachmentPath));
             if (existingAttachment instanceof TFile) {
               throw new Error(
-                `The task attachment already exists while the original email remains in intake: ${intake.attachmentPath}`
+                `The objective attachment already exists while the original email remains in intake: ${intake.attachmentPath}`
               );
             }
           }
@@ -298,23 +298,23 @@ export default class FjgTaskManagerPlugin extends Plugin {
             await this.workspaceService.appendUpdate(task.record.task_id, {
               actor: "Gmail intake",
               type: "attachment",
-              text: "Original Gmail email moved into the task attachments folder.",
+              text: "Original Gmail email moved into the objective attachments folder.",
               relatedFiles: [moved.path],
               source: { type: "email", title: intake.emailSubject },
               requestId: `${intake.requestId}_attachment`
             });
           } catch (updateError) {
-            console.warn("[FJG Task Manager] Gmail attachment update log failed", moved.path, updateError);
+            console.warn("[FJG Objective Manager] Gmail attachment update log failed", moved.path, updateError);
           }
         } catch (error) {
           failed++;
-          console.error("[FJG Task Manager] Gmail task intake file failed", file.path, error);
+          console.error("[FJG Objective Manager] Gmail objective intake file failed", file.path, error);
         }
       }
 
       if (imported > 0 || attached > 0) {
-        const taskText = `${imported} Gmail ${imported === 1 ? "task" : "tasks"} added`;
-        const attachmentText = `${attached} original ${attached === 1 ? "email" : "emails"} moved to task attachments`;
+        const taskText = `${imported} Gmail ${imported === 1 ? "objective" : "objectives"} added`;
+        const attachmentText = `${attached} original ${attached === 1 ? "email" : "emails"} moved to objective attachments`;
         new Notice(`${taskText}; ${attachmentText}.`);
         this.refreshDashboard();
       }
@@ -323,8 +323,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       }
       return imported;
     } catch (error) {
-      console.error("[FJG Task Manager] Gmail task intake failed", error);
-      new Notice(`Gmail task intake failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error("[FJG Objective Manager] Gmail objective intake failed", error);
+      new Notice(`Gmail objective intake failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
       return imported;
     } finally {
       this.gmailIntakeRunning = false;
@@ -347,8 +347,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
         queryTasks: (question, limit) => this.workspaceService.queryForClaudian(question, new Date(), limit)
       });
     } catch (error) {
-      console.error("[FJG Task Manager] Catalog failed to start", error);
-      new Notice(`Task catalog could not start: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error("[FJG Objective Manager] Catalog failed to start", error);
+      new Notice(`Objective catalog could not start: ${error instanceof Error ? error.message : String(error)}`, 10000);
     }
   }
 
@@ -372,7 +372,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         delegatedTo: value.delegatedTo,
         tags: ["task"]
       });
-      new Notice(`Task workspace created: ${task.record.title}`);
+      new Notice(`Objective workspace created: ${task.record.title}`);
       this.refreshDashboard();
     }).open();
   }
@@ -382,9 +382,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const file = await this.workspaceService.refreshBriefingNote();
       await this.app.workspace.getLeaf("tab").openFile(file);
     } catch (error) {
-      console.error("[FJG Task Manager] Could not open Task Manager briefing", error);
+      console.error("[FJG Objective Manager] Could not open Objective Manager briefing", error);
       new Notice(
-        `Task briefing could not open: ${error instanceof Error ? error.message : String(error)}`,
+        `Objective briefing could not open: ${error instanceof Error ? error.message : String(error)}`,
         10000
       );
     }
@@ -403,7 +403,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const result = await this.workspaceService.renameProject(projectName, nextName);
       new Notice(
         `Project renamed to ${result.project.record.name}. `
-        + `${result.updatedTaskCount} ${result.updatedTaskCount === 1 ? "task" : "tasks"} updated.`
+        + `${result.updatedTaskCount} ${result.updatedTaskCount === 1 ? "objective" : "objectives"} updated.`
       );
       onRenamed?.(result.project.record.name);
       this.refreshDashboard();
@@ -436,7 +436,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const task = this.workspaceService.getById(taskId);
     new RenameTaskModal(this.app, task.record.title, async (nextTitle) => {
       const renamed = await this.workspaceService.renameTask(taskId, nextTitle);
-      new Notice(`Task renamed to ${renamed.record.title}.`);
+      new Notice(`Objective renamed to ${renamed.record.title}.`);
       this.refreshDashboard();
     }).open();
   }
@@ -465,7 +465,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const result = await this.workspaceService.archiveProject(projectName);
       new Notice(
         `Project archived: ${result.project.record.name}. `
-        + `${result.archivedTaskCount} completed ${result.archivedTaskCount === 1 ? "task" : "tasks"} archived.`
+        + `${result.archivedTaskCount} completed ${result.archivedTaskCount === 1 ? "objective" : "objectives"} archived.`
       );
       this.clearArchivedProjectSelections(result.project.record.name);
       this.refreshDashboard();
@@ -474,7 +474,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async reopenProject(projectName: string): Promise<void> {
     const project = await this.workspaceService.reopenProject(projectName);
-    new Notice(`Project reopened: ${project.record.name}. Archived tasks were left unchanged.`);
+    new Notice(`Project reopened: ${project.record.name}. Archived objectives were left unchanged.`);
     this.refreshDashboard();
   }
 
@@ -507,11 +507,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
       try {
         await writeSystemClipboardText(text);
       } catch (error) {
-        console.warn("[FJG Task Manager] Could not restore captured clipboard text", error);
+        console.warn("[FJG Objective Manager] Could not restore captured clipboard text", error);
       }
       this.openUnifiedCaptureModal(text);
     } catch (error) {
-      console.warn("[FJG Task Manager] Could not inspect the system capture clipboard", error);
+      console.warn("[FJG Objective Manager] Could not inspect the system capture clipboard", error);
     } finally {
       this.systemCaptureCheckRunning = false;
     }
@@ -566,8 +566,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
     })), { actor: "Franklin" });
     new Notice(
       tasks.length === 1
-        ? `Task workspace created: ${tasks[0].record.title}`
-        : `${tasks.length} task workspaces created.`
+        ? `Objective workspace created: ${tasks[0].record.title}`
+        : `${tasks.length} objective workspaces created.`
     );
     this.refreshDashboard();
   }
@@ -576,7 +576,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const task = this.workspaceService.getById(taskId);
     new TextEntryModal(this.app, `Update: ${task.record.title}`, "Add Update", async (text) => {
       await this.workspaceService.appendUpdate(taskId, { actor: "Franklin", text, type: "update" });
-      new Notice(`Task updated: ${task.record.title}`);
+      new Notice(`Objective updated: ${task.record.title}`);
       this.refreshDashboard();
     }).open();
   }
@@ -589,7 +589,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       async (taskId, text) => {
         const task = this.workspaceService.getById(taskId);
         await this.workspaceService.appendUpdate(taskId, { actor: "Franklin", text, type: "update" });
-        new Notice(`Task updated: ${task.record.title}`);
+        new Notice(`Objective updated: ${task.record.title}`);
         this.refreshDashboard();
       }
     ).open();
@@ -597,7 +597,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async changeStatus(taskId: string, status: string): Promise<void> {
     const task = await this.workspaceService.changeStatus(taskId, status);
-    new Notice(`Task moved to ${task.record.status}: ${task.record.title}`);
+    new Notice(`Objective moved to ${task.record.status}: ${task.record.title}`);
     this.refreshDashboard();
   }
 
@@ -612,7 +612,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async relocateTask(taskId: string, destination: string): Promise<void> {
     const task = await this.workspaceService.relocateTask(taskId, destination);
-    new Notice(`Task moved to ${this.workspaceService.relocationLocationForTask(task.record.task_id)}: ${task.record.title}`);
+    new Notice(`Objective moved to ${this.workspaceService.relocationLocationForTask(task.record.task_id)}: ${task.record.title}`);
     this.refreshDashboard();
   }
 
@@ -620,8 +620,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const task = await this.workspaceService.changeDueDate(taskId, dueDate);
     new Notice(
       task.record.due
-        ? `Task due date set to ${task.record.due}: ${task.record.title}`
-        : `Task due date cleared: ${task.record.title}`
+        ? `Objective due date set to ${task.record.due}: ${task.record.title}`
+        : `Objective due date cleared: ${task.record.title}`
     );
     this.refreshDashboard();
   }
@@ -673,7 +673,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     const task = this.workspaceService.getById(taskId);
     const destination = this.workspaceService.copyFolderForTask(taskId);
     const entries: TaskFolderEntry[] = [
-      { file: task.taskFile, description: "Canonical task record", icon: "list-checks" }
+      { file: task.taskFile, description: "Canonical objective record", icon: "list-checks" }
     ];
     if (task.updatesFile) {
       entries.push({ file: task.updatesFile, description: "Complete chronological update log", icon: "history" });
@@ -700,7 +700,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async openTaskFileLocation(taskId: string): Promise<void> {
     if (!Platform.isDesktopApp) {
-      new Notice("Opening task file locations is only available in the desktop app.");
+      new Notice("Opening objective file locations is only available in the desktop app.");
       return;
     }
 
@@ -730,7 +730,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
       new Notice(`Opened file location for ${task.record.title}.`);
     } catch (error) {
-      console.error("[FJG Task Manager] Could not open task file location", error);
+      console.error("[FJG Objective Manager] Could not open objective file location", error);
       new Notice(`Could not open file location: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -746,14 +746,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
       }).plugins?.getPlugin?.("fjg-file-focus") as FileFocusPlugin | undefined;
 
       if (!fileFocus?.revealFolderPath) {
-        new Notice("Enable or update FJG File Focus to reveal task file locations in Obsidian.");
+        new Notice("Enable or update FJG File Focus to reveal objective file locations in Obsidian.");
         return;
       }
 
       await fileFocus.revealFolderPath(destination.folderPath);
       new Notice(`Shown in FJG File Focus: ${task.record.title}.`);
     } catch (error) {
-      console.error("[FJG Task Manager] Could not reveal task file location in FJG File Focus", error);
+      console.error("[FJG Objective Manager] Could not reveal objective file location in FJG File Focus", error);
       new Notice(`Could not show file location in FJG File Focus: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -763,19 +763,19 @@ export default class FjgTaskManagerPlugin extends Plugin {
       const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
       const path = taskFolderClipboardPath(destination.folderPath);
       await navigator.clipboard.writeText(path);
-      new Notice(`${destination.legacy ? "Legacy task attachments" : "Task attachments"} folder copied: ${path}`);
+      new Notice(`${destination.legacy ? "Legacy objective attachments" : "Objective attachments"} folder copied: ${path}`);
     } catch (error) {
-      console.error("[FJG Task Manager] Could not copy task folder path", error);
-      new Notice("Could not copy the task attachments folder path.");
+      console.error("[FJG Objective Manager] Could not copy objective folder path", error);
+      new Notice("Could not copy the objective attachments folder path.");
     }
   }
 
   private async handleClipperPayload(encoded: string): Promise<void> {
     try {
-      if (!encoded) throw new Error("Missing task clipper payload.");
+      if (!encoded) throw new Error("Missing objective clipper payload.");
       const payload = decodeProtocolPayload(encoded);
       if (this.settings.processedRequestIds.includes(payload.request_id)) {
-        new Notice("This task clipper request was already processed.");
+        new Notice("This objective clipper request was already processed.");
         return;
       }
       if (payload.action === "create-tasks") {
@@ -784,7 +784,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
           created.push(await this.workspaceService.createFromClip(item, payload.request_id, payload.created_at));
         }
         await this.recordRequest(payload.request_id);
-        new Notice(`Created ${created.length} task workspace${created.length === 1 ? "" : "s"}: ${created.map((task) => task.record.title).join(", ")}`);
+        new Notice(`Created ${created.length} objective workspace${created.length === 1 ? "" : "s"}: ${created.map((task) => task.record.title).join(", ")}`);
       } else {
         const task = this.workspaceService.findByIdOrQuery(payload.task_id, payload.task_query);
         await this.workspaceService.appendUpdate(task.record.task_id, {
@@ -796,12 +796,12 @@ export default class FjgTaskManagerPlugin extends Plugin {
           requestId: payload.request_id
         });
         await this.recordRequest(payload.request_id);
-        new Notice(`Task update added: ${task.record.title}`);
+        new Notice(`Objective update added: ${task.record.title}`);
       }
       this.refreshDashboard();
     } catch (error) {
-      console.error("[FJG Task Manager] Clipper request failed", error);
-      new Notice(`Task clip failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error("[FJG Objective Manager] Clipper request failed", error);
+      new Notice(`Objective clip failed: ${error instanceof Error ? error.message : String(error)}`, 10000);
     }
   }
 
@@ -826,7 +826,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       return true;
     } catch (error) {
       console.warn(
-        "[FJG Task Manager] Could not read legacy Task Capture settings.",
+        "[FJG Objective Manager] Could not read legacy Task Capture settings.",
         error
       );
       return false;
@@ -851,40 +851,40 @@ export default class FjgTaskManagerPlugin extends Plugin {
       this.refreshDashboard();
       this.recoverMissedAdvancedUriLaunch();
     } catch (error) {
-      console.error("[FJG Task Manager] Post-layout startup failed", error);
-      new Notice(`Task workspaces could not finish loading: ${error instanceof Error ? error.message : String(error)}`, 10000);
+      console.error("[FJG Objective Manager] Post-layout startup failed", error);
+      new Notice(`Objective workspaces could not finish loading: ${error instanceof Error ? error.message : String(error)}`, 10000);
     }
   }
 
   private async validateWorkspaces(): Promise<void> {
     const issues = await this.workspaceService.validateAll();
     if (!issues.length) {
-      new Notice(`All ${this.workspaceService.list({ includeArchived: true }).length} task workspaces are valid.`);
+      new Notice(`All ${this.workspaceService.list({ includeArchived: true }).length} objective workspaces are valid.`);
       return;
     }
-    console.warn("[FJG Task Manager] Validation issues", issues);
-    new Notice(`${issues.length} task workspace${issues.length === 1 ? "" : "s"} need attention. See Developer Console.`, 10000);
+    console.warn("[FJG Objective Manager] Validation issues", issues);
+    new Notice(`${issues.length} objective workspace${issues.length === 1 ? "" : "s"} need attention. See Developer Console.`, 10000);
   }
 
   private previewTaskArtifactMigration(): void {
     const preview = this.workspaceService.previewTaskArtifactMigration();
     const eligible = preview.filter((item) => item.eligible);
-    console.info("[FJG Task Manager] Task artifact migration preview", preview);
-    new Notice(`${eligible.length} task ${eligible.length === 1 ? "workspace is" : "workspaces are"} ready for task-folder migration. No files were changed.`, 8000);
+    console.info("[FJG Objective Manager] Objective artifact migration preview", preview);
+    new Notice(`${eligible.length} objective ${eligible.length === 1 ? "workspace is" : "workspaces are"} ready for objective-folder migration. No files were changed.`, 8000);
   }
 
   private async migrateTaskArtifacts(): Promise<void> {
     const preview = this.workspaceService.previewTaskArtifactMigration();
     const eligible = preview.filter((item) => item.eligible);
     if (!eligible.length) {
-      new Notice("No task workspaces need task-folder migration.");
+      new Notice("No objective workspaces need objective-folder migration.");
       return;
     }
     const result = await this.workspaceService.migrateTaskArtifacts();
-    console.info("[FJG Task Manager] Task artifact migration result", result);
+    console.info("[FJG Objective Manager] Objective artifact migration result", result);
     this.refreshDashboard();
     new Notice(
-      `Migrated ${result.migrated} task ${result.migrated === 1 ? "workspace" : "workspaces"}; `
+      `Migrated ${result.migrated} objective ${result.migrated === 1 ? "workspace" : "workspaces"}; `
       + `${result.attachmentMoves} attachment ${result.attachmentMoves === 1 ? "moved" : "moved"}; `
       + `${result.skippedShared.length} shared file ${result.skippedShared.length === 1 ? "skipped" : "skipped"}; `
       + `${result.errors.length} ${result.errors.length === 1 ? "error" : "errors"}.`,
@@ -895,20 +895,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private previewReadableTaskFolders(): void {
     const preview = this.workspaceService.previewTaskArtifactFolderRename();
     const eligible = preview.filter((item) => item.eligible);
-    console.info("[FJG Task Manager] Readable task folder rename preview", preview);
-    new Notice(`${eligible.length} task ${eligible.length === 1 ? "folder is" : "folders are"} ready for readable-title rename. No files were changed.`, 8000);
+    console.info("[FJG Objective Manager] Readable objective folder rename preview", preview);
+    new Notice(`${eligible.length} objective ${eligible.length === 1 ? "folder is" : "folders are"} ready for readable-title rename. No files were changed.`, 8000);
   }
 
   private async renameReadableTaskFolders(): Promise<void> {
     const preview = this.workspaceService.previewTaskArtifactFolderRename();
     if (!preview.some((item) => item.eligible)) {
-      new Notice("No task folders need readable-title renaming.");
+      new Notice("No objective folders need readable-title renaming.");
       return;
     }
     const result = await this.workspaceService.renameTaskArtifactFolders();
-    console.info("[FJG Task Manager] Readable task folder rename result", result);
+    console.info("[FJG Objective Manager] Readable objective folder rename result", result);
     this.refreshDashboard();
-    new Notice(`Renamed ${result.renamed} task folders; ${result.skipped} skipped; ${result.errors.length} errors.`, 12000);
+    new Notice(`Renamed ${result.renamed} objective folders; ${result.skipped} skipped; ${result.errors.length} errors.`, 12000);
   }
 
   private scheduleRefresh(): void {

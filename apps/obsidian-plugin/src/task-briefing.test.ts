@@ -53,9 +53,9 @@ describe("Task Manager briefing", () => {
 
   it("includes registered projects with no tasks and a clear empty state", () => {
     const projectOnly = renderTaskManagerBriefing([], [project], new Date("2026-08-16T20:00:00.000Z"));
-    expect(projectOnly).toContain("_No tasks are currently assigned to this project._");
+    expect(projectOnly).toContain("_No objectives are currently assigned to this project._");
     const empty = renderTaskManagerBriefing([], [], new Date("2026-08-16T20:00:00.000Z"));
-    expect(empty).toContain("No tasks or projects are currently indexed by FJG Task Manager.");
+    expect(empty).toContain("No objectives or projects are currently indexed by FJG Objective Manager.");
     expect(empty).toContain("task_count: 0");
   });
 });

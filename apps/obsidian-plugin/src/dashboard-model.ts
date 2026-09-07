@@ -38,7 +38,7 @@ export interface KanbanColumn<TTask extends KanbanTask = KanbanTask> {
 }
 
 export const TASK_VIEWS: readonly TaskViewDefinition[] = [
-  { key: "recent", label: "Recent Tasks", icon: "history" },
+  { key: "recent", label: "Recent Objectives", icon: "history" },
   { key: "do-first", label: "Do First", icon: "flame" },
   { key: "do-soon", label: "Do Soon", icon: "arrow-right-circle" },
   { key: "ongoing", label: "Ongoing", icon: "play-circle" },

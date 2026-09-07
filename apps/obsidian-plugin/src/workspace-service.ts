@@ -927,19 +927,19 @@ export class TaskWorkspaceService {
     await this.refresh();
   }
 
-  async addSubtask(taskId: string, title: string): Promise<TaskSubtask> {
+  async addSubtask(taskId: string, title: string, fields: Partial<Pick<TaskSubtask, "due" | "notes" | "status">> = {}): Promise<TaskSubtask> {
     const task = this.getById(taskId);
-    if (task.archived) throw new Error("Reopen the parent task first.");
+    if (task.archived) throw new Error("Reopen the parent objective first.");
     const clean = title.trim();
-    if (!clean) throw new Error("Enter a subtask title.");
-    if ([".", ".."].includes(sanitizeTitleForPath(clean))) throw new Error("Enter a descriptive subtask title.");
+    if (!clean) throw new Error("Enter an action title.");
+    if ([".", ".."].includes(sanitizeTitleForPath(clean))) throw new Error("Enter a descriptive action title.");
     const id = createTaskId();
     const base = `Subtasks/${sanitizeTitleForPath(clean)}`;
     let folder = base;
     let suffix = 2;
     while (task.record.subtasks.some((item) => item.attachment_folder.toLowerCase() === folder.toLowerCase())
       || await this.app.vault.adapter.stat(`${this.relatedFilesPath(task)}/${folder}`)) folder = `${base} (${suffix++})`;
-    const sub: TaskSubtask = { id, title: clean, completed: false, status: "do-soon", due: "", notes: "", history: "", source_task_id: "", attachment_folder: folder };
+    const sub: TaskSubtask = { id, title: clean, completed: fields.status === "completed", status: fields.status || "do-soon", due: fields.due || "", notes: fields.notes || "", history: "", source_task_id: "", attachment_folder: folder };
     await this.ensureFolder(`${this.relatedFilesPath(task)}/${folder}`);
     await this.writeSubtasks(taskId, (items) => [...items, sub]);
     return sub;

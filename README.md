@@ -1,6 +1,12 @@
-# FJG Task Manager
+# FJG Objective Manager
 
-Project-centered task workspaces for Obsidian with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
+Objective workspaces with nested Actions for Obsidian, with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
+
+## Objectives and Actions (0.16.0)
+
+Main tasks are now labeled **Objectives**, and subtasks are **Actions**. The Projects dashboard section is removed; existing project tags remain available as metadata. **Capture action** opens the same fields as **Add action**, plus a searchable Objective picker. Choose an exact result before saving; editing the search clears that selection. Existing attachment controls, Copy path, conversion and promotion are unchanged.
+
+This is not a vault migration: the plugin ID, `task_id`, `subtasks` metadata, command IDs, protocol routes, existing folder names, and `Task Manager Briefing.md` filename stay compatible. **Open objective briefing** refreshes the existing briefing with updated terminology. **Move folder** still moves the Objective's owned files and nested Action attachments; Copy path resolves the current destination. External Clipper templates containing an old literal path must be updated after a move. Older documentation below and external integrations may retain the original Task Manager terminology.
 
 The repository also includes a macOS-native [Apple Mail capture integration](integrations/apple-mail-capture/README.md). Its Mail Quick Action saves one open or selected message, complete readable body, metadata, and attachments directly into any chosen existing FJG Vault folder, including Task Manager `Files` folders.
 

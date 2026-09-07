@@ -86,11 +86,11 @@ export class TaskManagerSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "FJG Task Manager" });
+    containerEl.createEl("h2", { text: "FJG Objective Manager" });
 
     new Setting(containerEl)
       .setName("Inbox workspace root")
-      .setDesc("Tasks without a project are stored here in shared Tasks, Updates, and Files folders.")
+      .setDesc("Objectives are stored here using the existing Tasks, Updates, and Files folder layout.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.inboxRoot)
         .onChange(async (value) => {
@@ -100,8 +100,8 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName("Legacy task workspace root")
-      .setDesc("Read-only compatibility location for older per-task folders during migration.")
+      .setName("Legacy objective workspace root")
+      .setDesc("Read-only compatibility location for older per-objective folders during migration.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.activeRoot)
         .onChange(async (value) => {
@@ -112,7 +112,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Archive workspace root")
-      .setDesc("Archived task folders move here and return to the active root when reopened.")
+      .setDesc("Archived objective folders move here and return to the active root when reopened.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.archiveRoot)
         .onChange(async (value) => {
@@ -144,7 +144,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName("Desktop task search")
+      .setName("Desktop objective search")
       .setDesc("Expose an authenticated, read-only catalog on this Mac for the Chrome clipper.")
       .addToggle((toggle) => toggle
         .setValue(this.taskPlugin.settings.catalogEnabled)
@@ -156,7 +156,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Catalog port")
-      .setDesc("Loopback port used only for Chrome task search.")
+      .setDesc("Loopback port used only for Chrome objective search.")
       .addText((text) => text
         .setValue(String(this.taskPlugin.settings.catalogPort))
         .onChange(async (value) => {
@@ -177,7 +177,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         .setButtonText("Copy")
         .onClick(async () => {
           await navigator.clipboard.writeText(this.taskPlugin.settings.catalogToken);
-          new Notice("Task catalog token copied.");
+          new Notice("Objective catalog token copied.");
         }))
       .addButton((button) => button
         .setButtonText("Regenerate")
@@ -187,19 +187,19 @@ export class TaskManagerSettingTab extends PluginSettingTab {
           await this.taskPlugin.saveSettings();
           await this.taskPlugin.restartCatalog();
           this.display();
-          new Notice("Task catalog token regenerated. Update Chrome settings.");
+          new Notice("Objective catalog token regenerated. Update Chrome settings.");
         }));
 
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "The task catalog is read-only. All task creation and updates still pass through Obsidian."
+      text: "The objective catalog is read-only. All objective creation and updates still pass through Obsidian."
     });
 
-    containerEl.createEl("h3", { text: "Gmail task intake" });
+    containerEl.createEl("h3", { text: "Gmail objective intake" });
 
     new Setting(containerEl)
       .setName("Import status-prefixed Gmail captures")
-      .setDesc("Create FJG Task Manager workspaces from marked Gmail captures after they synchronize into the vault.")
+      .setDesc("Create FJG Objective Manager workspaces from marked Gmail captures after they synchronize into the vault.")
       .addToggle((toggle) => toggle
         .setValue(this.taskPlugin.settings.gmailTaskIntakeEnabled)
         .onChange(async (value) => {
@@ -210,7 +210,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Gmail intake folder")
-      .setDesc("Vault-relative folder where the FJG Task Manager Apps Script saves captured email notes.")
+      .setDesc("Vault-relative folder where the FJG Objective Manager Apps Script saves captured email notes.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.gmailTaskIntakeRoot)
         .onChange(async (value) => {
@@ -224,7 +224,7 @@ export class TaskManagerSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("OpenAI API key")
       .setDesc(
-        "Used for voice transcription and AI task drafting. FJG Task Manager "
+        "Used for voice transcription and AI objective drafting. FJG Objective Manager "
         + "will reuse a key already saved by the older Task Capture plugin."
       )
       .addText((text) => {
@@ -257,8 +257,8 @@ export class TaskManagerSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName("Task drafting model")
-      .setDesc("OpenAI model used to turn rough text or a transcript into reviewable task fields.")
+      .setName("Objective drafting model")
+      .setDesc("OpenAI model used to turn rough text or a transcript into reviewable objective fields.")
       .addText((text) => text
         .setValue(this.taskPlugin.settings.openAiModel)
         .onChange(async (value) => {

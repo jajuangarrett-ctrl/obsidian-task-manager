@@ -197,6 +197,23 @@ function createService() {
 }
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("captures a complete action under the exact objective with a ready attachment folder", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Action capture objective", status: "do-first" });
+    const other = await service.createTask({ title: "Other objective", status: "do-first" });
+    const action = await service.addSubtask(parent.record.task_id, "Review proposal", { status: "waiting", due: "2026-09-20", notes: "Ask for the revised budget." });
+    await service.refresh();
+    const stored = service.getById(parent.record.task_id);
+    expect(stored.record.subtasks).toEqual([action]);
+    expect(action).toMatchObject({ status: "waiting", due: "2026-09-20", notes: "Ask for the revised budget.", completed: false });
+    expect(await vault.adapter.stat(service.subtaskFolder(parent.record.task_id, action.id))).toEqual({ type: "folder" });
+    expect(service.getById(other.record.task_id).record.subtasks).toEqual([]);
+    expect(await vault.read(stored.taskFile as never)).toContain("task_id:");
+    await expect(service.addSubtask(parent.record.task_id, "  ")).rejects.toThrow("Enter an action title");
+    await service.changeStatus(parent.record.task_id, "archived");
+    await expect(service.addSubtask(parent.record.task_id, "Blocked")).rejects.toThrow("Reopen the parent objective");
+  });
   it("keeps subtask destinations and captured emails through parent rename, relocation and archive/reopen", async () => {
     const { service, vault } = createService();
     await service.initialize();
@@ -1151,7 +1168,7 @@ describe("TaskWorkspaceService briefing", () => {
     const briefing = vault.getAbstractFileByPath(service.briefingPath());
     expect(briefing).toBeInstanceOf(obsidianMock.MockTFile);
     expect(await vault.read(briefing as InstanceType<typeof obsidianMock.MockTFile>))
-      .toContain("No tasks or projects are currently indexed by FJG Task Manager.");
+      .toContain("No objectives or projects are currently indexed by FJG Objective Manager.");
   });
 
   it("regenerates every dashboard task with scannable title, status, project, details, and history", async () => {

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Hide the preserved notes/template block in expanded Actions to keep cards compact. Notes remain available in Edit and are preserved during promotion.
+
+## 0.16.0 — 2026-09-07
+
+- Rename the plugin interface to Objectives and Actions, including capture, conversion, promotion, commands, and objective briefing labels. Remove the dashboard's Projects section without deleting project metadata.
+- Add a top-level Capture action button using the existing action form and a searchable, explicitly selected parent objective. Searching again clears the previous selection.
+- Save new action fields together and create its attachment destination immediately. Preserve existing IDs, schema, command IDs, protocol routes, briefing filename, and task/subtask folder layout for compatibility.
+- Keep all existing action file, copy-path, conversion, promotion, and parent-folder move controls.
+
 ## 0.15.0 — 2026-09-06
 
 - Add collapsible subtasks to task and Kanban cards, with progress, status, due date, notes, files, and Copy path.

@@ -18,42 +18,42 @@ export function renderTaskManagerBriefing(
     `task_count: ${tasks.length}`,
     `project_count: ${projects.length}`,
     "---",
-    "# Task Manager Briefing",
+    "# Objective Manager Briefing",
     "",
-    "> Generated from the authoritative FJG Task Manager index. Use the Task Manager dashboard's **Refresh** or **Open Task Briefing** button to regenerate this note.",
+    "> Generated from the authoritative FJG Objective Manager index. Use the Objective Manager dashboard's **Refresh** or **Open Objective Briefing** button to regenerate this note.",
     "",
     "## Summary",
     "",
-    `- Tasks represented in the dashboard: **${tasks.length}**`,
+    `- Objectives represented in the dashboard: **${tasks.length}**`,
     `- Project tags represented in the dashboard: **${projects.length}**`,
     `- Generated: ${generatedAt.toLocaleString()}`,
     "",
-    "## Tasks and projects",
+    "## Objectives and projects",
     ""
   ];
 
   if (!tasks.length && !projects.length) {
-    lines.push("No tasks or projects are currently indexed by FJG Task Manager.", "");
+    lines.push("No objectives or projects are currently indexed by FJG Objective Manager.", "");
     return `${lines.join("\n").trimEnd()}\n`;
   }
 
   for (const group of projectGroups) {
     lines.push(`### ${headingText(group.name)}`, "");
     if (group.project) {
-      lines.push(`- Project tag status: **${group.project.status === "archived" ? "Archived tasks only" : "Active"}**`, "");
+      lines.push(`- Project tag status: **${group.project.status === "archived" ? "Archived objectives only" : "Active"}**`, "");
     } else if (group.name === "No project") {
-      lines.push("Tasks in this section are not assigned to a project.", "");
+      lines.push("Objectives in this section are not assigned to a project.", "");
     }
 
     if (!group.tasks.length) {
-      lines.push("_No tasks are currently assigned to this project._", "");
+      lines.push("_No objectives are currently assigned to this project._", "");
       continue;
     }
 
     for (const task of group.tasks) {
       lines.push(`#### ${headingText(task.record.title)}`, "");
-      lines.push(`- Task: ${wikiLink(task.taskPath, task.record.title)}`);
-      lines.push(`- Task ID: \`${inlineCode(task.record.task_id)}\``);
+      lines.push(`- Objective: ${wikiLink(task.taskPath, task.record.title)}`);
+      lines.push(`- Objective ID: \`${inlineCode(task.record.task_id)}\``);
       lines.push(`- Status: **${statusLabel(task.record.status)}**`);
       lines.push(`- Priority: ${capitalize(task.record.priority)}`);
       lines.push(`- Due date: ${task.record.due || "Not set"}`);
@@ -64,9 +64,9 @@ export function renderTaskManagerBriefing(
       if (task.projectPath) lines.push(`- Project note: ${wikiLink(task.projectPath, task.record.project || "Project")}`);
       if (task.updatesPath) lines.push(`- Full update history: ${wikiLink(task.updatesPath, `${task.record.title} updates`)}`);
       lines.push("", "##### Details and notes", "");
-      lines.push(task.notes.trim() ? blockquote(task.notes) : "_No task details or notes._", "");
+      lines.push(task.notes.trim() ? blockquote(task.notes) : "_No objective details or notes._", "");
       if (task.record.subtasks?.length) {
-        lines.push("##### Subtasks", "");
+        lines.push("##### Actions", "");
         for (const sub of task.record.subtasks) {
           lines.push(`- [${sub.completed ? "x" : " "}] ${escapeMarkdown(sub.title)} · ${statusLabel(sub.status)}${sub.due ? ` · Due ${sub.due}` : ""}`);
           if (sub.notes) lines.push(indent(sub.notes));
@@ -75,7 +75,7 @@ export function renderTaskManagerBriefing(
       }
       lines.push("##### Recent update history", "");
       if (!task.updates.length) {
-        lines.push("_No task updates recorded._", "");
+        lines.push("_No objective updates recorded._", "");
       } else {
         for (const update of task.updates.slice(0, RECENT_UPDATE_LIMIT)) {
           const meta = [update.timestamp, update.actor, update.type].filter(Boolean).join(" · ");
