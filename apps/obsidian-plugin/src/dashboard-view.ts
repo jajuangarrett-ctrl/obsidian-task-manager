@@ -153,11 +153,12 @@ export class TaskDashboardView extends ItemView {
   }
 
   private renderTasks(root: HTMLElement, tasks: IndexedTask[], projects: ProjectSummary[]): void {
+    projects = projects.map((project) => project.key === NO_PROJECT ? { ...project, name: "No objective tag" } : project);
     const activeProject = projects.find((project) => project.key === this.project);
     const selectedRecords = tasks
       .filter((task) => matchesProject(task.record, this.project))
       .filter((task) => this.view === "archived" || task.record.status !== "archived");
-    const selectedName = this.project === NO_PROJECT ? "No project" : this.project;
+    const selectedName = this.project === NO_PROJECT ? "No objective tag" : this.project;
     if (this.project !== ALL_PROJECTS) this.renderActiveProject(root);
 
     const heading = root.createDiv({ cls: "fjg-section-heading" });
@@ -233,7 +234,7 @@ export class TaskDashboardView extends ItemView {
       if (archivedWithoutProject && !projectOptions.some((project) => project.key === NO_PROJECT)) {
         projectOptions.push({
           key: NO_PROJECT,
-          name: "No project",
+          name: "No objective tag",
           openCount: 0,
           totalCount: archivedWithoutProject
         });
@@ -246,15 +247,15 @@ export class TaskDashboardView extends ItemView {
     }
     const projectPicker = filters.createEl("button", {
       cls: "fjg-dashboard-project-filter",
-      text: this.project === ALL_PROJECTS ? "All projects" : (projectOptions.find((option) => option.key === this.project)?.name || selectedName),
-      attr: { type: "button", "aria-label": "Filter objectives by project" }
+      text: this.project === ALL_PROJECTS ? "All objective tags" : (projectOptions.find((option) => option.key === this.project)?.name || selectedName),
+      attr: { type: "button", "aria-label": "Filter objectives by objective tag" }
     });
     projectPicker.addEventListener("click", () => {
       new DashboardProjectPickerModal(
         this.app,
         this.project,
         [
-          { key: ALL_PROJECTS, name: "All projects" },
+          { key: ALL_PROJECTS, name: "All objective tags" },
           ...projectOptions.map((project) => ({ key: project.key, name: project.name }))
         ],
         (projectKey) => {
@@ -412,7 +413,7 @@ export class TaskDashboardView extends ItemView {
     });
     const iconEl = back.createSpan();
     setIcon(iconEl, "arrow-left");
-    back.createSpan({ text: "All projects" });
+    back.createSpan({ text: "All objective tags" });
     back.addEventListener("click", () => {
       this.mode = "projects";
       this.render();
@@ -436,8 +437,8 @@ export class TaskDashboardView extends ItemView {
     const tools = root.createDiv({ cls: "fjg-project-tools" });
     const search = tools.createEl("input", {
       type: "search",
-      placeholder: "Search project tags",
-      attr: { "aria-label": "Search project tags" }
+      placeholder: "Search objective tags",
+      attr: { "aria-label": "Search objective tags" }
     });
     search.value = this.projectQuery;
     const listHeader = root.createDiv({
@@ -466,7 +467,7 @@ export class TaskDashboardView extends ItemView {
     if (!visible.length) {
       parent.createDiv({
         cls: "fjg-empty",
-        text: projects.length ? "No project tags match this search." : "Assign a project tag to an objective to get started."
+        text: projects.length ? "No objective tags match this search." : "Assign an objective tag to an objective to get started."
       });
       return;
     }
@@ -579,8 +580,8 @@ export class TaskDashboardView extends ItemView {
       });
       const project = meta.createEl("button", {
         cls: "fjg-task-meta-control fjg-task-project-picker-button",
-        text: task.record.project || "No project",
-        attr: { type: "button", "aria-label": `Choose project tag for ${task.record.title}` }
+        text: task.record.project || "No objective tag",
+        attr: { type: "button", "aria-label": `Choose objective tag for ${task.record.title}` }
       });
       project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
       const dueDate = meta.createEl("button", {

@@ -236,8 +236,8 @@ export class QuickCaptureModal extends Modal {
         this.drafts[index].status = status.value as TaskStatus || "do-first";
       });
 
-      const project = this.selectRow(formCard, "Project");
-      project.createEl("option", { value: "", text: "No Project" });
+      const project = this.selectRow(formCard, "Objective tag");
+      project.createEl("option", { value: "", text: "No objective tag" });
       for (const projectName of this.taskPlugin.projectNames()) {
         project.createEl("option", { value: projectName, text: projectName });
       }

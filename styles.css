@@ -54,9 +54,10 @@
 
 .fjg-dashboard-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  max-width: 480px;
+  width: fit-content;
+  max-width: 100%;
   margin-bottom: 16px;
   padding: 4px;
   border: 1px solid var(--background-modifier-border);
@@ -1239,7 +1240,7 @@
   }
 
   .fjg-dashboard-tabs {
-    max-width: none;
+    max-width: 100%;
   }
 
   .fjg-view-grid {

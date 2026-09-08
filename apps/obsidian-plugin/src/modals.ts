@@ -160,7 +160,7 @@ export class DashboardProjectPickerModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle("Filter objectives by project");
+    this.setTitle("Filter objectives by objective tag");
     this.render();
   }
 
@@ -171,23 +171,23 @@ export class DashboardProjectPickerModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Search projects to scope the current objective view. Your current view and objective search stay in place.",
+      text: "Search objective tags to scope the current objective view. Your current view and objective search stay in place.",
       cls: "fjg-project-picker-intro"
     });
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search projects", "aria-label": "Search dashboard projects" }
+      attr: { placeholder: "Search objective tags", "aria-label": "Search dashboard objective tags" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
       this.query = search.value;
       this.render();
     });
-    const choices = this.contentEl.createDiv({ cls: "fjg-project-picker-choices", attr: { role: "listbox", "aria-label": "Projects" } });
+    const choices = this.contentEl.createDiv({ cls: "fjg-project-picker-choices", attr: { role: "listbox", "aria-label": "Objective tags" } });
     const matches = this.options.filter((option) => normalizeProjectPickerText(option.name).includes(normalizeProjectPickerText(this.query)));
     if (!matches.length) {
-      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No projects match this search." });
+      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No objective tags match this search." });
     } else {
       for (const option of matches) {
         const selected = option.key === this.currentProject;
@@ -223,7 +223,7 @@ export class TaskProjectPickerModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle(`Project tag: ${this.taskTitle}`);
+    this.setTitle(`Objective tag: ${this.taskTitle}`);
     this.render();
   }
 
@@ -234,13 +234,13 @@ export class TaskProjectPickerModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Search an existing project tag, choose No project, or create a new tag. Project tags never move the objective.",
+      text: "Search an existing objective tag, choose No objective tag, or create a new tag. Objective tags never move the objective.",
       cls: "fjg-project-picker-intro"
     });
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search project tags", "aria-label": "Search project tags" }
+      attr: { placeholder: "Search objective tags", "aria-label": "Search objective tags" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
@@ -251,10 +251,10 @@ export class TaskProjectPickerModal extends Modal {
     if (this.error) this.contentEl.createDiv({ cls: "fjg-project-picker-error", text: this.error });
 
     const choices = this.contentEl.createDiv({ cls: "fjg-project-picker-choices" });
-    this.projectButton(choices, "No project", "", !this.currentProject);
+    this.projectButton(choices, "No objective tag", "", !this.currentProject);
     const options = filterProjectPickerOptions(this.projectNames(), this.query);
     if (!options.length) {
-      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No existing project tags match this search." });
+      choices.createDiv({ cls: "fjg-project-picker-empty", text: "No existing objective tags match this search." });
     } else {
       for (const project of options) this.projectButton(choices, project, project, project === this.currentProject);
     }
@@ -263,7 +263,7 @@ export class TaskProjectPickerModal extends Modal {
     if (createName) {
       const create = this.contentEl.createEl("button", {
         cls: "mod-cta fjg-project-picker-create",
-        text: `Create project tag “${createName}” and assign`,
+        text: `Create objective tag “${createName}” and assign`,
         attr: { type: "button" }
       });
       create.addEventListener("click", async () => {
@@ -334,7 +334,7 @@ export class TaskRelocationModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Choose a folder inside 02 Programs or 03 Areas. The complete objective-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and project tag stay unchanged.",
+      text: "Choose a folder inside 02 Programs or 03 Areas. The complete objective-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and objective tag stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     this.contentEl.createEl("p", {
@@ -688,7 +688,7 @@ export class CreateTaskModal extends Modal {
       dropdown.onChange((value) => this.value.status = value as TaskStatus);
     });
     new Setting(this.contentEl).setName("Project").addDropdown((dropdown) => {
-      dropdown.addOption("", "No Project");
+      dropdown.addOption("", "No objective tag");
       for (const projectName of this.projectNames) {
         dropdown.addOption(projectName, projectName);
       }

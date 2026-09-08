@@ -48,7 +48,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
-  { key: "no-project", label: "No Project", icon: "folder-minus" },
+  { key: "no-project", label: "No objective tag", icon: "folder-minus" },
   { key: "archived", label: "Archived", icon: "archive" }
 ] as const;
 

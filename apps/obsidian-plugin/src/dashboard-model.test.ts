@@ -129,7 +129,7 @@ describe("dashboard task views", () => {
 
   it("places No Project directly before Archived without restoring Unassigned", () => {
     const keys = TASK_VIEWS.map((view) => view.key);
-    expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "No Project" });
+    expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "No objective tag" });
     expect(keys.indexOf("no-project")).toBe(keys.indexOf("archived") - 1);
     expect(keys).not.toContain("unassigned");
   });

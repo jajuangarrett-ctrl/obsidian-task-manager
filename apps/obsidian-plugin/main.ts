@@ -604,8 +604,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
   async changeProject(taskId: string, projectName: string): Promise<void> {
     const task = await this.workspaceService.changeProject(taskId, projectName);
     const assignment = task.record.project
-      ? `Project tag set to ${task.record.project}: ${task.record.title}. Folder unchanged.`
-      : `Project tag removed: ${task.record.title}. Folder unchanged.`;
+      ? `Objective tag set to ${task.record.project}: ${task.record.title}. Folder unchanged.`
+      : `Objective tag removed: ${task.record.title}. Folder unchanged.`;
     new Notice(assignment);
     this.refreshDashboard();
   }
