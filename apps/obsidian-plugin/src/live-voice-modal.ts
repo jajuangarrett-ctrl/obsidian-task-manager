@@ -8,6 +8,7 @@ export class LiveVoiceModal extends Modal {
   private closed = false;
   private muted = false;
   private status!: HTMLElement;
+  private coverage!: HTMLElement;
   private transcript!: HTMLElement;
   private updates!: HTMLElement;
   private audio!: HTMLAudioElement;
@@ -25,6 +26,7 @@ export class LiveVoiceModal extends Modal {
     const root = this.contentEl;
     root.createEl("p", { text: "Ask about your tasks or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
     root.createEl("p", { text: "Your microphone and requested task context go to OpenAI while connected. Uses your saved API key.", cls: "fjg-live-caption" });
+    this.coverage = root.createEl("p", { cls: "fjg-live-coverage", attr: { role: "status" } });
     this.status = root.createEl("p", { text: "Ready to talk", cls: "fjg-live-status", attr: { role: "status", "aria-live": "polite" } });
     const controls = root.createDiv({ cls: "fjg-live-controls" });
     this.startButton = controls.createEl("button", { text: "Start conversation", cls: "mod-cta" });
@@ -60,7 +62,7 @@ export class LiveVoiceModal extends Modal {
     const tools = new LiveTaskTools(this.plugin.workspaceService, () => this.plugin.settings, (message) => {
       this.plugin.refreshDashboard();
       if (!this.closed) this.updates.createEl("p", { text: message });
-    }, () => !this.closed && session.active);
+    }, () => !this.closed && session.active, message => { if (!this.closed) this.coverage.setText(message); });
     session = new DashboardLiveSession(this.audio, {
       state: (state, message) => this.setState(state, message),
       transcript: (speaker, delta) => this.addTranscript(speaker, delta),

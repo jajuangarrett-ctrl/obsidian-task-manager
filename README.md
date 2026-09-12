@@ -299,3 +299,7 @@ Choose **Talk to capture** in the capture window. GPT-Live-1 fills visible field
 Uses the plugin's saved OpenAI key or the existing FJG Objective Manager key. No keys are copied into releases. Touch controls support mobile layouts; update through BRAT on phones that do not sync plugin files. Physical phone microphone/playback verification remains necessary.
 
 The shared implementation is maintained in obsidian-task-manager/apps/obsidian-plugin/src/capture-live and copied into each capture plugin's src/capture-live so each plugin works independently. Keep those copies synchronized when fixing the shared protocol or form tools.
+
+## Broader live search
+
+Live search ranks individual keywords and common word forms instead of requiring an exact phrase. Search coverage is shown in the voice panel. Vault search scans the complete eligible folder/vault scope before paging results; hidden/protected files, unsupported content types, unreadable files and oversized notes are reported separately. Dashboard search covers all indexed objectives, including notes, updates and nested actions, with explicit status filters respected. Ranking is keyword-based, not semantic/vector search. Source matches remain ambiguous until the user identifies the intended note or objective.

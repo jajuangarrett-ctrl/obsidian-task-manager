@@ -198,6 +198,19 @@ function createService() {
 }
 
 describe("Live voice writes to authoritative task Markdown", () => {
+  it("searches all indexed notes, updates and nested actions with ranked non-phrase matching", async () => {
+    const {service}=createService();await service.initialize();
+    const task=await service.createTask({title:"Late folder item",details:"Student enrollment budget planning"});
+    await service.addSubtask(task.record.task_id,"Staffing review",{notes:"Counselor schedules"});
+    await service.appendUpdate(task.record.task_id,{text:"Quarterly grant renewal",actor:"Test"});
+    const coverage=vi.fn();const tools=new LiveTaskTools(service,()=>({}) as never,vi.fn(),()=>true,coverage);
+    for(const query of ["budget student","counselor schedules","grant quarterly"]){
+      const result=await tools.execute("find_tasks",JSON.stringify({query,status:"",offset:0}),"search") as any;
+      expect(result.tasks[0].task_id).toBe(task.record.task_id);expect(result.scanned_tasks).toBe(1);expect(result.search_complete).toBe(true);
+    }
+    expect(coverage).toHaveBeenCalled();
+  });
+
   const settings = { activeRoot: "08 Tasks/Workspaces", inboxRoot: "08 Tasks/Inbox", projectRoot: "08 Tasks/Projects" };
   it("creates, updates due date, appends an update, and completes the same task with persisted data", async () => {
     const { service, vault } = createService(); await service.initialize();
