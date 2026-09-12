@@ -10,7 +10,7 @@ export interface LiveCallbacks {
 }
 
 export function liveRequest(sdp: string, backendModel: string, context: string) {
-  return { session: { model: "gpt-live-1", instructions: LIVE_INSTRUCTIONS,
+  return { session: { model: "gpt-live-1", instructions: LIVE_INSTRUCTIONS + "\nCapture context: " + context,
     delegation: { type: "responses", responses: { model: backendModel, instructions: backendInstructions(context),
       tools: LIVE_TOOLS, tool_choice: "auto", parallel_tool_calls: false, max_output_tokens: 1800 } } },
     transport: { type: "webrtc", sdp } };

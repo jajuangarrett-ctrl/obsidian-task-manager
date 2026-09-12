@@ -29,7 +29,8 @@ export class CaptureVoice {
   private audio: HTMLAudioElement;
   constructor(root: HTMLElement, private app: App, private label: string, private port: CapturePort, private key: ()=>Promise<string>) {
     const panel=root.createDiv({cls:'fjg-capture-live'});
-    panel.createEl('p',{text:'Talk to fill this capture, make corrections, then say “Save it.” Audio and capture fields go to OpenAI while connected.'});
+    (panel as HTMLElement & { captureVoice?: CaptureVoice }).captureVoice=this;
+    panel.createEl('p',{text:(label.includes('REVIEW ROUTER')?'Talk to fill this form, then say “Continue to review.” Nothing saves here.':'Talk to fill this capture, make corrections, then say “Save it.”')+' Audio and capture fields go to OpenAI while connected.'});
     const controls=panel.createDiv({cls:'fjg-capture-live-controls'});
     this.startButton=controls.createEl('button',{text:'Talk to capture',cls:'mod-cta'});this.startButton.onclick=()=>void this.start();
     this.muteButton=controls.createEl('button',{text:'Mute',attr:{'aria-pressed':'false'}});this.muteButton.disabled=true;
