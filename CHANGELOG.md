@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.17.0 — 2026-09-11
+
+- Add Talk to dashboard with GPT-Live-1, a live transcript, microphone mute, and explicit end controls. Use the existing OpenAI key and a separately configurable Responses backend (default GPT-5.6 Terra).
+- Apply clear spoken requests immediately through existing task operations: create an Inbox objective, change status or due date, rename, and append updates. Read objective IDs and revisions before editing; reject stale edits, duplicate creates, unsupported archive/delete actions, and writes outside configured active task roots.
+- Deduplicate completed tool calls, serialize writes, and stop queued actions when the conversation ends. Release microphone tracks on errors, cancelled permission prompts, and shutdown. Do not automatically reconnect or replay writes.
+- Add responsive voice controls with mobile touch targets. Physical phone audio and plugin synchronization require device verification.
+
 - Hide the preserved notes/template block in expanded Actions to keep cards compact. Notes remain available in Edit and are preserved during promotion.
 
 ## 0.16.0 — 2026-09-07

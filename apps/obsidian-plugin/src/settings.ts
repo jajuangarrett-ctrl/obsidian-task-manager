@@ -26,6 +26,7 @@ export interface TaskManagerSettings {
   processedRequestIds: string[];
   openAiApiKey: string;
   openAiModel: string;
+  liveBackendModel: string;
   transcriptionModel: string;
   autoDraftAfterTranscription: boolean;
   gmailTaskIntakeEnabled: boolean;
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   processedRequestIds: [],
   openAiApiKey: "",
   openAiModel: "gpt-4.1-mini",
+  liveBackendModel: "gpt-5.6-terra",
   transcriptionModel: "gpt-4o-mini-transcribe",
   autoDraftAfterTranscription: true,
   gmailTaskIntakeEnabled: true,
@@ -67,6 +69,7 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     processedRequestIds: Array.isArray(value.processedRequestIds) ? value.processedRequestIds.slice(-500) : [],
     openAiApiKey: String(value.openAiApiKey || "").trim(),
     openAiModel: String(value.openAiModel || DEFAULT_SETTINGS.openAiModel).trim() || DEFAULT_SETTINGS.openAiModel,
+    liveBackendModel: String(value.liveBackendModel || DEFAULT_SETTINGS.liveBackendModel).trim() || DEFAULT_SETTINGS.liveBackendModel,
     transcriptionModel: String(value.transcriptionModel || DEFAULT_SETTINGS.transcriptionModel).trim() || DEFAULT_SETTINGS.transcriptionModel,
     autoDraftAfterTranscription: value.autoDraftAfterTranscription !== false,
     gmailTaskIntakeEnabled: value.gmailTaskIntakeEnabled !== false,
@@ -87,6 +90,13 @@ export class TaskManagerSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "FJG Objective Manager" });
+    new Setting(containerEl)
+      .setName("Live voice backend model")
+      .setDesc("Talk to dashboard uses GPT-Live-1 for speech and this model for objective tools. Uses the saved OpenAI key; clear requests apply immediately.")
+      .addText((text) => text.setValue(this.taskPlugin.settings.liveBackendModel).onChange(async (value) => {
+        this.taskPlugin.settings.liveBackendModel = value.trim() || DEFAULT_SETTINGS.liveBackendModel;
+        await this.taskPlugin.saveSettings();
+      }));
 
     new Setting(containerEl)
       .setName("Inbox workspace root")

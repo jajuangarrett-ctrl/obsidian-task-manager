@@ -64,6 +64,7 @@ vi.mock("obsidian", () => ({
 }));
 
 import { TaskWorkspaceService } from "./workspace-service";
+import { LiveTaskTools } from "./live-tools";
 import { createTaskRecord, parseTaskMarkdown, renderTaskMarkdown, renderUpdatesMarkdown, updateTaskFields } from "@fjg/task-core";
 
 class MockVault {
@@ -195,6 +196,52 @@ function createService() {
     service: new TaskWorkspaceService(app as never, () => settings as never)
   };
 }
+
+describe("Live voice writes to authoritative task Markdown", () => {
+  const settings = { activeRoot: "08 Tasks/Workspaces", inboxRoot: "08 Tasks/Inbox", projectRoot: "08 Tasks/Projects" };
+  it("creates, updates due date, appends an update, and completes the same task with persisted data", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const saved = vi.fn(); const tools = new LiveTaskTools(service, () => settings as never, saved, () => true);
+    const result = await tools.execute("create_task", JSON.stringify({ title: "Voice fixture", details: "Test only", status: "do-first", due: "2026-09-15" }), "create-1") as any;
+    let task = result.task;
+    for (const [operation, value] of [["due", "2026-09-20"], ["update", "Reviewed the draft"], ["status", "completed"]]) {
+      const result = await tools.execute("change_task", JSON.stringify({ task_id: task.task_id, expected_revision: task.revision, operation, value }), operation) as any;
+      expect(result.saved).toBe(true); task = result.task;
+    }
+    const indexed = service.getById(task.task_id);
+    const markdown = parseTaskMarkdown(await vault.read(indexed.taskFile as never));
+    expect(markdown.record.status).toBe("completed"); expect(markdown.record.due).toBe("2026-09-20");
+    expect(markdown.record.task_id).toBe(task.task_id);
+    expect(await vault.read(indexed.updatesFile as never)).toContain("Reviewed the draft");
+    expect(saved).toHaveBeenCalledTimes(4);
+  });
+  it("rejects stale revisions, invalid dates, archive, unknown IDs, and cancelled writes", async () => {
+    const { service } = createService(); await service.initialize();
+    const task = await service.createTask({ title: "Original" });
+    let active = true;
+    const tools = new LiveTaskTools(service, () => settings as never, vi.fn(), () => active);
+    const read = await tools.execute("read_task", JSON.stringify({ task_id: task.record.task_id }), "read") as any;
+    const change = (operation: string, value: string, rev = read.revision) => tools.execute("change_task", JSON.stringify({ task_id: task.record.task_id, expected_revision: rev, operation, value }), "change");
+    await expect(change("due", "2026-02-30")).rejects.toThrow("valid due date");
+    await expect(change("status", "archived")).rejects.toThrow("cannot archive");
+    await expect(change("rename", "Changed", "stale")).rejects.toThrow("changed since");
+    await expect(tools.execute("read_task", '{"task_id":"missing"}', "read2")).rejects.toThrow("No task");
+    active = false; await expect(change("update", "Should not save")).rejects.toThrow("ended");
+    expect(service.getById(task.record.task_id).record.title).toBe("Original");
+  });
+  it("returns ambiguous candidates, avoids duplicate creation, and rejects writes outside configured roots", async () => {
+    const { service } = createService(); await service.initialize();
+    const a = await service.createTask({ title: "Budget review" });
+    await service.createTask({ title: "Budget review" });
+    const tools = new LiveTaskTools(service, () => settings as never, vi.fn(), () => true);
+    const matches = await tools.execute("find_tasks", '{"query":"Budget review","status":"","offset":0}', "search") as any;
+    expect(matches.tasks).toHaveLength(2);
+    const duplicate = await tools.execute("create_task", '{"title":"Budget review","details":"","due":"","status":"do-first"}', "create") as any;
+    expect(duplicate.error).toContain("already exists"); expect(service.list()).toHaveLength(2);
+    const blocked = new LiveTaskTools(service, () => ({ activeRoot: "Other", inboxRoot: "Other", projectRoot: "Other" }) as never, vi.fn(), () => true);
+    await expect(blocked.execute("change_task", JSON.stringify({ task_id: a.record.task_id, expected_revision: matches.tasks.find((t: any) => t.task_id === a.record.task_id).revision, operation: "update", value: "blocked" }), "write")).rejects.toThrow("outside");
+  });
+});
 
 describe("TaskWorkspaceService project-centered moves", () => {
   it("captures a complete action under the exact objective with a ready attachment folder", async () => {

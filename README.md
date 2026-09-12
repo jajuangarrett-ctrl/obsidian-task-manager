@@ -280,3 +280,14 @@ npm run package:release
 ```
 
 The prior Taskboard, iOS app, Taskboard clipper, Obsidian-focused clipper, and bridge remain legacy references. FJG Task Manager is the active Obsidian task workflow.
+# Voice conversations
+
+Select **Talk to dashboard** in the dashboard header, then **Start conversation**. Allow microphone access when prompted. You can ask about objectives or request immediate changes, for example “What is due this week?”, “Move the budget review to Waiting”, or “Add an update to the budget review: I sent the draft.” The panel shows the conversation and successful saves. **Mute microphone** pauses your input; **End conversation** stops the call and further queued changes. Closing the panel also ends the call.
+
+Voice uses `gpt-live-1` and the saved OpenAI API key. The **Live voice backend model** setting defaults to `gpt-5.6-terra`. Both models must be available to the key's OpenAI project; voice and backend API usage are billed by OpenAI. No additional local server or catalog write endpoint is opened. The key remains in Obsidian plugin settings and native authenticated HTTP requests, never tool context, transcripts, or data-channel events.
+
+Supported changes are creating an Inbox objective, editing its status/due date/title, and appending progress updates. Ambiguous names need clarification. Existing objectives are edited by ID with a revision check. Voice does not delete, archive, relocate, change project assignments, or manipulate nested actions. A connection error does not undo previously saved changes; check the dashboard before repeating an uncertain request.
+
+The same plugin package supports desktop and mobile. On a phone, synchronize the plugin files through your configured vault/plugin update method and reload the plugin. The voice panel requires WebRTC and microphone permission in Obsidian's mobile webview; it displays an error if unavailable. Backgrounding the app may disconnect voice; restart manually when ready. Never automatically replay a previous spoken change after reconnecting.
+
+Implementation follows official [GPT-Live WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc) and [Responses delegation](https://developers.openai.com/api/docs/guides/live-delegation) contracts. Session creation uses `/v1/live/sessions`, waits for `session.started`, consumes nested completed function items, sends all results before `response.create`, and closes with `session.close`.

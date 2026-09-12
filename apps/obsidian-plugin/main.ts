@@ -27,6 +27,7 @@ import {
   TextEntryModal
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
+import { LiveVoiceModal } from "./src/live-voice-modal";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
 import { UnifiedCaptureModal } from "./src/unified-capture-modal";
 import type { UnifiedCaptureRequest } from "./src/unified-capture-model";
@@ -46,6 +47,7 @@ import {
 } from "./src/gmail-task-intake";
 
 export default class FjgTaskManagerPlugin extends Plugin {
+  private liveVoiceModal: LiveVoiceModal | null = null;
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
   private readonly catalogServer = new TaskCatalogServer();
@@ -64,6 +66,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.workspaceService.initialize();
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
+    this.addCommand({ id: "talk-to-dashboard", name: "Talk to Dashboard", callback: () => this.openLiveVoice() });
     this.addRibbonIcon("list-checks", "Open FJG Objective Manager", () => this.activateDashboard());
     this.addRibbonIcon("circle-plus", "Quick capture an objective", () => this.openQuickCaptureModal());
     this.addRibbonIcon("clipboard-paste", "Capture objective, agenda, or update", () => this.openUnifiedCaptureModal());
@@ -195,6 +198,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
+    this.liveVoiceModal?.shutdown();
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     if (this.gmailIntakeTimer !== null) window.clearTimeout(this.gmailIntakeTimer);
     await this.catalogServer.stop();
@@ -933,7 +937,19 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }, 500);
   }
 
-  private refreshDashboard(): void {
+  openLiveVoice(context?: () => string): void {
+    if (this.liveVoiceModal) return;
+    const describe = () => JSON.stringify({
+      local_date: new Date().toLocaleDateString("en-CA"),
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      dashboard: context?.() || "All objectives; no specific objective selected.",
+      active_objectives: this.workspaceService.list().length
+    });
+    this.liveVoiceModal = new LiveVoiceModal(this.app, this, describe, () => { this.liveVoiceModal = null; });
+    this.liveVoiceModal.open();
+  }
+
+  refreshDashboard(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_DASHBOARD_VIEW)) {
       const view = leaf.view;
       if (view instanceof TaskDashboardView) view.render();
