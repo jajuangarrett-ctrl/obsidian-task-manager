@@ -945,6 +945,20 @@ export class TaskWorkspaceService {
     return sub;
   }
 
+  async moveSubtask(taskId: string, id: string, direction: "up" | "down"): Promise<void> {
+    if (this.getById(taskId).archived) throw new Error("Reopen the parent objective first.");
+    if (direction !== "up" && direction !== "down") throw new Error("Choose up or down.");
+    await this.writeSubtasks(taskId, (items) => {
+      const index = items.findIndex((item) => item.id === id);
+      if (index < 0) throw new Error("Action not found. Refresh the objective.");
+      const target = index + (direction === "up" ? -1 : 1);
+      if (target < 0 || target >= items.length) return items;
+      const next = [...items];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
   async updateSubtask(taskId: string, id: string, patch: Partial<Pick<TaskSubtask, "title" | "status" | "due" | "notes">>): Promise<void> {
     if (!this.getById(taskId).record.subtasks.some((item) => item.id === id)) throw new Error("Subtask not found.");
     if (patch.title !== undefined && !patch.title.trim()) throw new Error("Enter a subtask title.");

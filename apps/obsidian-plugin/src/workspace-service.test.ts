@@ -244,6 +244,31 @@ describe("Live voice writes to authoritative task Markdown", () => {
 });
 
 describe("TaskWorkspaceService project-centered moves", () => {
+  it("persists action order by ID while keeping fields, attachments and sibling objectives intact", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const parent = await service.createTask({ title: "Ordered objective", status: "do-first" });
+    const other = await service.createTask({ title: "Unchanged objective", status: "do-first" });
+    const id = parent.record.task_id;
+    const a = await service.addSubtask(id, "Same title", { notes: "Preserve me", due: "2026-09-25", status: "waiting" });
+    const b = await service.addSubtask(id, "Same title");
+    const c = await service.addSubtask(id, "Last action");
+    const folder = service.subtaskFolder(id, a.id);
+    await vault.create(`${folder}/Evidence.md`, "Keep attachment");
+    await service.moveSubtask(id, b.id, "up"); await service.refresh();
+    expect(service.getById(id).record.subtasks).toEqual([b, a, c]);
+    await service.moveSubtask(id, b.id, "up");
+    expect(service.getById(id).record.subtasks).toEqual([b, a, c]);
+    await service.moveSubtask(id, a.id, "down"); await service.refresh();
+    expect(service.getById(id).record.subtasks).toEqual([b, c, a]);
+    expect(service.subtaskFolder(id, a.id)).toBe(folder);
+    expect(service.subtaskFiles(id, a.id).map(f => f.path)).toEqual([`${folder}/Evidence.md`]);
+    expect(service.getById(other.record.task_id).record.subtasks).toEqual([]);
+    await expect(service.moveSubtask(id, "missing", "up")).rejects.toThrow("Action not found");
+    expect(service.getById(id).record.subtasks).toEqual([b, c, a]);
+    await service.changeStatus(id, "archived");
+    await expect(service.moveSubtask(id, a.id, "up")).rejects.toThrow("Reopen");
+  });
+
   it("captures a complete action under the exact objective with a ready attachment folder", async () => {
     const { service, vault } = createService();
     await service.initialize();

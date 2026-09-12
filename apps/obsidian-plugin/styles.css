@@ -1859,3 +1859,7 @@
   .fjg-live-transcript { max-height: 28dvh; }
   .fjg-header-actions .fjg-live-trigger { white-space: normal; }
 }
+
+@media (max-width: 700px) {
+  .fjg-subtask-line .fjg-action-move { min-height: 44px; min-width: 44px; }
+}

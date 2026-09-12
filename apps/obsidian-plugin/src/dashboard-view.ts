@@ -712,7 +712,7 @@ export class TaskDashboardView extends ItemView {
       progress.addClass("fjg-subtask-progress");
     }
     const run = async (action: () => Promise<unknown>) => { try { await action(); this.render(); } catch (error) { new Notice(String(error), 8000); } };
-    for (const sub of subs) {
+    for (const [index, sub] of subs.entries()) {
       const item = section.createDiv({ cls: "fjg-subtask-item" });
       const line = item.createDiv({ cls: "fjg-subtask-line" });
       const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete action ${sub.title}` } });
@@ -724,6 +724,16 @@ export class TaskDashboardView extends ItemView {
       const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy action folder path for ${sub.title}` } });
       copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Action folder path copied."); }));
       if (!task.archived) {
+        for (const direction of ["up", "down"] as const) {
+          const move = line.createEl("button", { text: direction === "up" ? "↑ Move up" : "↓ Move down", cls: "fjg-action-move",
+            attr: { "aria-label": `Move action ${sub.title} ${direction}` } });
+          move.disabled = direction === "up" ? index === 0 : index === subs.length - 1;
+          move.addEventListener("click", () => {
+            section.querySelectorAll<HTMLButtonElement>(".fjg-action-move").forEach((button) => { button.disabled = true; });
+            this.expandedSubtasks.add(taskId);
+            void run(() => service.moveSubtask(taskId, sub.id, direction)).finally(() => this.render());
+          });
+        }
         const edit = line.createEl("button", { text: "Edit" });
         edit.addEventListener("click", () => new SubtaskEditModal(this.app, sub, async (title, due, notes, status) => { await service.updateSubtask(taskId, sub.id, { title, due, notes, status }); this.render(); }).open());
         const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to action ${sub.title}` } });

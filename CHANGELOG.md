@@ -1,3 +1,7 @@
+# 0.18.0
+
+- Add Move up and Move down controls for actions within an objective, with saved ordering and mobile touch targets. Action notes, status, due dates, IDs and attachment folders stay intact.
+
 # Changelog
 
 ## Unreleased
