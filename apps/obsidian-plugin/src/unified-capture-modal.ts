@@ -71,7 +71,7 @@ export class UnifiedCaptureModal extends Modal {
         this.continueButton = button.buttonEl;
       });
 
-    this.voice = new CaptureVoice(this.contentEl, this.app, "REVIEW ROUTER: Capture to FJG Vault. This opens a review screen; it never saves. Say Continue to review when ready.", {
+    this.voice = new CaptureVoice(this.contentEl, this.app, "REVIEW ROUTER: Capture to FJG Vault. This opens a review screen; it never saves. Press Continue to Review when ready.", {
       fields: () => settingFields(this.contentEl, ["Action", "Source text"]), ready: () => !this.closed,
       save: async () => { this.continue(); return this.closed ? { review_opened: true, saved: false } : false; }
     }, () => captureKey(this.app));

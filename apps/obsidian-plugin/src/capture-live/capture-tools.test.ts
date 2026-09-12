@@ -9,7 +9,7 @@ function setup() {
  return {values,save,run,stop:()=>active=false};
 }
 describe('live capture form tools',()=>{
- it('fills and revises fields without saving until the separate save operation',async()=>{
+ it('fills and revises fields while keeping all voice saves disabled',async()=>{
   const {run,values,save}=setup();let state=await run('get_capture');
   await run('update_capture',{revision:state.revision,changes:[{field:'text',value:'Discuss the revised budget'},{field:'person',value:'two'}]});
   expect(values).toEqual({text:'Discuss the revised budget',person:'two'});expect(save).not.toHaveBeenCalled();
