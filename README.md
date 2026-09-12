@@ -303,3 +303,7 @@ The shared implementation is maintained in obsidian-task-manager/apps/obsidian-p
 ## Broader live search
 
 Live search ranks individual keywords and common word forms instead of requiring an exact phrase. Search coverage is shown in the voice panel. Vault search scans the complete eligible folder/vault scope before paging results; hidden/protected files, unsupported content types, unreadable files and oversized notes are reported separately. Dashboard search covers all indexed objectives, including notes, updates and nested actions, with explicit status filters respected. Ranking is keyword-based, not semantic/vector search. Source matches remain ambiguous until the user identifies the intended note or objective.
+
+## Create actions with dashboard voice
+
+In **Talk to dashboard**, say “Add an action under my Work Study objective to review invoices, due September 20.” The assistant finds and reads the parent objective, asks which one you mean when necessary, then creates the action under its exact ID. Requested notes, due date and status are retained; the default action status is Do Soon. A saved-action receipt names both the action and its parent. Archiving remains manual. The separate capture forms still require their Save buttons.
