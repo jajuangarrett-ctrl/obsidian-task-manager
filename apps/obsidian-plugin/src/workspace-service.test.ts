@@ -198,6 +198,31 @@ function createService() {
 }
 
 describe("Live voice writes to authoritative task Markdown", () => {
+  it("creates a voice action under an exact parent with persisted fields and attachment folder", async () => {
+    const {service,vault}=createService();await service.initialize();
+    const parent=await service.createTask({title:"Work Study"});
+    const other=await service.createTask({title:"Work Study follow-up"});
+    const changed=vi.fn();let active=true;
+    const tools=new LiveTaskTools(service,()=>({activeRoot:"08 Tasks/Workspaces",inboxRoot:"08 Tasks/Inbox",projectRoot:"08 Tasks/Projects"}) as never,changed,()=>active);
+    const read=()=>tools.execute("read_task",JSON.stringify({task_id:parent.record.task_id}),"read") as Promise<any>;
+    let current=await read();
+    const args={task_id:parent.record.task_id,expected_revision:current.revision,title:"Review invoices",notes:"Check the supporting receipts",due:"2026-09-20",status:"waiting"};
+    await expect(tools.execute("create_action",JSON.stringify({...args,expected_revision:"stale"}),"stale")).rejects.toThrow("changed since");
+    const result=await tools.execute("create_action",JSON.stringify(args),"create-action") as any;
+    expect(result.saved).toBe(true);expect(result.parent.task_id).toBe(parent.record.task_id);
+    expect(result.action).toMatchObject({title:args.title,notes:args.notes,due:args.due,status:"waiting"});
+    expect(service.getById(other.record.task_id).record.subtasks).toEqual([]);
+    const stored=parseTaskMarkdown(await vault.read(service.getById(parent.record.task_id).taskFile as never));
+    expect(stored.record.subtasks).toEqual([result.action]);
+    expect(await vault.adapter.stat(service.subtaskFolder(parent.record.task_id,result.action.id))).toEqual({type:"folder"});
+    current=await read();expect(current.actions[0].id).toBe(result.action.id);
+    const duplicate=await tools.execute("create_action",JSON.stringify({...args,expected_revision:current.revision}),"duplicate") as any;
+    expect(duplicate.error).toContain("already has");expect(changed).toHaveBeenCalledTimes(1);
+    active=false;await expect(tools.execute("create_action",JSON.stringify(args),"cancelled")).rejects.toThrow("ended");
+    active=true;await service.changeStatus(parent.record.task_id,"archived");current=await read();
+    await expect(tools.execute("create_action",JSON.stringify({...args,expected_revision:current.revision,title:"Another"}),"archive")).rejects.toThrow("Reopen");
+  });
+
   it("searches all indexed notes, updates and nested actions with ranked non-phrase matching", async () => {
     const {service}=createService();await service.initialize();
     const task=await service.createTask({title:"Late folder item",details:"Student enrollment budget planning"});

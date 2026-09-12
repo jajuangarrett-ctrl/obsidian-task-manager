@@ -1,3 +1,7 @@
+# 0.21.0
+
+- Dashboard voice can create actions under an exact active parent objective, preserving requested notes, status and due date. Duplicate titles under the same parent, stale revisions and archived parents are rejected. Archiving remains manual.
+
 # 0.18.0
 
 - Add Move up and Move down controls for actions within an objective, with saved ordering and mobile touch targets. Action notes, status, due dates, IDs and attachment folders stay intact.
