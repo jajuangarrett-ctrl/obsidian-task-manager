@@ -14,8 +14,7 @@ describe('live capture form tools',()=>{
   await run('update_capture',{revision:state.revision,changes:[{field:'text',value:'Discuss the revised budget'},{field:'person',value:'two'}]});
   expect(values).toEqual({text:'Discuss the revised budget',person:'two'});expect(save).not.toHaveBeenCalled();
   state=await run('get_capture');await run('update_capture',{revision:state.revision,changes:[{field:'text',value:'Discuss next week’s budget'}]});
-  state=await run('get_capture');expect(await run('save_capture',{revision:state.revision})).toEqual({saved:true});expect(save).toHaveBeenCalledTimes(1);
-  await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('already attempted');
+  state=await run('get_capture');await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('visible Save');expect(save).not.toHaveBeenCalled();
  });
  it('returns ambiguous people as separate choices and rejects invented option values atomically',async()=>{
   const {run,values}=setup();expect((await run('find_choices',{field:'person',query:'Alex'})).choices).toHaveLength(2);
@@ -26,14 +25,15 @@ describe('live capture form tools',()=>{
   await expect(run('update_capture',{revision:state.revision,changes:[{field:'text',value:'Old speech'}]})).rejects.toThrow('form changed');
   stop();await expect(run('get_capture')).rejects.toThrow('ended');expect(values.text).toBe('Typed correction');
  });
- it('requires missing fields and never retries a failed save automatically',async()=>{
-  const {run,values,save}=setup();let state=await run('get_capture');await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('Fill in');expect(save).not.toHaveBeenCalled();
-  values.text='Text';values.person='one';save.mockRejectedValueOnce(new Error('Disk unavailable'));state=await run('get_capture');
-  await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('Disk');await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('already attempted');expect(save).toHaveBeenCalledTimes(1);
+ it('has no voice save operation, even when the form is complete',async()=>{
+ const {run,values,save}=setup();values.text='Complete thought';values.person='one';const state=await run('get_capture');
+ await expect(run('save_capture',{revision:state.revision})).rejects.toThrow('visible Save');expect(save).not.toHaveBeenCalled();
  });
- it('reports router handoff as review opened, not a saved capture',async()=>{
-  const tools=new CaptureTools({fields:()=>[],ready:()=>true,save:async()=>({review_opened:true,saved:false})},()=>true);
-  const state=await tools.execute('get_capture','{}') as any;
-  expect(await tools.execute('save_capture',JSON.stringify({revision:state.revision}))).toEqual({review_opened:true,saved:false});
- });
+});
+
+it('accepts program Update text without mistaking its name for a date', async()=>{
+ let value='';const tools=new CaptureTools({ready:()=>true,save:async()=>true,fields:()=>[{id:'Update',label:'Update',value,set:v=>value=v}]},()=>true);
+ const state=await tools.execute('get_capture','{}') as any;
+ await tools.execute('update_capture',JSON.stringify({revision:state.revision,changes:[{field:'Update',value:'Enrollment increased this week.'}]}));
+ expect(value).toBe('Enrollment increased this week.');
 });

@@ -291,3 +291,11 @@ Supported changes are creating an Inbox objective, editing its status/due date/t
 The same plugin package supports desktop and mobile. On a phone, synchronize the plugin files through your configured vault/plugin update method and reload the plugin. The voice panel requires WebRTC and microphone permission in Obsidian's mobile webview; it displays an error if unavailable. Backgrounding the app may disconnect voice; restart manually when ready. Never automatically replay a previous spoken change after reconnecting.
 
 Implementation follows official [GPT-Live WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc) and [Responses delegation](https://developers.openai.com/api/docs/guides/live-delegation) contracts. Session creation uses `/v1/live/sessions`, waits for `session.started`, consumes nested completed function items, sends all results before `response.create`, and closes with `session.close`.
+
+## Live voice capture
+
+Choose **Talk to capture** in the capture window. GPT-Live-1 fills visible fields and applies spoken corrections. Review the form and press its **Save** button to persist the capture; voice has no save operation. **Capture to FJG Vault** uses **Continue to Review** and does not save from its first screen. Existing recording and typing remain available. **Mute** pauses microphone input and **End voice** releases the microphone; closing the capture ends voice too. Audio and current capture fields are sent to OpenAI while connected.
+
+Uses the plugin's saved OpenAI key or the existing FJG Objective Manager key. No keys are copied into releases. Touch controls support mobile layouts; update through BRAT on phones that do not sync plugin files. Physical phone microphone/playback verification remains necessary.
+
+The shared implementation is maintained in obsidian-task-manager/apps/obsidian-plugin/src/capture-live and copied into each capture plugin's src/capture-live so each plugin works independently. Keep those copies synchronized when fixing the shared protocol or form tools.

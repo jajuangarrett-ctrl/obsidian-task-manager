@@ -1,3 +1,4 @@
+import { CaptureVoice, captureKey, settingFields } from "./capture-live/panel";
 import { App, Modal, Notice, setIcon, Setting, TFile } from "obsidian";
 import { statusLabel, TASK_STATUSES, TaskStatus } from "@fjg/task-core";
 import type { CatalogTask } from "@fjg/task-protocol";
@@ -754,6 +755,9 @@ export class TextEntryModal extends Modal {
 }
 
 export class TaskUpdateCaptureModal extends Modal {
+  private voice?: CaptureVoice;
+  private closed = false;
+  private saving = false;
   private query = "";
   private text: string;
   private selectedTaskId = "";
@@ -805,7 +809,8 @@ export class TaskUpdateCaptureModal extends Modal {
     new Setting(this.contentEl).addButton((button) => {
       button.setButtonText("Add Update").setCta().setDisabled(true).onClick(async () => {
         const text = this.text.trim();
-        if (!this.selectedTaskId || !text) return;
+        if (!this.selectedTaskId || !text || this.saving) return;
+        this.saving = true;
         button.setDisabled(true);
         try {
           await this.submit(this.selectedTaskId, text);
@@ -813,14 +818,28 @@ export class TaskUpdateCaptureModal extends Modal {
         } catch (error) {
           new Notice(error instanceof Error ? error.message : String(error), 8000);
           this.syncSubmitState();
-        }
+        } finally { this.saving = false; }
       });
       this.submitEl = button.buttonEl;
     });
+    this.voice = new CaptureVoice(this.contentEl, this.app, "Update an existing objective", {
+      fields: () => [{ id: "objective_id", label: "Objective", value: this.selectedTaskId, required: true,
+        options: this.tasks.filter(t => !t.archived).map(t => ({ value: t.task_id, label: `${t.title} — ${t.task_id}` })),
+        set: (value: string) => { this.selectedTaskId = value; this.query = value; search.value = value; this.renderResults(); this.syncSubmitState(); }
+      }, ...settingFields(this.contentEl, ["Update"])],
+      ready: () => !this.closed && !this.saving,
+      save: async () => {
+        if (!this.selectedTaskId || !this.text.trim() || this.saving) return false;
+        this.saving = true; this.submitEl.disabled = true;
+        try { await this.submit(this.selectedTaskId, this.text.trim()); this.close(); return true; }
+        finally { this.saving = false; if (!this.closed) this.syncSubmitState(); }
+      }
+    }, () => captureKey(this.app));
     window.setTimeout(() => search.focus(), 0);
   }
 
   onClose(): void {
+    this.closed = true; this.voice?.close();
     this.contentEl.empty();
   }
 
