@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ request: vi.fn() }));
-vi.mock("obsidian", () => ({ requestUrl: mocks.request }));
+const mocks = vi.hoisted(() => ({ request: vi.fn(), platform: { isMobile: false } }));
+vi.mock("obsidian", () => ({ requestUrl: mocks.request, Platform: mocks.platform }));
 import { DashboardLiveSession, liveRequest } from "./live-session";
 
 class Channel extends EventTarget {
@@ -11,19 +11,20 @@ class Channel extends EventTarget {
 }
 class Peer extends EventTarget {
   static last: Peer;
-  channel = new Channel(); iceGatheringState = "complete"; connectionState = "new";
+  channel = new Channel(); iceGatheringState = "complete"; connectionState = "connected"; bytes = 0; flowing = true;
   localDescription = { sdp: "test-offer" }; closed = false;
   constructor() { super(); Peer.last = this; }
+  async getStats() { if (this.flowing) this.bytes += 100; return new Map([["audio", { type: "outbound-rtp", kind: "audio", bytesSent: this.bytes }]]); }
   addTrack() {} createDataChannel() { return this.channel; }
   async createOffer() { return { sdp: "test-offer" }; }
   async setLocalDescription() {} async setRemoteDescription() {}
   close() { this.closed = true; }
 }
 describe("Live connection lifecycle", () => {
-  beforeEach(() => { vi.stubGlobal("RTCPeerConnection", Peer); mocks.request.mockReset(); });
+  beforeEach(() => { vi.stubGlobal("RTCPeerConnection", Peer); mocks.request.mockReset(); mocks.platform.isMobile = false; vi.useFakeTimers(); });
   afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
   const setup = () => {
-    const track = { stop: vi.fn(), enabled: true };
+    const track = { stop: vi.fn(), enabled: true, readyState: "live", muted: false };
     const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
     vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: vi.fn(async () => stream) } });
     const audio = { pause: vi.fn(), play: vi.fn(async () => {}), srcObject: null };
@@ -37,7 +38,7 @@ describe("Live connection lifecycle", () => {
     expect(session.active).toBe(false);
     const channel = Peer.last.channel;
     expect(channel.sent).toEqual([]);
-    channel.event({ type: "session.started" }); expect(session.active).toBe(true);
+    channel.event({ type: "session.started" }); await vi.advanceTimersByTimeAsync(400); expect(session.active).toBe(true);
     session.mute(true); expect(track.enabled).toBe(false);
     session.mute(false); expect(track.enabled).toBe(true);
     session.end(); expect(session.active).toBe(false); expect(track.stop).toHaveBeenCalled();
@@ -59,8 +60,32 @@ describe("Live connection lifecycle", () => {
     expect(state.mock.calls.some(([value]) => value === "connected")).toBe(false);
     expect(session.active).toBe(false);
     Peer.last.channel.event({ type: "session.started" });
+    await vi.advanceTimersByTimeAsync(400);
     expect(state.mock.calls.at(-1)).toEqual(["connected", "Ready — start speaking. Press play below to hear replies."]);
     session.dispose();
+  });
+  it("waits for phone audio flow and warm-up, and never becomes ready after cancellation", async () => {
+    mocks.platform.isMobile = true;
+    const { session, state } = setup();
+    mocks.request.mockResolvedValue({ status: 201, json: { transport: { sdp: "answer" } } });
+    await session.start("test-key", "backend", "context");
+    Peer.last.flowing = false;
+    Peer.last.channel.event({ type: "session.started" });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(session.active).toBe(false);
+    Peer.last.flowing = true;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(session.active).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(session.active).toBe(true);
+    session.dispose();
+    const cancelled = setup();
+    await cancelled.session.start("test-key", "backend", "context");
+    Peer.last.channel.event({ type: "session.started" });
+    cancelled.session.end();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(cancelled.state.mock.calls.some(([state]) => state === "connected")).toBe(false);
+    expect(state.mock.calls.some(([,message]) => message.includes("Warming up"))).toBe(true);
   });
   it("cleans up media on API denial and reports access failure without credentials", async () => {
     const { session, track, state } = setup();

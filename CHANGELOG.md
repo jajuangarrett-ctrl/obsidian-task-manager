@@ -1,3 +1,9 @@
+## 0.21.2 — Audio readiness
+
+Readiness now waits for a live, unmuted microphone, connected WebRTC transport and outgoing audio packet flow. Mobile sessions then allow a conservative 3.5-second warm-up before showing Ready. This mitigates the reported missing opening phrase; packet flow does not prove server recognition, and physical phone confirmation remains pending. End during warm-up closes the started session and cancels readiness.
+
+Validation: automated lifecycle tests cover absent audio flow, mobile warm-up and cancellation; required builds and tests pass.
+
 ## 0.21.1 — Voice readiness
 
 Voice panels now distinguish microphone off, connecting, and ready to speak. The Start button displays Connecting while waiting, and the prominent status turns green only after session.started. Playback restrictions cannot prematurely mark the session ready. Startup network latency is unchanged.

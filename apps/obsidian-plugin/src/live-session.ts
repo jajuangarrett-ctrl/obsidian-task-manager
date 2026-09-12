@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { Platform, requestUrl } from "obsidian";
 import { backendInstructions, LIVE_INSTRUCTIONS, LIVE_TOOLS, LiveToolLoop } from "./live-tools";
 
 export type LiveState = "idle" | "connecting" | "connected" | "ending" | "ended" | "error";
@@ -21,6 +21,11 @@ export class DashboardLiveSession {
   private channel?: RTCDataChannel;
   private microphone?: MediaStream;
   private ready = false;
+  private sessionStarted = false;
+  private readinessTimer?: ReturnType<typeof setTimeout>;
+  private audioStableSince = 0;
+  private lastAudioBytes = 0;
+  private lastAudioProgress = 0;
   private playbackBlocked = false;
   private disposed = false;
   private ending = false;
@@ -96,7 +101,7 @@ export class DashboardLiveSession {
     this.mute(true);
     this.microphone?.getTracks().forEach((track) => track.stop());
     this.audio.pause();
-    if (this.ready && this.channel?.readyState === "open") {
+    if (this.sessionStarted && this.channel?.readyState === "open") {
       this.callbacks.state("ending", "Ending conversation…");
       this.send({ type: "session.close" });
       clearTimeout(this.timer);
@@ -112,6 +117,7 @@ export class DashboardLiveSession {
     this.disposed = true;
     this.loop.stop();
     clearTimeout(this.timer);
+    clearTimeout(this.readinessTimer);
     this.microphone?.getTracks().forEach((track) => track.stop());
     this.channel?.close();
     this.peer?.close();
@@ -123,9 +129,10 @@ export class DashboardLiveSession {
   private onEvent(event: Record<string, any>): void {
     if (this.disposed) return;
     if (event.type === "session.started") {
-      clearTimeout(this.timer);
-      this.ready = true;
-      this.callbacks.state("connected", this.playbackBlocked ? "Ready — start speaking. Press play below to hear replies." : "Ready — start speaking");
+      if (this.sessionStarted || this.ending) return;
+      this.sessionStarted = true;
+      this.callbacks.state("connecting", "Warming up microphone… Please wait before speaking.");
+      void this.checkAudioReady();
     } else if (event.type === "session.closed") {
       this.dispose();
       this.callbacks.state("ended", "Conversation ended.");
@@ -136,6 +143,43 @@ export class DashboardLiveSession {
     } else if (event.type === "response.event" && this.active) {
       void this.loop.handle(event).catch(() => this.fail("Could not finish a voice task request. Check the dashboard before trying the change again."));
     }
+  }
+
+  /** A session event alone does not establish that the phone audio path is sending. */
+  private async checkAudioReady(): Promise<void> {
+    if (this.disposed || this.ending || this.ready) return;
+    try {
+      const peer = this.peer;
+      const track = this.microphone?.getAudioTracks()[0];
+      let bytes = 0;
+      if (peer?.connectionState === "connected" && track?.readyState === "live" && !track.muted && track.enabled) {
+        const stats = await peer.getStats();
+        stats.forEach((report) => {
+          if (report.type === "outbound-rtp" && (report.kind === "audio" || report.mediaType === "audio")) bytes += report.bytesSent || 0;
+        });
+      }
+      if (this.disposed || this.ending) return;
+      if (bytes > this.lastAudioBytes) {
+        if (!this.audioStableSince) this.audioStableSince = Date.now();
+        this.lastAudioProgress = Date.now();
+      }
+      if (bytes > 0 && this.audioStableSince && Date.now() - this.lastAudioProgress < 1500) {
+        // Conservative mobile warm-up for reported loss of the opening phrase.
+        // Packet flow is transport evidence, not proof of server speech recognition.
+        if (Date.now() - this.audioStableSince >= (Platform.isMobile ? 3500 : 200)) {
+          this.ready = true;
+          clearTimeout(this.timer);
+          this.callbacks.state("connected", this.playbackBlocked ? "Ready — start speaking. Press play below to hear replies." : "Ready — start speaking");
+          return;
+        }
+      } else {
+        this.audioStableSince = 0;
+      }
+      this.lastAudioBytes = bytes;
+    } catch {
+      this.audioStableSince = 0;
+    }
+    this.readinessTimer = setTimeout(() => void this.checkAudioReady(), 200);
   }
 
   private send(event: Record<string, unknown>): void {
