@@ -1,8 +1,13 @@
+import { CaptureVoice, captureKey, settingFields } from "./capture-live/panel";
 import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile } from "obsidian";
 import { TASK_STATUSES, statusLabel, TaskSubtask } from "@fjg/task-core";
 import type { TaskWorkspaceService } from "./workspace-service";
 
 export class SubtaskEditModal extends Modal {
+  private voice?: CaptureVoice;
+  private closed = false;
+  private saving = false;
+  onClose(): void { this.closed = true; this.voice?.close(); }
   constructor(app: App, private sub: TaskSubtask | null, private save: (title: string, due: string, notes: string, status: TaskSubtask["status"], parentId?: string) => Promise<void>, private captureService?: TaskWorkspaceService) { super(app); }
   onOpen(): void {
     this.setTitle(this.captureService ? "Capture action" : this.sub ? "Edit action" : "Add action");
@@ -36,12 +41,30 @@ export class SubtaskEditModal extends Modal {
     });
     new Setting(this.contentEl).setName("Due date").addText((text) => { text.inputEl.type = "date"; text.setValue(due).onChange((value) => due = value); });
     new Setting(this.contentEl).setName("Notes").addTextArea((text) => { text.inputEl.rows = 5; text.setValue(notes).onChange((value) => notes = value); });
+    const saveAction = async (): Promise<boolean> => {
+      if (this.saving || this.closed) return false;
+      if (this.captureService && !parentId) throw new Error("Choose a parent objective.");
+      if (!title.trim()) throw new Error("Enter an action title.");
+      this.saving = true;
+      try { await this.save(title, due, notes, status, parentId || undefined); this.close(); return true; }
+      finally { this.saving = false; }
+    };
+    this.voice = new CaptureVoice(this.contentEl, this.app, "Action within an objective", {
+      fields: () => {
+        const fields = settingFields(this.contentEl, ["Title"]);
+        if (this.captureService) fields.unshift({ id: "parent_id", label: "Parent objective", value: parentId, required: true,
+          options: this.captureService.list().filter(t => !t.archived).map(t => ({ value: t.record.task_id, label: `${t.record.title} — ${t.taskFile.path}` })),
+          set: value => { parentId = value; const task = this.captureService!.getById(value); const search = this.contentEl.querySelector<HTMLInputElement>(".fjg-parent-search"); if (search) search.value = task.record.title; this.contentEl.querySelector(".fjg-parent-choice")!.textContent = `Selected objective: ${task.record.title}`; this.contentEl.querySelector(".fjg-parent-results")!.empty(); }
+        });
+        return fields;
+      }, ready: () => !this.closed && !this.saving, save: saveAction
+    }, () => captureKey(this.app));
     new Setting(this.contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => this.close()))
       .addButton((button) => button.setButtonText("Save action").setCta().onClick(async () => {
         if (this.captureService && !parentId) { new Notice("Choose a parent objective from the search results."); return; }
         if (!title.trim()) { new Notice("Enter an action title."); return; }
         button.setDisabled(true);
-        try { await this.save(title, due, notes, status, parentId || undefined); this.close(); }
+        try { await saveAction(); }
         catch (error) { new Notice(String(error)); }
         finally { button.setDisabled(false); }
       }));

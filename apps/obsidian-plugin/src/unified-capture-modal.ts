@@ -1,3 +1,4 @@
+import { CaptureVoice, captureKey, settingFields } from "./capture-live/panel";
 import { App, Modal, Notice, Setting } from "obsidian";
 import {
   prepareUnifiedCapture,
@@ -6,6 +7,8 @@ import {
 } from "./unified-capture-model";
 
 export class UnifiedCaptureModal extends Modal {
+  private voice?: CaptureVoice;
+  private closed = false;
   private action: UnifiedCaptureAction = "new-task";
   private text = "";
   private textArea!: HTMLTextAreaElement;
@@ -68,10 +71,15 @@ export class UnifiedCaptureModal extends Modal {
         this.continueButton = button.buttonEl;
       });
 
+    this.voice = new CaptureVoice(this.contentEl, this.app, "REVIEW ROUTER: Capture to FJG Vault. This opens a review screen; it never saves. Say Continue to review when ready.", {
+      fields: () => settingFields(this.contentEl, ["Action", "Source text"]), ready: () => !this.closed,
+      save: async () => { this.continue(); return this.closed ? { review_opened: true, saved: false } : false; }
+    }, () => captureKey(this.app));
     window.setTimeout(() => this.textArea.focus(), 0);
   }
 
   onClose(): void {
+    this.closed = true; this.voice?.close();
     this.contentEl.empty();
   }
 

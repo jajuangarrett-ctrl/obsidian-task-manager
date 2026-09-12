@@ -1,3 +1,4 @@
+import { CaptureVoice, inputField } from "./capture-live/panel";
 import {
   App,
   Modal,
@@ -28,6 +29,8 @@ interface DraftFormControls {
 }
 
 export class QuickCaptureModal extends Modal {
+  private voice?: CaptureVoice;
+  private closed = false;
   private rawCapture = "";
   private drafts: TaskCaptureDraft[] = [{
     title: "",
@@ -114,11 +117,16 @@ export class QuickCaptureModal extends Modal {
     this.createButton.addClass("fjg-create-task-button", "mod-cta");
     this.updateCreateButton();
 
+    this.voice = new CaptureVoice(this.contentEl, this.app, "Objective", {
+      fields: () => this.formControls.flatMap((controls, index) => Object.entries(controls).map(([name, input]) => inputField(`${index + 1}.${name}`, `Objective ${index + 1} ${name}`, input, name === "title"))),
+      ready: () => !this.closed && !this.busy && !this.recording,
+      save: async () => { await this.createTasks(); return this.closed; }
+    }, () => this.taskPlugin.resolveOpenAiApiKey());
     setTimeout(() => this.rawInput?.focus(), 0);
   }
 
   private async toggleRecording(): Promise<void> {
-    if (this.busy || !this.recordButton) return;
+    if (this.busy || this.voice?.active || !this.recordButton) return;
     if (!this.recording) {
       const apiKey = await this.taskPlugin.resolveOpenAiApiKey();
       if (!apiKey) {
@@ -406,6 +414,7 @@ export class QuickCaptureModal extends Modal {
   }
 
   onClose(): void {
+    this.closed = true; this.voice?.close();
     this.recorder?.cancel();
     this.recorder = null;
     this.contentEl.empty();
