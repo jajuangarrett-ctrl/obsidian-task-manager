@@ -1879,3 +1879,8 @@
  .modal:has(.fjg-capture-live) .setting-item-control select { width: 100%; min-width: 0; }
  .modal:has(.fjg-capture-live) button { min-height: 44px; }
 }
+
+/* Explicit voice readiness, including narrow mobile panels. */
+.fjg-live-status { font-weight: 600; border: 2px solid var(--background-modifier-border); }
+.fjg-live-status[data-state="connecting"] { border-color: var(--text-warning); }
+.fjg-live-status[data-state="connected"] { border-color: var(--color-green); }

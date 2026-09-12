@@ -28,7 +28,7 @@ describe("Live connection lifecycle", () => {
     vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: vi.fn(async () => stream) } });
     const audio = { pause: vi.fn(), play: vi.fn(async () => {}), srcObject: null };
     const state = vi.fn(); const execute = vi.fn(); const transcript = vi.fn();
-    return { track, state, execute, transcript, session: new DashboardLiveSession(audio as any, { state, execute, transcript }) };
+    return { audio, track, state, execute, transcript, session: new DashboardLiveSession(audio as any, { state, execute, transcript }) };
   };
   it("uses Live sessions with Responses tools, waits for ready, mutes, and gracefully ends", async () => {
     const { session, track } = setup();
@@ -47,6 +47,20 @@ describe("Live connection lifecycle", () => {
     expect(request.url).toBe("https://api.openai.com/v1/live/sessions");
     expect(JSON.parse(request.body).session.model).toBe("gpt-live-1");
     expect(JSON.stringify(liveRequest("offer", "backend", "data"))).not.toContain("test-key");
+  });
+  it("does not announce readiness when playback is blocked before session startup", async () => {
+    const { session, audio, state } = setup();
+    vi.stubGlobal("MediaStream", class { constructor(_tracks: unknown[]) {} });
+    audio.play.mockRejectedValue(new Error("blocked"));
+    mocks.request.mockResolvedValue({ status: 201, json: { transport: { sdp: "answer" } } });
+    await session.start("test-key", "backend", "context");
+    const event = new Event("track"); Object.assign(event, { track: {} });
+    Peer.last.dispatchEvent(event); await Promise.resolve();
+    expect(state.mock.calls.some(([value]) => value === "connected")).toBe(false);
+    expect(session.active).toBe(false);
+    Peer.last.channel.event({ type: "session.started" });
+    expect(state.mock.calls.at(-1)).toEqual(["connected", "Ready — start speaking. Press play below to hear replies."]);
+    session.dispose();
   });
   it("cleans up media on API denial and reports access failure without credentials", async () => {
     const { session, track, state } = setup();

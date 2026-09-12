@@ -1,3 +1,9 @@
+## 0.21.1 — Voice readiness
+
+Voice panels now distinguish microphone off, connecting, and ready to speak. The Start button displays Connecting while waiting, and the prominent status turns green only after session.started. Playback restrictions cannot prematurely mark the session ready. Startup network latency is unchanged.
+
+Validation: builds and automated checks passed; idle, connecting, ready, and error controls were checked in running Obsidian using simulated UI state transitions. Physical phone audio was not retested.
+
 # 0.21.0
 
 - Dashboard voice can create actions under an exact active parent objective, preserving requested notes, status and due date. Duplicate titles under the same parent, stale revisions and archived parents are rejected. Archiving remains manual.

@@ -27,7 +27,7 @@ export class LiveVoiceModal extends Modal {
     root.createEl("p", { text: "Ask about your tasks or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
     root.createEl("p", { text: "Your microphone and requested task context go to OpenAI while connected. Uses your saved API key.", cls: "fjg-live-caption" });
     this.coverage = root.createEl("p", { cls: "fjg-live-coverage", attr: { role: "status" } });
-    this.status = root.createEl("p", { text: "Ready to talk", cls: "fjg-live-status", attr: { role: "status", "aria-live": "polite" } });
+    this.status = root.createEl("p", { text: "Microphone off — press Start conversation", cls: "fjg-live-status", attr: { role: "status", "aria-live": "polite" } });
     const controls = root.createDiv({ cls: "fjg-live-controls" });
     this.startButton = controls.createEl("button", { text: "Start conversation", cls: "mod-cta" });
     this.startButton.addEventListener("click", () => void this.start());
@@ -38,7 +38,7 @@ export class LiveVoiceModal extends Modal {
       this.session?.mute(this.muted);
       this.muteButton.setText(this.muted ? "Unmute microphone" : "Mute microphone");
       this.muteButton.setAttribute("aria-pressed", String(this.muted));
-      this.status.setText(this.muted ? "Microphone muted" : "Listening · GPT-Live-1");
+      this.status.setText(this.muted ? "Microphone muted" : "Ready — start speaking");
     });
     this.endButton = controls.createEl("button", { text: "End conversation" });
     this.endButton.disabled = true;
@@ -69,7 +69,7 @@ export class LiveVoiceModal extends Modal {
       execute: (name, args, id) => tools.execute(name, args, id)
     });
     this.session = session;
-    this.setState("connecting", "Preparing voice…");
+    this.setState("connecting", "Connecting… Please wait before speaking.");
     try {
       const key = await this.plugin.resolveOpenAiApiKey();
       if (this.closed || this.session !== session) return;
@@ -93,6 +93,8 @@ export class LiveVoiceModal extends Modal {
     if (this.closed) return;
     this.status.setText(message);
     this.status.dataset.state = state;
+    this.startButton.setText(state === "connecting" ? "Connecting…" : state === "connected" ? "Conversation active" : "Start conversation");
+    this.status.setAttribute("aria-busy", String(state === "connecting"));
     this.startButton.disabled = ["connecting", "connected", "ending"].includes(state);
     this.endButton.disabled = !["connecting", "connected"].includes(state);
     this.muteButton.disabled = state !== "connected";

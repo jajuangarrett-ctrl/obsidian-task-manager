@@ -21,6 +21,7 @@ export class DashboardLiveSession {
   private channel?: RTCDataChannel;
   private microphone?: MediaStream;
   private ready = false;
+  private playbackBlocked = false;
   private disposed = false;
   private ending = false;
   private timer?: ReturnType<typeof setTimeout>;
@@ -32,7 +33,7 @@ export class DashboardLiveSession {
 
   async start(apiKey: string, backendModel: string, context: string): Promise<void> {
     if (this.disposed) return;
-    this.callbacks.state("connecting", "Connecting to GPT-Live…");
+    this.callbacks.state("connecting", "Connecting… Please wait before speaking.");
     try {
       if (!apiKey.trim()) throw new Error("Add your OpenAI API key in FJG Task Manager settings.");
       if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") throw new Error("Live voice is not supported on this device.");
@@ -40,7 +41,10 @@ export class DashboardLiveSession {
       peer.addEventListener("track", (event) => {
         if (this.disposed || this.ending) return;
         this.audio.srcObject = new MediaStream([event.track]);
-        void this.audio.play().catch(() => this.callbacks.state("connected", "Press play below to hear the assistant."));
+        void this.audio.play().catch(() => {
+          this.playbackBlocked = true;
+          if (this.active) this.callbacks.state("connected", "Ready — start speaking. Press play below to hear replies.");
+        });
       });
       // Start from the user's click; never automatically reopen a microphone after disconnecting.
       const microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
@@ -121,7 +125,7 @@ export class DashboardLiveSession {
     if (event.type === "session.started") {
       clearTimeout(this.timer);
       this.ready = true;
-      this.callbacks.state("connected", "Listening · GPT-Live-1");
+      this.callbacks.state("connected", this.playbackBlocked ? "Ready — start speaking. Press play below to hear replies." : "Ready — start speaking");
     } else if (event.type === "session.closed") {
       this.dispose();
       this.callbacks.state("ended", "Conversation ended.");
