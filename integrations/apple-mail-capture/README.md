@@ -1,17 +1,20 @@
 # Apple Mail capture for FJG Vault
 
-`Save Mail to FJG Vault` is a macOS Quick Action for one message selected or
-open in Apple Mail. It asks for an existing destination folder inside the real
-FJG Vault, then writes a readable Markdown note and saves every Mail attachment
-beside it. This works with ordinary vault folders and Task Manager `Files`
-folders, including relocated task workspaces under `02 Programs/` and
-`03 Areas/`.
+`Save Mail to FJG Vault` is a macOS Quick Action for a message or conversation
+selected or open in Apple Mail. It asks for a destination inside the real FJG
+Vault. A single message remains one readable Markdown note with its attachments
+beside it. When Mail exposes multiple members of the selected conversation, the
+Quick Action creates one collision-safe `… - Mail Thread` folder, then saves one
+Markdown note per message and every attachment in that shared folder. This
+works with ordinary vault folders and Task Manager `Files` folders, including
+relocated task workspaces under `02 Programs/` and `03 Areas/`.
 
 The capture does not create or use a generic mail archive. It never replaces an
-existing note or attachment: filename conflicts receive `(2)`, `(3)`, and so
-on. The Markdown note contains the subject, sender, To and Cc recipients, sent
-and received dates, message ID, complete readable body returned by Apple Mail,
-and same-folder Obsidian links for attachments.
+existing note, thread folder, or attachment: filename conflicts receive `(2)`,
+`(3)`, and so on. Every Markdown note contains the subject, sender, To and Cc
+recipients, sent and received dates, message ID, source mailbox, complete
+readable body returned by Apple Mail, and same-folder Obsidian links for that
+message's attachments.
 
 ## Install
 
@@ -35,7 +38,7 @@ and installs the Mail Quick Action at:
 
 ## Use from Mail
 
-1. Open Apple Mail and select or open exactly one message.
+1. Open Apple Mail and select or open one message in the conversation to save.
 2. Choose **Mail > Services > Save Mail to FJG Vault**.
 3. To use an exact path, copy the full folder path before invoking the command,
    then choose **Paste Folder Path**. The workflow reads the clipboard directly;
@@ -45,6 +48,11 @@ and installs the Mail Quick Action at:
 4. Alternatively, choose **Browse Folders…** and select a destination in the
    actual FJG Vault hierarchy. For a Task Manager item, choose that task
    workspace's `Files` folder.
+
+For a conversation, choose the parent destination once. The Quick Action makes
+a uniquely named thread folder there and saves each message as a separately
+dated Markdown file, in chronological order. A non-thread message keeps the
+original behavior and saves directly into the chosen destination.
 
 An empty clipboard, multiple clipboard lines, or a folder outside the canonical
 FJG Vault is rejected before the email or any attachment is written. If exactly
@@ -67,7 +75,7 @@ selected message until this Apple automation permission is granted.
 2. Open **Services**, then the **General** section.
 3. Find **Save Mail to FJG Vault** and assign an unused shortcut, such as
    `Control-Option-Command-S`.
-4. Return to Mail, open one message, and press the shortcut.
+4. Return to Mail, open a message or conversation, and press the shortcut.
 
 If the Quick Action is not immediately listed, log out and back in or restart
 the Mac after installation so Launch Services refreshes its Services menu.
@@ -83,12 +91,24 @@ changing the capture model:
   -- --folder "/Users/franklingarrett/FJG Vault/08 Tasks/Projects/Example/Files"
 ```
 
-The script canonicalizes the path, requires that it already exists, and rejects
-destinations outside `/Users/franklingarrett/FJG Vault`.
+The script canonicalizes the path and rejects destinations outside
+`/Users/franklingarrett/FJG Vault`. It may create exactly one missing final
+folder beneath an existing in-vault parent after explicit confirmation.
 
 ## Known boundaries
 
-- Capture is one selected Apple Mail message at a time.
+- Apple Mail does not expose a public conversation ID to automation. The Quick
+  Action first uses the active message viewer's conversation members. When Mail
+  gives automation only the selected result while visibly rendering a larger
+  conversation, it performs a bounded subject search of the selected mailbox
+  plus that account's Inbox, Sent, Archive, All Mail, and Conversation History
+  mailboxes. It verifies normalized subjects, removes duplicates, and records
+  each member's source mailbox. The selected mailbox may be any other user
+  mailbox, so filed messages are included when the invocation starts there.
+- If Mail exposes only a selected reply, a mixed message list, or too many
+  messages to verify safely, the Quick Action explains the limitation before
+  any write and offers **Save Selected Message Only** or **Cancel**. It never
+  silently claims that an incomplete thread is complete.
 - The body is Mail's complete readable `content` value (plain readable text),
   not a pixel-perfect HTML export.
 - Mail may need to download a remote body or attachment before the save can

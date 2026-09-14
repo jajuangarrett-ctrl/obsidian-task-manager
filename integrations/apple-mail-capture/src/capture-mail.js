@@ -149,13 +149,188 @@ function selectedMessage() {
   return messages[0];
 }
 
+function safeMessageValue(read, fallback) {
+  try {
+    const value = read();
+    return value == null ? fallback : String(value);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function messageMailboxName(message) {
+  return safeMessageValue(() => message.mailbox().name(), "Unknown");
+}
+
+function messageSummary(message) {
+  return {
+    ref: message,
+    subject: safeMessageValue(() => message.subject(), "(No subject)"),
+    sender: safeMessageValue(() => message.sender(), "Unknown sender"),
+    dateSent: formatDate(message.dateSent()),
+    dateReceived: formatDate(message.dateReceived()),
+    messageId: safeMessageValue(() => message.messageId(), "Not available"),
+    mailUid: safeMessageValue(() => message.id(), ""),
+    mailbox: messageMailboxName(message)
+  };
+}
+
+function sameMailMessage(left, right) {
+  const leftSummary = messageSummary(left);
+  const rightSummary = messageSummary(right);
+  if (
+    leftSummary.messageId !== "Not available"
+    && rightSummary.messageId !== "Not available"
+  ) {
+    return leftSummary.messageId.toLowerCase() === rightSummary.messageId.toLowerCase();
+  }
+  return Boolean(leftSummary.mailUid)
+    && leftSummary.mailUid === rightSummary.mailUid
+    && leftSummary.mailbox === rightSummary.mailbox;
+}
+
+function selectedMessageViewer(message) {
+  const viewers = MAIL.messageViewers();
+  for (let index = 0; index < viewers.length; index += 1) {
+    const selected = viewers[index].selectedMessages();
+    if (selected.some((candidate) => sameMailMessage(candidate, message))) return viewers[index];
+  }
+  return null;
+}
+
+function mailboxIdentity(mailbox) {
+  const name = safeMessageValue(() => mailbox.name(), "Unknown");
+  const accountId = safeMessageValue(() => mailbox.account().id(), "Unknown account");
+  return `${accountId}:${name}`;
+}
+
+function recoveryMailboxes(message, viewerMessages) {
+  const mailboxes = [];
+  const seen = Object.create(null);
+  function add(mailbox) {
+    if (!mailbox) return;
+    const key = mailboxIdentity(mailbox);
+    if (seen[key]) return;
+    seen[key] = true;
+    mailboxes.push(mailbox);
+  }
+
+  add(message.mailbox());
+  (viewerMessages || []).forEach((candidate) => {
+    try { add(candidate.mailbox()); } catch (_) {}
+  });
+
+  try {
+    const account = message.mailbox().account();
+    account.mailboxes().forEach((mailbox) => {
+      const name = safeMessageValue(() => mailbox.name(), "");
+      if (/^(?:inbox|sent(?: items| messages)?|archive|all mail|conversation history)$/i.test(name)) {
+        add(mailbox);
+      }
+    });
+  } catch (_) {
+    // The selected and viewer mailboxes above remain usable when account lookup fails.
+  }
+  return mailboxes;
+}
+
+function searchConversationMailboxes(message, viewerMessages) {
+  const subject = FJGMailCaptureCore.conversationSearchSubject(
+    safeMessageValue(() => message.subject(), "")
+  );
+  if (subject.length < 4) return { messages: [], errors: ["The subject is too short for a safe mailbox search."] };
+
+  const messages = [];
+  const errors = [];
+  recoveryMailboxes(message, viewerMessages).forEach((mailbox) => {
+    const mailboxName = safeMessageValue(() => mailbox.name(), "Unknown");
+    try {
+      logStage("searching-conversation-mailbox", mailboxName);
+      const matches = mailbox.messages.whose({ subject: { _contains: subject } })();
+      for (let index = 0; index < matches.length; index += 1) {
+        messages.push(matches[index]);
+        if (messages.length > 200) return;
+      }
+    } catch (error) {
+      errors.push(`${mailboxName}: ${String(error && error.message ? error.message : error)}`);
+    }
+  });
+  return { messages, errors };
+}
+
+function selectedConversation() {
+  const message = selectedMessage();
+  const selected = messageSummary(message);
+  logStage("enumerating-conversation", FJGMailCaptureCore.sanitizeFileName(selected.subject, "Email"));
+
+  try {
+    const viewer = selectedMessageViewer(message);
+    const viewerMessages = viewer ? viewer.messages() : [];
+    let plan = FJGMailCaptureCore.planConversationCapture(
+      selected,
+      viewerMessages.map(messageSummary)
+    );
+    if (plan.mode === "conversation") {
+      return { ...plan, enumerationSource: "message viewer" };
+    }
+
+    logStage("recovering-conversation-by-mailbox", FJGMailCaptureCore.sanitizeFileName(selected.subject, "Email"));
+    const recovery = searchConversationMailboxes(message, viewerMessages);
+    plan = FJGMailCaptureCore.planConversationCapture(
+      selected,
+      recovery.messages.map(messageSummary)
+    );
+    if (plan.mode === "conversation") {
+      return {
+        ...plan,
+        enumerationSource: "bounded mailbox search",
+        enumerationWarnings: recovery.errors
+      };
+    }
+    if (recovery.errors.length) {
+      const errorSummary = recovery.errors.join("; ");
+      plan = {
+        ...plan,
+        limitation: `${plan.limitation || "Apple Mail did not expose a verifiable complete conversation."} Mailbox search reported: ${errorSummary}`
+      };
+    }
+    return { ...plan, enumerationSource: "selected message fallback" };
+  } catch (error) {
+    const fallback = FJGMailCaptureCore.planConversationCapture(selected, []);
+    if (!fallback.limitation) return fallback;
+    return {
+      ...fallback,
+      limitation: `${fallback.limitation} Mail reported: ${String(error && error.message ? error.message : error)}`
+    };
+  }
+}
+
+function confirmSelectedMessageFallback(limitation) {
+  if (!limitation) return true;
+  if (environmentValue("FJG_MAIL_CAPTURE_NONINTERACTIVE") === "1") {
+    throw new Error(`Conversation could not be enumerated: ${limitation}`);
+  }
+  MAIL.activate();
+  const result = MAIL.displayDialog(
+    `${limitation}\n\nNo thread files have been written. You can save only the selected message or cancel.`,
+    {
+      withTitle: "Complete Mail Conversation Unavailable",
+      buttons: ["Cancel", "Save Selected Message Only"],
+      defaultButton: "Save Selected Message Only",
+      cancelButton: "Cancel"
+    }
+  );
+  return result.buttonReturned === "Save Selected Message Only";
+}
+
 function clipboardText() {
   const value = $.NSPasteboard.generalPasteboard.stringForType($.NSPasteboardTypeString);
   return value ? String(unwrap(value)) : "";
 }
 
 function interactiveDestination() {
-  const choice = HOST.displayDialog(
+  MAIL.activate();
+  const choice = MAIL.displayDialog(
     "Copy the full destination folder path before choosing Paste Folder Path, or browse the FJG Vault normally.",
     {
       withTitle: "Save Mail to FJG Vault",
@@ -168,10 +343,12 @@ function interactiveDestination() {
   if (choice === "Paste Folder Path") {
     return FJGMailCaptureCore.folderPathFromClipboard(clipboardText());
   }
-  return String(HOST.chooseFolder({
+  const chosenFolder = MAIL.chooseFolder({
     withPrompt: "Choose an existing FJG Vault folder for this email and its attachments.",
     defaultLocation: Path(canonicalPath(VAULT_ROOT))
-  }));
+  });
+  if (!chosenFolder) throw new Error("User canceled folder selection. (-128)");
+  return String(chosenFolder);
 }
 
 function confirmCreateDestination(path) {
@@ -262,7 +439,48 @@ function messageData(message) {
     dateSent: formatDate(message.dateSent()),
     dateReceived: formatDate(message.dateReceived()),
     messageId: String(message.messageId() || "Not available"),
+    mailbox: messageMailboxName(message),
     body: String(message.content() || "")
+  };
+}
+
+function saveMessage(message, destination, reserved, createdPaths, conversationIndex) {
+  const data = messageData(message);
+  logStage("message-read", FJGMailCaptureCore.sanitizeFileName(data.subject, "Email"));
+  const isTaken = (name) => reserved[name] || fileExists(joinPath(destination, name));
+  const requestedNoteName = conversationIndex == null
+    ? `${FJGMailCaptureCore.sanitizeFileName(data.subject, "Email")}.md`
+    : FJGMailCaptureCore.conversationMessageFileName(data, conversationIndex + 1);
+  const noteName = FJGMailCaptureCore.availableFileName(requestedNoteName, isTaken);
+  reserved[noteName] = true;
+
+  const attachmentNames = [];
+  logStage("reading-attachments", noteName);
+  const attachments = message.mailAttachments();
+  logStage("attachments-found", `${noteName} count=${attachments.length}`);
+  for (let index = 0; index < attachments.length; index += 1) {
+    const requested = FJGMailCaptureCore.sanitizeFileName(
+      attachments[index].name() || `Attachment ${index + 1}`,
+      `Attachment ${index + 1}`
+    );
+    const name = FJGMailCaptureCore.availableFileName(requested, isTaken);
+    reserved[name] = true;
+    const attachmentPath = joinPath(destination, name);
+    createdPaths.push(attachmentPath);
+    logStage("saving-attachment", `${noteName} attachment=${name}`);
+    MAIL.save(attachments[index], { in: Path(attachmentPath) });
+    attachmentNames.push(name);
+  }
+
+  const notePath = joinPath(destination, noteName);
+  createdPaths.push(notePath);
+  logStage("writing-markdown", noteName);
+  writeUtf8(notePath, FJGMailCaptureCore.renderMarkdown(data, attachmentNames));
+  return {
+    noteName,
+    notePath,
+    attachmentNames,
+    attachmentPaths: attachmentNames.map((name) => joinPath(destination, name))
   };
 }
 
@@ -270,50 +488,85 @@ function capture(argv) {
   logStage("started");
   const options = FJGMailCaptureCore.parseArguments(argv || []);
   logStage("reading-mail-selection");
-  const message = selectedMessage();
+  const conversation = selectedConversation();
+  if (conversation.limitation) {
+    logStage("conversation-limited", conversation.limitation);
+    if (!confirmSelectedMessageFallback(conversation.limitation)) {
+      throw new Error("User canceled conversation fallback. (-128)");
+    }
+  } else {
+    logStage(
+      "conversation-enumerated",
+      `${conversation.mode} count=${conversation.messages.length} via=${conversation.enumerationSource || "selection"}`
+    );
+    if (conversation.enumerationWarnings && conversation.enumerationWarnings.length) {
+      logStage("conversation-enumeration-warning", conversation.enumerationWarnings.join("; "));
+    }
+  }
   logStage("choosing-destination");
   const destinationResult = chooseDestination(options.folder, options.pasteFolder);
-  const destination = destinationResult.path;
-  logStage("destination-accepted", destination);
-  const data = messageData(message);
-  logStage("message-read", FJGMailCaptureCore.sanitizeFileName(data.subject, "Email"));
-  const reserved = Object.create(null);
-  const isTaken = (name) => reserved[name] || fileExists(joinPath(destination, name));
-  const createdPaths = [];
-
-  const noteName = FJGMailCaptureCore.availableFileName(
-    `${FJGMailCaptureCore.sanitizeFileName(data.subject, "Email")}.md`,
-    isTaken
-  );
-  reserved[noteName] = true;
-
-  const attachmentNames = [];
-  let notePath = "";
+  const parentDestination = destinationResult.path;
+  logStage("destination-accepted", parentDestination);
+  const createdPaths = destinationResult.created ? [parentDestination] : [];
+  let destination = parentDestination;
+  let threadFolder = "";
   try {
-    logStage("reading-attachments");
-    const attachments = message.mailAttachments();
-    logStage("attachments-found", String(attachments.length));
-    for (let index = 0; index < attachments.length; index += 1) {
-      const requested = FJGMailCaptureCore.sanitizeFileName(
-        attachments[index].name() || `Attachment ${index + 1}`,
-        `Attachment ${index + 1}`
+    if (conversation.mode === "conversation") {
+      const requestedFolder = FJGMailCaptureCore.conversationFolderName(
+        conversation.messages[0].subject
       );
-      const name = FJGMailCaptureCore.availableFileName(requested, isTaken);
-      reserved[name] = true;
-      const attachmentPath = joinPath(destination, name);
-      createdPaths.push(attachmentPath);
-      logStage("saving-attachment", name);
-      MAIL.save(attachments[index], { in: Path(attachmentPath) });
-      attachmentNames.push(name);
+      const folderName = FJGMailCaptureCore.availableFolderName(
+        requestedFolder,
+        (name) => fileExists(joinPath(parentDestination, name))
+      );
+      destination = joinPath(parentDestination, folderName);
+      logStage("creating-thread-folder", folderName);
+      createSingleDirectory(destination);
+      createdPaths.push(destination);
+      threadFolder = destination;
     }
 
-    notePath = joinPath(destination, noteName);
-    createdPaths.push(notePath);
-    logStage("writing-markdown", noteName);
-    writeUtf8(notePath, FJGMailCaptureCore.renderMarkdown(data, attachmentNames));
+    const reserved = Object.create(null);
+    const results = conversation.messages.map((summary, index) => saveMessage(
+      summary.ref,
+      destination,
+      reserved,
+      createdPaths,
+      conversation.mode === "conversation" ? index : null
+    ));
+
+    const notePaths = results.map((result) => result.notePath);
+    const attachmentPaths = results.reduce(
+      (paths, result) => paths.concat(result.attachmentPaths),
+      []
+    );
+    logStage("completed", `${destination} messages=${results.length}`);
+    if (conversation.mode === "conversation") {
+      HOST.displayNotification(
+        `${results.length} messages${attachmentPaths.length ? ` plus ${attachmentPaths.length} attachment${attachmentPaths.length === 1 ? "" : "s"}` : ""} in ${String(unwrap($(destination).lastPathComponent))}`,
+        { withTitle: "Mail conversation saved to FJG Vault" }
+      );
+    } else {
+      const result = results[0];
+      HOST.displayNotification(
+        `${result.noteName}${result.attachmentPaths.length ? ` plus ${result.attachmentPaths.length} attachment${result.attachmentPaths.length === 1 ? "" : "s"}` : ""}${conversation.limitation ? "; selected message only" : ""}`,
+        { withTitle: "Email saved to FJG Vault" }
+      );
+    }
+    return JSON.stringify({
+      captured: true,
+      mode: conversation.mode,
+      messageCount: results.length,
+      threadFolder,
+      notePath: notePaths[0],
+      notePaths,
+      attachmentPaths,
+      conversationLimitation: conversation.limitation || "",
+      enumerationSource: conversation.enumerationSource || "selection"
+    });
   } catch (error) {
     logStage("cleaning-partial-files");
-    const cleanupFailures = createdPaths.map(removeCreatedPath).filter(Boolean);
+    const cleanupFailures = createdPaths.slice().reverse().map(removeCreatedPath).filter(Boolean);
     if (cleanupFailures.length) {
       throw new Error(
         `${String(error && error.message ? error.message : error)} Cleanup also failed: ${cleanupFailures.join("; ")}`
@@ -321,17 +574,6 @@ function capture(argv) {
     }
     throw error;
   }
-
-  logStage("completed", notePath);
-  HOST.displayNotification(
-    `${noteName}${attachmentNames.length ? ` plus ${attachmentNames.length} attachment${attachmentNames.length === 1 ? "" : "s"}` : ""}`,
-    { withTitle: "Email saved to FJG Vault" }
-  );
-  return JSON.stringify({
-    captured: true,
-    notePath,
-    attachmentPaths: attachmentNames.map((name) => joinPath(destination, name))
-  });
 }
 
 function run(argv) {

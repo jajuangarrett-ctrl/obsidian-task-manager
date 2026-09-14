@@ -20,6 +20,84 @@ test("allocates non-overwriting note and attachment names", () => {
   assert.equal(core.availableFileName("Meeting.md", (name) => taken.has(name)), "Meeting (2).md");
 });
 
+test("preserves the existing single-message capture plan", () => {
+  const selected = {
+    subject: "Budget reminder",
+    messageId: "single@example.test",
+    dateSent: "2026-09-12 09:00:00 PDT",
+    mailbox: "Inbox"
+  };
+  assert.deepEqual(core.planConversationCapture(selected, [selected]), {
+    mode: "single",
+    messages: [selected],
+    limitation: ""
+  });
+});
+
+test("plans one Apple Mail conversation across Sent and Archive in chronological order", () => {
+  const reply = {
+    subject: "Re: Protect and Progress Meeting: August Agenda",
+    messageId: "reply@example.test",
+    dateSent: "2026-08-22 11:00:00 PDT",
+    mailbox: "Sent"
+  };
+  const original = {
+    subject: "Protect and Progress Meeting: August Agenda",
+    messageId: "original@example.test",
+    dateSent: "2026-08-22 09:30:00 PDT",
+    mailbox: "Archive"
+  };
+  const plan = core.planConversationCapture(reply, [reply, original]);
+  assert.equal(plan.mode, "conversation");
+  assert.equal(plan.limitation, "");
+  assert.deepEqual(plan.messages.map((message) => message.mailbox), ["Archive", "Sent"]);
+  assert.equal(
+    core.conversationFolderName(reply.subject),
+    "Protect and Progress Meeting - August Agenda - Mail Thread"
+  );
+  assert.equal(
+    core.conversationMessageFileName(original, 1),
+    "2026-08-22 0930 - Protect and Progress Meeting - August Agenda.md"
+  );
+  assert.equal(
+    core.conversationSearchSubject("Re: Fwd: Protect and Progress Meeting: August Agenda"),
+    "Protect and Progress Meeting: August Agenda"
+  );
+});
+
+test("keeps thread folders and same-named attachments collision-safe", () => {
+  const folders = new Set(["Monthly Planning - Mail Thread", "Monthly Planning - Mail Thread (2)"]);
+  assert.equal(
+    core.availableFolderName("Monthly Planning - Mail Thread", (name) => folders.has(name)),
+    "Monthly Planning - Mail Thread (3)"
+  );
+
+  const names = new Set(["Agenda.pdf"]);
+  const first = core.availableFileName("Agenda.pdf", (name) => names.has(name));
+  names.add(first);
+  const second = core.availableFileName("Agenda.pdf", (name) => names.has(name));
+  assert.equal(first, "Agenda (2).pdf");
+  assert.equal(second, "Agenda (3).pdf");
+});
+
+test("falls back clearly when Apple Mail cannot enumerate a selected reply", () => {
+  const selected = {
+    subject: "Re: Cross-mailbox planning",
+    messageId: "reply-only@example.test",
+    mailbox: "Archive"
+  };
+  const plan = core.planConversationCapture(selected, [selected]);
+  assert.equal(plan.mode, "single");
+  assert.deepEqual(plan.messages, [selected]);
+  assert.match(plan.limitation, /only the selected reply/i);
+
+  const mixed = core.planConversationCapture(selected, [
+    selected,
+    { subject: "Unrelated message", messageId: "other@example.test", mailbox: "Inbox" }
+  ]);
+  assert.match(mixed.limitation, /mixed message list/i);
+});
+
 test("accepts the vault root and descendants but rejects sibling prefixes", () => {
   const root = "/Users/franklingarrett/FJG Vault";
   assert.equal(core.isInsideVault(root, root), true);
@@ -62,12 +140,14 @@ test("renders complete readable mail metadata, body, and attachment links", () =
     dateSent: "2026-08-22 09:30:00 PDT",
     dateReceived: "2026-08-22 09:31:00 PDT",
     messageId: "example-message-id",
+    mailbox: "Archive",
     body: "Franklin,\r\n\r\nHere is the complete August agenda.\r\n\r\nRoberto"
   }, ["Protect and Progress August Agenda.pdf"]);
 
   assert.match(markdown, /^# Protect and Progress Meeting: August Agenda/m);
   assert.match(markdown, /\*\*From:\*\* Roberto Marin/);
   assert.match(markdown, /\*\*To:\*\* Franklin Garrett/);
+  assert.match(markdown, /\*\*Mailbox:\*\* Archive/);
   assert.match(markdown, /\[\[Protect and Progress August Agenda\.pdf\]\]/);
   assert.match(markdown, /Here is the complete August agenda\./);
   assert.ok(markdown.endsWith("\n"));

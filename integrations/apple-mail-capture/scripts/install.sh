@@ -26,4 +26,4 @@ fi
 /System/Library/CoreServices/pbs -flush >/dev/null 2>&1 || true
 print "Installed Apple Mail capture script: ${install_root}/capture-mail.js"
 print "Installed Mail Quick Action: ${service_root}"
-print "In Mail, select one message and choose Mail > Services > Save Mail to FJG Vault."
+print "In Mail, open one message or conversation and choose Mail > Services > Save Mail to FJG Vault."

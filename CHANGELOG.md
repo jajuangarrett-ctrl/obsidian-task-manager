@@ -34,6 +34,13 @@ Validation: builds and automated checks passed; idle, connecting, ready, and err
 
 ## Unreleased
 
+- Extend **Save Mail to FJG Vault** to save every message Apple Mail exposes in
+  the selected conversation, including members from Sent, Archive, or other
+  mailboxes, as separate readable Markdown notes in one collision-safe thread
+  folder with all attachments beside them. Preserve direct single-message
+  capture and surface a reviewable selected-message fallback when Mail cannot
+  verify the complete conversation.
+
 ## 0.17.0 — 2026-09-11
 
 - Add Talk to dashboard with GPT-Live-1, a live transcript, microphone mute, and explicit end controls. Use the existing OpenAI key and a separately configurable Responses backend (default GPT-5.6 Terra).
