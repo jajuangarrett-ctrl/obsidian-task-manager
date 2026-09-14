@@ -1,3 +1,9 @@
+## 0.21.3 — Empty archive folder cleanup
+
+After an objective archives successfully, remove its empty source folders and empty descendants. Preserve shared parent folders, remaining files (including hidden files), and failed-move rollback. Cleanup errors leave the archive successful. Applies to future archives; existing leftovers are unchanged.
+
+Validation: focused archive cleanup scenarios, typecheck, automated tests, and production build.
+
 ## 0.21.2 — Audio readiness
 
 Readiness now waits for a live, unmuted microphone, connected WebRTC transport and outgoing audio packet flow. Mobile sessions then allow a conservative 3.5-second warm-up before showing Ready. This mitigates the reported missing opening phrase; packet flow does not prove server recognition, and physical phone confirmation remains pending. End during warm-up closes the started session and cancels readiness.
