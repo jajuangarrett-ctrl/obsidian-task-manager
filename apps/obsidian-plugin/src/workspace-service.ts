@@ -1188,6 +1188,9 @@ export class TaskWorkspaceService {
   ): Promise<IndexedTask> {
     const task = this.getById(taskId);
     const status = normalizeStatus(target);
+    const archiveCleanupRoots = status === "archived" && !task.archived
+      ? this.taskOwnedFolderRoots(task)
+      : [];
     const at = new Date();
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
@@ -1225,6 +1228,7 @@ export class TaskWorkspaceService {
       if (currentUpdates instanceof TFile) await this.app.vault.modify(currentUpdates, oldUpdates);
       throw error;
     }
+    for (const root of archiveCleanupRoots) await this.removeEmptyArchivedSourceFolders(root);
     await this.refresh();
     return this.getById(taskId);
   }
@@ -1764,6 +1768,35 @@ export class TaskWorkspaceService {
   private folderIsEmpty(path: string): boolean {
     const prefix = `${normalizePath(path)}/`;
     return !this.app.vault.getAllLoadedFiles().some((entry) => normalizePath(entry.path).startsWith(prefix));
+  }
+
+  private taskOwnedFolderRoots(task: IndexedTask): string[] {
+    if (task.legacyWorkspace || task.relocatedBundle) return [normalizePath(task.folderPath)];
+    if (!usesTaskArtifactLayout(task.taskFile)) return [];
+    const name = artifactFolderNameForTask(task);
+    return (["Tasks", "Updates", "Files"] as const)
+      .map((collection) => taskArtifactFolderPath(task.folderPath, collection, name));
+  }
+
+  private async removeEmptyArchivedSourceFolders(root: string): Promise<void> {
+    // Work only inside the objective's captured source roots, never shared parents.
+    // Read the adapter so files absent from Obsidian's index also prevent removal.
+    try {
+      if ((await this.app.vault.adapter.stat(root))?.type !== "folder") return;
+      const children = await this.app.vault.adapter.list(root);
+      for (const folder of children.folders) {
+        if (normalizePath(folder).startsWith(`${normalizePath(root)}/`)) {
+          await this.removeEmptyArchivedSourceFolders(folder);
+        }
+      }
+      const remaining = await this.app.vault.adapter.list(root);
+      if (remaining.files.length || remaining.folders.length) return;
+      // Nonrecursive removal also refuses hidden or newly created files at deletion time.
+      await this.app.vault.adapter.rmdir(root, false);
+    } catch (error) {
+      // Cleanup is best effort after a successful archive, never part of move rollback.
+      console.warn("[FJG Task Manager] Could not remove empty archived source folder", root, error);
+    }
   }
 
   private async moveTaskFiles(

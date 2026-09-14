@@ -71,8 +71,28 @@ class MockVault {
   private readonly entries = new Map<string, InstanceType<typeof obsidianMock.MockTFile> | InstanceType<typeof obsidianMock.MockTFolder>>();
   failNextRenameTarget = "";
   failNextWriteTarget = "";
+  failRemovePath = "";
+  readonly hiddenFiles = new Set<string>();
 
   readonly adapter = {
+    list: async (value: string) => {
+      const prefix = `${obsidianMock.normalizePath(value)}/`;
+      const children = [...this.entries.values()].filter((entry) =>
+        entry.path.startsWith(prefix) && !entry.path.slice(prefix.length).includes("/"));
+      return {
+        files: children.filter((entry) => entry instanceof obsidianMock.MockTFile).map((entry) => entry.path),
+        folders: children.filter((entry) => entry instanceof obsidianMock.MockTFolder).map((entry) => entry.path)
+      };
+    },
+    rmdir: async (value: string, recursive: boolean) => {
+      expect(recursive).toBe(false);
+      const root = obsidianMock.normalizePath(value);
+      if (root === this.failRemovePath) throw new Error("Simulated locked folder");
+      if ([...this.entries.keys(), ...this.hiddenFiles].some((path) => path.startsWith(`${root}/`))) {
+        throw new Error("Directory not empty");
+      }
+      this.entries.delete(root);
+    },
     stat: async (value: string) => {
       const entry = this.entries.get(obsidianMock.normalizePath(value));
       if (!entry) return null;
@@ -433,6 +453,85 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(archived.record.tags).toContain("project/Basic_Needs_Expansion");
     expect(archived.taskFile.path).toBe("08 Tasks/Archive/Tasks/Archive after confirmation/task.md");
     expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Archive after confirmation/task.md")).toBeNull();
+    for (const collection of ["Tasks", "Updates", "Files"]) {
+      expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}/Archive after confirmation`)).toBeNull();
+      expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}`)).not.toBeNull();
+    }
+  });
+
+  it("cleans a relocated objective's empty tree while preserving its collection and neighboring files", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    await vault.createFolder("03 Areas");
+    await vault.createFolder("03 Areas/Career");
+    const task = await service.createTask({ taskId: "tsk_cleanup_bundle", title: "Cleanup bundle" });
+    const relocated = await service.relocateTask(task.record.task_id, "03 Areas/Career");
+    const source = relocated.folderPath;
+    await vault.createFolder(`${source}/Files/Empty`);
+    await vault.create(`${source}/Files/evidence.md`, "Keep archived evidence");
+    await vault.create("03 Areas/Career/Career Tasks/neighbor.md", "Keep neighbor");
+    await service.refresh();
+
+    const archived = await service.changeStatus(task.record.task_id, "archived");
+
+    expect(vault.getAbstractFileByPath(source)).toBeNull();
+    expect(vault.getAbstractFileByPath("03 Areas/Career/Career Tasks")).not.toBeNull();
+    expect(vault.getAbstractFileByPath("03 Areas/Career/Career Tasks/neighbor.md")).not.toBeNull();
+    const evidence = vault.getAbstractFileByPath("08 Tasks/Archive/Files/Cleanup bundle/evidence.md");
+    expect(evidence).toBeInstanceOf(obsidianMock.MockTFile);
+    expect(await vault.read(evidence as InstanceType<typeof obsidianMock.MockTFile>)).toContain("Keep archived evidence");
+    expect(archived.archived).toBe(true);
+  });
+
+  it("preserves source folders with remaining notes and hidden files", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({ taskId: "tsk_cleanup_keep", title: "Keep leftovers" });
+    const taskRoot = "08 Tasks/Inbox/Tasks/Keep leftovers";
+    const updatesRoot = "08 Tasks/Inbox/Updates/Keep leftovers";
+    await vault.create(`${taskRoot}/personal.md`, "Do not remove");
+    vault.hiddenFiles.add(`${updatesRoot}/.hidden`);
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const archived = await service.changeStatus(task.record.task_id, "archived");
+      expect(archived.archived).toBe(true);
+      expect(vault.getAbstractFileByPath(`${taskRoot}/personal.md`)).not.toBeNull();
+      expect(vault.getAbstractFileByPath(taskRoot)).not.toBeNull();
+      expect(vault.getAbstractFileByPath(updatesRoot)).not.toBeNull();
+      expect(vault.hiddenFiles.has(`${updatesRoot}/.hidden`)).toBe(true);
+    } finally { warning.mockRestore(); }
+  });
+
+  it("leaves the source tree intact when an archive move fails", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({ taskId: "tsk_cleanup_rollback", title: "Failed archive" });
+    const originalTaskPath = task.taskFile.path;
+    const originalUpdatesPath = task.updatesFile!.path;
+    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Failed archive/task.md";
+
+    await expect(service.changeStatus(task.record.task_id, "archived")).rejects.toThrow("Simulated rename failure");
+
+    expect(vault.getAbstractFileByPath(originalTaskPath)).not.toBeNull();
+    expect(vault.getAbstractFileByPath(originalUpdatesPath)).not.toBeNull();
+    expect(parseTaskMarkdown(await vault.read(task.taskFile as never)).record.status).not.toBe("archived");
+    for (const collection of ["Tasks", "Updates", "Files"]) {
+      expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}/Failed archive`)).not.toBeNull();
+    }
+  });
+
+  it("keeps a successful archive when an empty source folder cannot be removed", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({ taskId: "tsk_cleanup_locked", title: "Locked source" });
+    vault.failRemovePath = "08 Tasks/Inbox/Tasks/Locked source";
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const archived = await service.changeStatus(task.record.task_id, "archived");
+      expect(archived.archived).toBe(true);
+      expect(vault.getAbstractFileByPath(vault.failRemovePath)).not.toBeNull();
+      expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Locked source")).toBeNull();
+    } finally { warning.mockRestore(); }
   });
 
   it("discovers files stored in the task-specific Files folder without requiring metadata backfill", async () => {
