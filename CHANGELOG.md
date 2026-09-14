@@ -1,3 +1,9 @@
+## 0.21.4 — Readable objective briefing
+
+Regenerate the Objective Manager briefing around linked objective headings instead of project groups. Put actions directly beneath their objective, keep status, due date, project tag, ID, and updated date compact, and show only populated notes, sections, sources, related files, and recent updates. Exclude archived objectives from the briefing without changing their stored records.
+
+Validation: focused briefing scenarios, full typecheck and automated test suite, production build, live plugin reload, exact live briefing regeneration, source-count comparison, and Obsidian outline inspection.
+
 ## 0.21.3 — Empty archive folder cleanup
 
 After an objective archives successfully, remove its empty source folders and empty descendants. Preserve shared parent folders, remaining files (including hidden files), and failed-move rollback. Cleanup errors leave the archive successful. Applies to future archives; existing leftovers are unchanged.

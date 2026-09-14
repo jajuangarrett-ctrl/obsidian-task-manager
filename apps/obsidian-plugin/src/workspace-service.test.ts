@@ -1377,7 +1377,7 @@ describe("TaskWorkspaceService briefing", () => {
     const briefing = vault.getAbstractFileByPath(service.briefingPath());
     expect(briefing).toBeInstanceOf(obsidianMock.MockTFile);
     expect(await vault.read(briefing as InstanceType<typeof obsidianMock.MockTFile>))
-      .toContain("No objectives or projects are currently indexed by FJG Objective Manager.");
+      .toContain("_No non-archived objectives are currently indexed._");
   });
 
   it("regenerates every dashboard task with scannable title, status, project, details, and history", async () => {
@@ -1408,14 +1408,14 @@ describe("TaskWorkspaceService briefing", () => {
     const briefing = await service.refreshBriefingNote(new Date("2026-08-16T20:00:00.000Z"));
     const markdown = await vault.read(briefing as unknown as InstanceType<typeof obsidianMock.MockTFile>);
     expect(markdown).toContain("task_count: 2");
-    expect(markdown).toMatch(/#### Prepare weekly enrollment report[\s\S]*Status: \*\*Waiting\*\*[\s\S]*Project: Enrollment/);
-    expect(markdown).toMatch(/#### Review unassigned follow-up[\s\S]*Status: \*\*Do First\*\*[\s\S]*Project: No Project/);
-    expect(markdown).toContain("Due date: 2026-08-21");
-    expect(markdown).toContain("Delegated to: Dara");
+    expect(markdown).toMatch(/### \[\[.*Prepare weekly enrollment report\]\][\s\S]*\*\*Status:\*\* Waiting[\s\S]*\*\*Project:\*\* #project\/Enrollment/);
+    expect(markdown).toMatch(/### \[\[.*Review unassigned follow-up\]\][\s\S]*\*\*Status:\*\* Do First/);
+    expect(markdown).toContain("**Due:** Aug 21, 2026");
+    expect(markdown).toContain("**Delegated:** Dara");
     expect(markdown).toContain("Confirm the MIS totals with PRIE.");
     expect(markdown).toContain("PRIE sent the corrected enrollment extract.");
-    expect(markdown).toContain("- Project tag status: **Active**");
-    expect(markdown).not.toContain("[[08 Tasks/Projects/Enrollment/project|Enrollment]]");
+    expect(markdown).not.toContain("Objectives and projects");
+    expect(markdown).not.toContain("Project tag status");
     expect(markdown).toContain("generated_at: 2026-08-16T20:00:00.000Z");
   });
 
