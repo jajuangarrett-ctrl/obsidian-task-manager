@@ -913,6 +913,12 @@ export class TaskWorkspaceService {
     return this.app.vault.getFiles().filter((file) => file.path.startsWith(prefix));
   }
 
+  objectiveFiles(taskId: string): TaskRelatedFile[] {
+    const task = this.getById(taskId);
+    const actionRoot = `${normalizePath(this.relatedFilesPath(task))}/Subtasks/`;
+    return task.relatedFiles.filter((related) => !normalizePath(related.file.path).startsWith(actionRoot));
+  }
+
   async ensureSubtaskFolder(taskId: string, subtaskId: string): Promise<string> {
     const path = this.subtaskFolder(taskId, subtaskId);
     await this.ensureFolder(path);

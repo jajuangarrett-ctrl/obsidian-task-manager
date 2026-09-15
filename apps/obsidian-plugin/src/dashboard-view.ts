@@ -695,8 +695,30 @@ export class TaskDashboardView extends ItemView {
         this.taskPlugin.openArchiveTaskModal(task.record.task_id);
       });
     }
+    this.renderObjectiveFiles(row, task);
     this.renderSubtasks(row, task);
     this.renderRecentUpdates(row, task);
+  }
+
+  private renderObjectiveFiles(parent: HTMLElement, task: IndexedTask): void {
+    const files = this.taskPlugin.workspaceService.objectiveFiles(task.record.task_id);
+    if (!files.length) return;
+    const section = parent.createEl("details", { cls: "fjg-objective-files" });
+    section.createEl("summary", {
+      text: `Files · ${files.length}`,
+      attr: { "aria-label": `${files.length} objective ${files.length === 1 ? "file" : "files"} for ${task.record.title}` }
+    });
+    const list = section.createDiv({ cls: "fjg-objective-file-list" });
+    for (const related of files) {
+      const open = list.createEl("button", {
+        cls: "fjg-objective-file-button",
+        attr: { type: "button", title: related.file.path, "aria-label": `Open ${related.file.name}` }
+      });
+      const icon = open.createSpan({ cls: "fjg-objective-file-icon" });
+      setIcon(icon, related.kind === "image" ? "image" : "file");
+      open.createSpan({ text: related.file.name });
+      open.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(related.file));
+    }
   }
 
   private renderSubtasks(parent: HTMLElement, task: IndexedTask): void {
@@ -749,7 +771,7 @@ export class TaskDashboardView extends ItemView {
       let files;
       try { files = service.subtaskFiles(taskId, sub.id); } catch (error) { item.createEl("p", { text: String(error) }); continue; }
       const attachments = item.createEl("details");
-      attachments.createEl("summary", { text: `${files.length} ${files.length === 1 ? "file" : "files"}` });
+      attachments.createEl("summary", { text: `Files · ${files.length}` });
       for (const file of files) {
         const link = attachments.createEl("button", { text: file.name, attr: { title: file.path } });
         link.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(file));

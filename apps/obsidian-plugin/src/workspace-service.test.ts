@@ -554,6 +554,40 @@ describe("TaskWorkspaceService project-centered moves", () => {
       .toEqual(["08 Tasks/Inbox/Files/Review support packet/Supporting note.md"]);
   });
 
+  it("separates objective files from each action's files while preserving explicit external links", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({
+      taskId: "tsk_owned_file_sets",
+      title: "Keep attachment ownership",
+      status: "do-first"
+    });
+    const first = await service.addSubtask(task.record.task_id, "First action");
+    const second = await service.addSubtask(task.record.task_id, "Second action");
+    const objectiveFolder = (await service.ensureFilesFolderForTask(task.record.task_id)).folderPath;
+    const objectiveFile = await vault.create(`${objectiveFolder}/Objective evidence.md`, "Objective-owned file");
+    const firstFile = await vault.create(`${service.subtaskFolder(task.record.task_id, first.id)}/First evidence.md`, "First action only");
+    const secondFile = await vault.create(`${service.subtaskFolder(task.record.task_id, second.id)}/Second evidence.md`, "Second action only");
+    await vault.createFolder("04 Resources");
+    const explicitExternal = await vault.create("04 Resources/Shared guidance.md", "Intentional cross-link");
+    const current = service.getById(task.record.task_id);
+    const document = parseTaskMarkdown(await vault.read(current.taskFile as never));
+    await vault.modify(current.taskFile as never, renderTaskMarkdown(updateTaskFields(document.record, {
+      related_files: [explicitExternal.path, firstFile.path]
+    }), document.body));
+
+    await service.refresh();
+
+    expect(service.objectiveFiles(task.record.task_id).map((related) => related.file.path).sort()).toEqual([
+      explicitExternal.path,
+      objectiveFile.path
+    ].sort());
+    expect(service.subtaskFiles(task.record.task_id, first.id).map((file) => file.path)).toEqual([firstFile.path]);
+    expect(service.subtaskFiles(task.record.task_id, second.id).map((file) => file.path)).toEqual([secondFile.path]);
+    expect(service.objectiveFiles(task.record.task_id).map((related) => related.file.path)).not.toContain(firstFile.path);
+    expect(service.objectiveFiles(task.record.task_id).map((related) => related.file.path)).not.toContain(secondFile.path);
+  });
+
   it("renames matching task, update, and file folders while preserving task state", async () => {
     const { service, vault } = createService();
     await service.initialize();

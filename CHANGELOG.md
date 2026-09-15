@@ -1,3 +1,9 @@
+## 0.21.5 — Objective and action file lists
+
+Show each objective's own related files in a compact dashboard disclosure while keeping every action's attachment list beneath that action. Exclude all action attachment subtrees from the objective list to prevent duplicates, and preserve intentional objective links outside those subtrees.
+
+Validation: focused ownership scenarios for objective files, explicit external links, and distinct multi-action attachments; full typecheck, automated tests, production build, live plugin reload, and dashboard inspection.
+
 ## 0.21.4 — Readable objective briefing
 
 Regenerate the Objective Manager briefing around linked objective headings instead of project groups. Put actions directly beneath their objective, keep status, due date, project tag, ID, and updated date compact, and show only populated notes, sections, sources, related files, and recent updates. Exclude archived objectives from the briefing without changing their stored records.
