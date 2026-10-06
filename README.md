@@ -2,6 +2,16 @@
 
 Objective workspaces with nested Actions for Obsidian, with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
+## Horizontal Home and Move queue (0.22.0)
+
+The dashboard opens on **Home**, with one horizontal row per status. Scope buttons separate open, completed, archived and all objectives. Search covers every objective in the selected scope, including off-screen cards and action titles. Home, Objectives, Kanban and Move stay in a single horizontal tab row, scrolling sideways in narrow panes. Mobile layouts wrap filters and use 44-pixel touch targets. Use Previous/Next, the row scrollbar, or View all; filters and row positions survive dashboard refreshes. Cards retain the existing Folder, Show in file, Copy, Update and More controls; objective tags remain available as a filter rather than a Home card field. Add action opens the existing action editor for that exact objective.
+
+Click a Home card to open **Start Here**. Shift-click opens the **Folder browser** at the objective's current folder. The workspace reads current status, due date and the first unfinished action from the authoritative record. Create Start Here note explicitly creates one editable supporting note with Outcome, Current status, Next action, Open questions / waiting and Key files; it does not create notes across the vault automatically. Existing notes are opened without overwriting them.
+
+**Move** lists non-archived objectives whose actual task paths remain under the configured active, Inbox or Projects roots. Choose an existing destination under Programs or Areas, then select Move on that row. It reuses the existing relocation operation, preserves identity and owned files, and removes the row after success while keeping the objective indexed. Canceling the picker does nothing; conflicts and errors remain visible. Arbitrary loose notes and already relocated bundles do not belong to this queue.
+
+The crossed-out linked-context and AI-inclusion section of the design is excluded. The existing Talk to dashboard button remains between Capture objective and More actions. No new AI calls or schedules are introduced.
+
 ## Objectives and Actions (0.16.0)
 
 Main tasks are now labeled **Objectives**, and subtasks are **Actions**. The Projects dashboard section is removed; existing project tags remain available as metadata. **Capture action** opens the same fields as **Add action**, plus a searchable Objective picker. Choose an exact result before saving; editing the search clears that selection. Existing attachment controls, Copy path, conversion and promotion are unchanged.

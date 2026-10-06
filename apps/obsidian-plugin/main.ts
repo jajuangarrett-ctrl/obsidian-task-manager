@@ -9,6 +9,8 @@ import {
 } from "obsidian";
 import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
+import { ObjectiveWorkspaceModal } from "./src/objective-workspace-modal";
+import { SubtaskEditModal } from "./src/subtask-modals";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import {
   ArchiveProjectModal,
@@ -628,6 +630,19 @@ export default class FjgTaskManagerPlugin extends Plugin {
         : `Objective due date cleared: ${task.record.title}`
     );
     this.refreshDashboard();
+  }
+
+  openObjectiveWorkspace(taskId: string, folder = false, actions = false): void {
+    new ObjectiveWorkspaceModal(this.app, this, taskId, folder, actions).open();
+  }
+
+  openObjectiveActionModal(taskId: string, done: () => void = () => {}): void {
+    const task = this.workspaceService.getById(taskId);
+    if (task.archived) { new Notice("Reopen this objective before adding an action."); return; }
+    new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
+      await this.workspaceService.addSubtask(taskId, title, { due, notes, status });
+      this.refreshDashboard(); done(); new Notice("Action added.");
+    }).open();
   }
 
   async openTask(taskId: string): Promise<void> {

@@ -22,12 +22,26 @@ import {
 import type { IndexedTask } from "./workspace-service";
 import { ConvertSubtasksModal, PromoteSubtaskModal, SubtaskEditModal, SubtaskVaultFileModal } from "./subtask-modals";
 import { TaskFileModal } from "./modals";
+import { eligibleForMove, filterHomeTasks, HomeScope, HomeSort, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
 import { taskFolderClipboardPath } from "./task-folder-path";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
 
 export class TaskDashboardView extends ItemView {
-  private mode: DashboardMode = "tasks";
+  private mode: DashboardMode = "home";
+  private tabPosition = 0;
+  private homeScope: HomeScope = "open";
+  private homeQuery = "";
+  private homeProject = "";
+  private homeStatus = "";
+  private homeSort: HomeSort = "updated";
+  private homeList = false;
+  private moveQuery = "";
+  private moveRoot = "";
+  private readonly moveDestinations = new Map<string, string>();
+  private readonly moveErrors = new Map<string, string>();
+  private readonly movingTasks = new Set<string>();
+  private readonly rowPositions = new Map<string, number>();
   private query = "";
   private projectQuery = "";
   private view: TaskViewKey = "do-first";
@@ -66,6 +80,12 @@ export class TaskDashboardView extends ItemView {
 
   render(): void {
     const root = this.containerEl.children[1] as HTMLElement;
+    const top = root.scrollTop;
+    this.tabPosition = root.querySelector<HTMLElement>(".fjg-dashboard-tabs")?.scrollLeft ?? this.tabPosition;
+    root.querySelectorAll<HTMLElement>("[data-home-row]").forEach(row => this.rowPositions.set(row.dataset.homeRow!, row.scrollLeft));
+    const focused = root.querySelector<HTMLInputElement>("input:focus");
+    const focusKey = focused?.dataset.focusKey;
+    const caret = focused?.selectionStart;
     root.empty();
     root.addClass("fjg-task-dashboard");
     this.renderHeader(root);
@@ -76,12 +96,27 @@ export class TaskDashboardView extends ItemView {
       tasks.map((task) => task.record),
       this.taskPlugin.workspaceService.projectNames()
     );
-    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.length);
-    if (this.mode === "kanban") {
+    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.filter(task => !task.archived).length);
+    if (this.mode === "home") {
+      this.renderHome(root, allTasks);
+    } else if (this.mode === "move") {
+      this.renderMove(root, allTasks);
+    } else if (this.mode === "kanban") {
       this.renderKanban(root, allTasks.filter((task) => task.record.status !== "archived"));
     } else {
       this.renderTasks(root, allTasks, projects);
     }
+    const navigation = root.querySelector<HTMLElement>(".fjg-dashboard-tabs");
+    const selectedTab = navigation?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (navigation && selectedTab) {
+      navigation.scrollLeft = this.tabPosition;
+      const selected = selectedTab.getBoundingClientRect(), bounds = navigation.getBoundingClientRect();
+      if (selected.right > bounds.right) navigation.scrollLeft += selected.right - bounds.right + 6;
+      else if (selected.left < bounds.left) navigation.scrollLeft -= bounds.left - selected.left + 6;
+      this.tabPosition = navigation.scrollLeft;
+    }
+    root.scrollTop = top;
+    if (focusKey) { const input = root.querySelector<HTMLInputElement>(`input[data-focus-key="${focusKey}"]`); input?.focus(); if (caret != null) input?.setSelectionRange(caret,caret); }
   }
 
   private renderHeader(root: HTMLElement): void {
@@ -98,6 +133,7 @@ export class TaskDashboardView extends ItemView {
       JSON.stringify({ mode: this.mode, view: this.view, project: this.project, search: this.query })));
     const createButton = actions.createEl("button", { text: "Capture objective", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
+    actions.appendChild(voiceButton);
     const captureAction = actions.createEl("button", { text: "Capture action" });
     captureAction.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status, parentId) => {
       if (!parentId) throw new Error("Choose a parent objective.");
@@ -123,6 +159,10 @@ export class TaskDashboardView extends ItemView {
       await this.taskPlugin.workspaceService.refresh();
       this.render();
     });
+    const more = actions.createEl("details", { cls: "fjg-header-more" });
+    more.createEl("summary", { text: "More actions" });
+    const menu = more.createDiv({ cls: "fjg-header-more-menu" });
+    for (const button of [captureAction, convert, briefingButton, refreshButton]) menu.appendChild(button);
   }
 
   private renderSectionTabs(root: HTMLElement, projectCount: number, taskCount: number): void {
@@ -130,8 +170,10 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-dashboard-tabs",
       attr: { role: "tablist", "aria-label": "Objective Manager sections" }
     });
+    this.sectionTab(tabs, "home", "Home", "house");
     this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
+    this.sectionTab(tabs, "move", "Move", "folder-input");
   }
 
   private sectionTab(
@@ -156,6 +198,84 @@ export class TaskDashboardView extends ItemView {
       this.mode = mode;
       this.render();
     });
+  }
+
+  private renderHome(root: HTMLElement, tasks: IndexedTask[]): void {
+    const heading=root.createDiv({cls:"fjg-section-heading"});
+    heading.createEl("h2",{text:"Home"});
+    heading.createEl("p",{text:"Scan status, browse objectives, and open a workspace. Shift-click a card to browse its folder."});
+    const scope=root.createDiv({cls:"fjg-home-scopes"});
+    for(const [key,label] of [["open","All Open"],["completed","Completed"],["archived","Archived"],["all","All objectives"]] as const){
+      const button=scope.createEl("button",{text:`${label} ${tasks.filter(task=>matchesHomeScope(task.record,key)).length}`,attr:{"aria-pressed":String(this.homeScope===key)}});
+      button.toggleClass("is-active",this.homeScope===key);button.addEventListener("click",()=>{this.homeScope=key;this.render();});
+    }
+    const filters=root.createDiv({cls:"fjg-home-filters"});
+    const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.render();});
+    const select=(label:string,choices:[string,string][],value:string,changed:(value:string)=>void)=>{const el=filters.createEl("select",{attr:{"aria-label":label}});for(const [key,name] of choices)el.createEl("option",{value:key,text:name});el.value=value;el.addEventListener("change",()=>{changed(el.value);this.render();});};
+    select("Filter Home by objective tag",[["","All objective tags"],["__none__","No objective tag"],...[...new Set(tasks.map(task=>task.record.project).filter(Boolean))].sort().map(value=>[value,value] as [string,string])],this.homeProject,value=>this.homeProject=value);
+    select("Filter Home by status",[["","All statuses"],...TASK_STATUSES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
+    select("Sort Home objectives",[["updated","Updated newest"],["due","Due first"]],this.homeSort,value=>this.homeSort=value as HomeSort);
+    const clear=filters.createEl("button",{text:"Clear filters"});clear.addEventListener("click",()=>{this.homeQuery="";this.homeProject="";this.homeStatus="";this.render();});
+    const view=filters.createEl("button",{text:this.homeList?"Status rows":"All results list",attr:{"aria-pressed":String(this.homeList)}});view.addEventListener("click",()=>{this.homeList=!this.homeList;this.render();});
+    const visible=filterHomeTasks(tasks,this.homeScope,this.homeQuery,this.homeProject,this.homeStatus,this.homeSort);
+    root.createEl("p",{text:`${visible.length} matching / ${tasks.filter(task=>matchesHomeScope(task.record,this.homeScope)).length} in scope`,cls:"fjg-home-count",attr:{"aria-live":"polite"}});
+    if(!visible.length){root.createDiv({cls:"fjg-empty",text:tasks.length?"No objectives match. Clear filters or choose another scope.":"No objectives yet. Capture an objective to get started."});return;}
+    if(this.homeList){const list=root.createDiv({cls:"fjg-home-results"});for(const task of visible)this.renderTask(list,task,true);return;}
+    const rows=root.createDiv({cls:"fjg-home-rows"});
+    for(const status of homeRowStatuses(this.homeScope)){
+      const matches=visible.filter(task=>task.record.status===status);
+      const total=tasks.filter(task=>matchesHomeScope(task.record,this.homeScope)&&task.record.status===status).length;
+      const section=rows.createEl("section",{cls:"fjg-home-status-row",attr:{"aria-label":`${statusLabel(status)} objectives`}});
+      const label=section.createDiv({cls:"fjg-home-row-label"});label.createEl("h3",{text:statusLabel(status)});label.createEl("p",{text:`${matches.length} / ${total} objectives`});
+      const strip=section.createDiv({cls:"fjg-home-row-cards",attr:{"data-home-row":status,"aria-label":`Browse ${statusLabel(status)} objectives`,tabindex:"0"}});
+      const navigation=label.createDiv({cls:"fjg-home-row-navigation"});
+      for(const [caption,direction] of [["Previous",-1],["Next",1]] as const){const button=navigation.createEl("button",{text:caption,attr:{"aria-label":`${caption} ${statusLabel(status)} objectives`}});button.disabled=!matches.length;button.addEventListener("click",()=>strip.scrollBy({left:direction*Math.max(330,strip.clientWidth-48),behavior:"smooth"}));}
+      const all=label.createEl("button",{text:"View all"});all.addEventListener("click",()=>{this.homeStatus=status;this.homeList=true;this.render();});
+      for(const task of matches)this.renderTask(strip,task,true);
+      if(!matches.length)strip.createEl("p",{text:"No matches in this status.",cls:"fjg-empty"});
+      strip.scrollLeft=this.rowPositions.get(status)||0;
+      strip.addEventListener("scroll",()=>this.rowPositions.set(status,strip.scrollLeft));
+    }
+  }
+
+  private moveRoots(): string[] { const settings=this.taskPlugin.settings;return [...new Set([settings.activeRoot,settings.inboxRoot,settings.projectRoot].filter(Boolean))]; }
+
+  private renderMove(root: HTMLElement, tasks: IndexedTask[]): void {
+    const roots=this.moveRoots();
+    const eligible=tasks.filter(task=>eligibleForMove(task,roots));
+    const heading=root.createDiv({cls:"fjg-section-heading"});heading.createEl("h2",{text:"Move"});heading.createEl("p",{text:"File objectives from their original task roots. Choose a Program or Area destination, then move one objective and its owned contents."});
+    const filters=root.createDiv({cls:"fjg-home-filters"});
+    const search=filters.createEl("input",{type:"search",placeholder:"Search objective titles or source paths",attr:{"aria-label":"Search Move queue","data-focus-key":"move-search"}});search.value=this.moveQuery;search.addEventListener("input",()=>{this.moveQuery=search.value;this.render();});
+    const filter=filters.createEl("select",{attr:{"aria-label":"Filter Move queue by original root"}});filter.createEl("option",{value:"",text:"All original roots"});for(const path of roots)filter.createEl("option",{value:path,text:path});filter.value=this.moveRoot;filter.addEventListener("change",()=>{this.moveRoot=filter.value;this.render();});
+    const refresh=filters.createEl("button",{text:"Refresh"});refresh.addEventListener("click",()=>{refresh.disabled=true;void this.taskPlugin.workspaceService.refresh().then(()=>this.render()).catch(error=>{new Notice(String(error));refresh.disabled=false;});});
+    const matches=eligible.filter(task=>(!this.moveRoot||task.taskFile.path.startsWith(`${this.moveRoot}/`))&&`${task.record.title} ${task.taskFile.path}`.toLocaleLowerCase().includes(this.moveQuery.trim().toLocaleLowerCase()));
+    root.createEl("p",{text:`${matches.length} matching / ${eligible.length} awaiting filing`,attr:{"aria-live":"polite"}});
+    if(!matches.length){root.createDiv({cls:"fjg-empty",text:eligible.length?"No objectives match. Clear the search or choose another root.":"The Move queue is empty. New objectives in original task roots will appear here."});return;}
+    const list=root.createDiv({cls:"fjg-move-list"});
+    for(const task of matches){
+      const id=task.record.task_id,busy=this.movingTasks.has(id);
+      const row=list.createEl("article",{cls:"fjg-move-row",attr:{"data-task-id":id}});
+      row.createEl("h3",{text:task.record.title});row.createEl("p",{text:statusLabel(task.record.status)});row.createEl("code",{text:task.taskFile.path,cls:"fjg-workspace-path"});
+      const actions=row.createDiv({cls:"fjg-move-controls"});
+      const picker=actions.createEl("button",{text:this.moveDestinations.get(id)||"Choose destination",attr:{"aria-label":`Choose destination for ${task.record.title}`}});picker.disabled=busy;
+      picker.addEventListener("click",()=>new DashboardProjectPickerModal(this.app,this.moveDestinations.get(id)||"",this.taskPlugin.workspaceService.listRelocationDestinations().map(path=>({key:path,name:path})),destination=>{this.moveDestinations.set(id,destination);this.moveErrors.delete(id);this.render();}).open());
+      const move=actions.createEl("button",{text:busy?"Moving…":"Move",cls:"mod-cta",attr:{"aria-label":`Move ${task.record.title}`}});move.disabled=busy||!this.moveDestinations.get(id);
+      move.addEventListener("click",()=>void this.moveQueuedObjective(id,task.taskFile.path));
+      if(this.moveErrors.has(id))row.createEl("p",{text:this.moveErrors.get(id),cls:"fjg-workspace-error",attr:{role:"alert"}});
+    }
+  }
+
+  private async moveQueuedObjective(taskId: string, expectedPath: string): Promise<void> {
+    if(this.movingTasks.has(taskId))return;
+    const destination=this.moveDestinations.get(taskId);if(!destination)return;
+    this.movingTasks.add(taskId);this.moveErrors.delete(taskId);this.render();
+    try {
+      const task=this.taskPlugin.workspaceService.getById(taskId);
+      if(task.taskFile.path!==expectedPath||!eligibleForMove(task,this.moveRoots()))throw new Error("This objective changed location. Refresh the queue before moving it.");
+      await this.taskPlugin.relocateTask(taskId,destination);
+      this.moveDestinations.delete(taskId);
+    } catch(error) { this.moveErrors.set(taskId,error instanceof Error?error.message:String(error)); }
+    finally { this.movingTasks.delete(taskId);this.render(); }
   }
 
   private renderTasks(root: HTMLElement, tasks: IndexedTask[], projects: ProjectSummary[]): void {
@@ -545,22 +665,29 @@ export class TaskDashboardView extends ItemView {
     for (const task of tasks) this.renderTask(rows, task);
   }
 
-  private renderTask(parent: HTMLElement, task: IndexedTask): void {
+  private renderTask(parent: HTMLElement, task: IndexedTask, compact = false): void {
     const row = parent.createDiv({
-      cls: "fjg-task-row",
-      attr: { "data-status": task.record.status }
+      cls: `fjg-task-row${compact ? " fjg-home-card" : ""}`,
+      attr: { "data-status": task.record.status, "data-task-id": task.record.task_id }
     });
     const overview = row.createDiv({ cls: "fjg-task-overview" });
     const main = overview.createDiv({ cls: "fjg-task-main" });
     const title = main.createEl("button", { text: task.record.title, cls: "fjg-task-title" });
-    title.addEventListener("click", () => this.taskPlugin.openTask(task.record.task_id));
+    title.addEventListener("click", event => {
+      if (compact || event.shiftKey) this.taskPlugin.openObjectiveWorkspace(task.record.task_id, event.shiftKey);
+      else void this.taskPlugin.openTask(task.record.task_id);
+    });
+    if (compact) row.addEventListener("click", event => {
+      if ((event.target as HTMLElement).closest("button,input,select,details,summary,a")) return;
+      this.taskPlugin.openObjectiveWorkspace(task.record.task_id, event.shiftKey);
+    });
     const meta = main.createDiv({ cls: "fjg-task-meta" });
     if (task.archived || task.record.status === "archived") {
       meta.createSpan({
         text: statusLabel(task.record.status),
         cls: `fjg-status-badge is-${task.record.status}`
       });
-      if (task.record.project) meta.createSpan({ text: task.record.project, cls: "fjg-task-static-meta" });
+      if (!compact && task.record.project) meta.createSpan({ text: task.record.project, cls: "fjg-task-static-meta" });
       if (task.record.due) {
         meta.createSpan({
           text: `Due ${task.record.due}`,
@@ -584,12 +711,14 @@ export class TaskDashboardView extends ItemView {
           new Notice(error instanceof Error ? error.message : String(error));
         }
       });
+      if (!compact) {
       const project = meta.createEl("button", {
         cls: "fjg-task-meta-control fjg-task-project-picker-button",
         text: task.record.project || "No objective tag",
         attr: { type: "button", "aria-label": `Choose objective tag for ${task.record.title}` }
       });
       project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
+      }
       const dueDate = meta.createEl("button", {
         cls: `fjg-task-meta-control fjg-task-due-date-button${task.record.due ? "" : " is-empty"}${isDueOrOverdue(task.record) ? " is-overdue" : ""}`,
         text: task.record.due ? `Due ${task.record.due}` : "Add due date",
@@ -694,6 +823,14 @@ export class TaskDashboardView extends ItemView {
         more.open = false;
         this.taskPlugin.openArchiveTaskModal(task.record.task_id);
       });
+    }
+    if (compact) {
+      const summary = row.createEl("button", { cls: "fjg-home-action-summary", text: task.record.subtasks.length
+        ? `Actions · ${task.record.subtasks.filter(sub => sub.completed).length} of ${task.record.subtasks.length} complete` : "Actions · Add your first step" });
+      summary.addEventListener("click", () => this.taskPlugin.openObjectiveWorkspace(task.record.task_id, false, true));
+      row.createEl("p", { cls: "fjg-home-next-action", text: nextObjectiveAction(task.record) });
+      if (!task.archived) { const add = row.createEl("button", { text: "Add action", attr: { "aria-label": `Add action to ${task.record.title}` } }); add.addEventListener("click", () => this.taskPlugin.openObjectiveActionModal(task.record.task_id)); }
+      return;
     }
     this.renderObjectiveFiles(row, task);
     this.renderSubtasks(row, task);

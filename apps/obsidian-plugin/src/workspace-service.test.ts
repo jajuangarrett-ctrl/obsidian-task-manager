@@ -218,6 +218,27 @@ function createService() {
 }
 
 describe("Live voice writes to authoritative task Markdown", () => {
+  it("creates one editable Start Here note on demand and retains it through relocation", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const task = await service.createTask({ title: "Brief objective" });
+    const id = task.record.task_id;
+    expect(service.startHereFile(id)).toBeNull();
+    const [first, second] = await Promise.all([service.ensureStartHereNote(id), service.ensureStartHereNote(id)]);
+    expect(first.path).toBe(second.path);
+    const body = await vault.read(first as never);
+    expect(body).toContain("## Outcome");
+    expect(body).toContain("## Open questions / waiting");
+    expect(body).toContain("## Next action");
+    expect(body).toContain("## Current status");
+    expect(body).toContain("## Key files");
+    await vault.createFolder("02 Programs/Basic-Needs");
+    await service.relocateTask(id, "02 Programs/Basic-Needs");
+    const moved = service.startHereFile(id)!;
+    expect(moved.path).toContain("02 Programs/Basic-Needs");
+    expect(await service.ensureStartHereNote(id)).toBe(moved);
+  });
+
   it("creates a voice action under an exact parent with persisted fields and attachment folder", async () => {
     const {service,vault}=createService();await service.initialize();
     const parent=await service.createTask({title:"Work Study"});

@@ -1086,6 +1086,32 @@ export class TaskWorkspaceService {
     }
   }
 
+  startHereFile(taskId: string): TFile | null {
+    const task = this.getById(taskId);
+    return this.objectiveFiles(taskId).find(item => item.file.extension === "md"
+      && (item.file.basename === "Start Here" || item.file.basename === `${sanitizeTitleForPath(task.record.title)} - Start Here`))?.file || null;
+  }
+
+  private readonly startHereWrites = new Map<string, Promise<TFile>>();
+  async ensureStartHereNote(taskId: string): Promise<TFile> {
+    const existing = this.startHereFile(taskId);
+    if (existing) return existing;
+    const pending = this.startHereWrites.get(taskId);
+    if (pending) return pending;
+    const task = this.getById(taskId);
+    if (task.archived) throw new Error("Reopen this objective before creating its Start Here note.");
+    const link = `[[${task.taskFile.path.replace(/\.md$/i, "")}]]`;
+    const write = this.createRelatedNote(taskId, "Start Here", [
+      "## Outcome", "Describe what success looks like.", "", "## Current status",
+      `See ${link} for the current status. The workspace reads it live.`, "",
+      "## Next action", "Choose or add the next action in the objective workspace; it reads the action record live.", "",
+      "## Open questions / waiting", "Record open questions, blockers and who or what you are waiting for.", "",
+      "## Key files", `Objective record: ${link}`, "List the key files you want to return to."
+    ].join("\n"));
+    this.startHereWrites.set(taskId, write);
+    try { return await write; } finally { this.startHereWrites.delete(taskId); }
+  }
+
   async createRelatedNote(taskId: string, title: string, content = ""): Promise<TFile> {
     const task = this.getById(taskId);
     const cleanTitle = safeRelatedFileName(title, "Untitled note").replace(/\.md$/i, "").trim();
