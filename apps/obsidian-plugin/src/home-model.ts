@@ -1,3 +1,4 @@
+import { matchesPerson } from "./people-model";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 import type { IndexedTask } from "./workspace-service";
 
@@ -6,9 +7,9 @@ export type HomeSort = "updated" | "due";
 export function matchesHomeScope(record: TaskRecord, scope: HomeScope): boolean {
   return scope === "all" || (scope === "open" ? !["completed", "archived"].includes(record.status) : record.status === scope);
 }
-export function filterHomeTasks(tasks: readonly IndexedTask[], scope: HomeScope, query: string, project: string, status: string, sort: HomeSort): IndexedTask[] {
+export function filterHomeTasks(tasks: readonly IndexedTask[], scope: HomeScope, query: string, project: string, status: string, sort: HomeSort, person = ""): IndexedTask[] {
   const search = query.trim().toLocaleLowerCase();
-  return tasks.filter(task => matchesHomeScope(task.record, scope)
+  return tasks.filter(task => matchesPerson(task.record,person) && matchesHomeScope(task.record, scope)
     && (project === "" || (project === "__none__" ? !task.record.project : task.record.project === project))
     && (status === "" || task.record.status === status)
     && (!search || [task.record.title, task.record.task_id, task.record.project, task.taskFile.path, ...task.record.subtasks.map(sub => sub.title)].join(" ").toLocaleLowerCase().includes(search)))

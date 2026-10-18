@@ -1,3 +1,4 @@
+import { matchesPerson } from "./people-model";
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
@@ -33,6 +34,7 @@ export class TaskDashboardView extends ItemView {
   private homeScope: HomeScope = "open";
   private homeQuery = "";
   private homeProject = "";
+  private person = "";
   private homeStatus = "";
   private homeSort: HomeSort = "updated";
   private homeList = false;
@@ -99,6 +101,8 @@ export class TaskDashboardView extends ItemView {
     this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.filter(task => !task.archived).length);
     if (this.mode === "home") {
       this.renderHome(root, allTasks);
+    } else if (this.mode === "people") {
+      this.renderPeople(root, allTasks);
     } else if (this.mode === "move") {
       this.renderMove(root, allTasks);
     } else if (this.mode === "kanban") {
@@ -173,6 +177,7 @@ export class TaskDashboardView extends ItemView {
     this.sectionTab(tabs, "home", "Home", "house");
     this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
+    this.sectionTab(tabs, "people", "People", "users");
     this.sectionTab(tabs, "move", "Move", "folder-input");
   }
 
@@ -212,12 +217,12 @@ export class TaskDashboardView extends ItemView {
     const filters=root.createDiv({cls:"fjg-home-filters"});
     const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.render();});
     const select=(label:string,choices:[string,string][],value:string,changed:(value:string)=>void)=>{const el=filters.createEl("select",{attr:{"aria-label":label}});for(const [key,name] of choices)el.createEl("option",{value:key,text:name});el.value=value;el.addEventListener("change",()=>{changed(el.value);this.render();});};
-    select("Filter Home by objective tag",[["","All objective tags"],["__none__","No objective tag"],...[...new Set(tasks.map(task=>task.record.project).filter(Boolean))].sort().map(value=>[value,value] as [string,string])],this.homeProject,value=>this.homeProject=value);
+    select("Filter Home by People",[["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(value=>[value,value] as [string,string])],this.person,value=>this.person=value);
     select("Filter Home by status",[["","All statuses"],...TASK_STATUSES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
     select("Sort Home objectives",[["updated","Updated newest"],["due","Due first"]],this.homeSort,value=>this.homeSort=value as HomeSort);
-    const clear=filters.createEl("button",{text:"Clear filters"});clear.addEventListener("click",()=>{this.homeQuery="";this.homeProject="";this.homeStatus="";this.render();});
+    const clear=filters.createEl("button",{text:"Clear filters"});clear.addEventListener("click",()=>{this.homeQuery="";this.homeProject="";this.person="";this.homeStatus="";this.render();});
     const view=filters.createEl("button",{text:this.homeList?"Status rows":"All results list",attr:{"aria-pressed":String(this.homeList)}});view.addEventListener("click",()=>{this.homeList=!this.homeList;this.render();});
-    const visible=filterHomeTasks(tasks,this.homeScope,this.homeQuery,this.homeProject,this.homeStatus,this.homeSort);
+    const visible=filterHomeTasks(tasks,this.homeScope,this.homeQuery,this.homeProject,this.homeStatus,this.homeSort,this.person);
     root.createEl("p",{text:`${visible.length} matching / ${tasks.filter(task=>matchesHomeScope(task.record,this.homeScope)).length} in scope`,cls:"fjg-home-count",attr:{"aria-live":"polite"}});
     if(!visible.length){root.createDiv({cls:"fjg-empty",text:tasks.length?"No objectives match. Clear filters or choose another scope.":"No objectives yet. Capture an objective to get started."});return;}
     if(this.homeList){const list=root.createDiv({cls:"fjg-home-results"});for(const task of visible)this.renderTask(list,task,true);return;}
@@ -239,6 +244,19 @@ export class TaskDashboardView extends ItemView {
   }
 
   private moveRoots(): string[] { const settings=this.taskPlugin.settings;return [...new Set([settings.activeRoot,settings.inboxRoot,settings.projectRoot].filter(Boolean))]; }
+
+  private renderPeople(root: HTMLElement, tasks: IndexedTask[]): void {
+    root.createEl("h2",{text:"People"});
+    root.createEl("p",{text:"Open objectives grouped by associated employee. Use People on an objective to choose staff and whether it appears on their agendas."});
+    const open=tasks.filter(task=>!task.archived && !["completed","archived"].includes(task.record.status));
+    for(const name of [...this.taskPlugin.workspaceService.peopleNames(),"__none__"]) {
+      const matches=open.filter(task=>matchesPerson(task.record,name));
+      const section=root.createEl("section",{cls:"fjg-people-group"});
+      section.createEl("h3",{text:`${name==="__none__"?"No People":name} · ${matches.length}`});
+      for(const task of matches)this.renderTask(section,task);
+      if(!matches.length)section.createEl("p",{text:"No open objectives."});
+    }
+  }
 
   private renderMove(root: HTMLElement, tasks: IndexedTask[]): void {
     const roots=this.moveRoots();
@@ -282,7 +300,7 @@ export class TaskDashboardView extends ItemView {
     projects = projects.map((project) => project.key === NO_PROJECT ? { ...project, name: "No objective tag" } : project);
     const activeProject = projects.find((project) => project.key === this.project);
     const selectedRecords = tasks
-      .filter((task) => matchesProject(task.record, this.project))
+      .filter((task) => matchesPerson(task.record, this.person))
       .filter((task) => this.view === "archived" || task.record.status !== "archived");
     const selectedName = this.project === NO_PROJECT ? "No objective tag" : this.project;
     if (this.project !== ALL_PROJECTS) this.renderActiveProject(root);
@@ -302,7 +320,7 @@ export class TaskDashboardView extends ItemView {
       cls: "fjg-view-grid",
       attr: { "aria-label": "Objective views" }
     });
-    const scopedTasks = tasks.filter((task) => matchesProject(task.record, this.project));
+    const scopedTasks = tasks.filter((task) => matchesPerson(task.record, this.person));
     for (const definition of TASK_VIEWS) {
       const button = viewNav.createEl("button", {
         cls: `fjg-view-card${this.view === definition.key ? " is-active" : ""}`,
@@ -345,51 +363,9 @@ export class TaskDashboardView extends ItemView {
       this.renderRows(root);
     });
 
-    const projectOptions = [...projects];
-    if (this.view === "archived") {
-      const known = new Set(projectOptions.map((project) => normalize(project.key)));
-      const archivedProjects = tasks.filter((task) => task.archived && task.record.project.trim());
-      for (const task of archivedProjects) {
-        const name = task.record.project.trim();
-        if (known.has(normalize(name))) continue;
-        const totalCount = archivedProjects.filter((candidate) => normalize(candidate.record.project) === normalize(name)).length;
-        projectOptions.push({ key: name, name, openCount: 0, totalCount });
-        known.add(normalize(name));
-      }
-      const archivedWithoutProject = tasks.filter((task) => task.archived && !task.record.project.trim()).length;
-      if (archivedWithoutProject && !projectOptions.some((project) => project.key === NO_PROJECT)) {
-        projectOptions.push({
-          key: NO_PROJECT,
-          name: "No objective tag",
-          openCount: 0,
-          totalCount: archivedWithoutProject
-        });
-      }
-      projectOptions.sort((left, right) => {
-        if (left.key === NO_PROJECT) return 1;
-        if (right.key === NO_PROJECT) return -1;
-        return left.name.localeCompare(right.name);
-      });
-    }
-    const projectPicker = filters.createEl("button", {
-      cls: "fjg-dashboard-project-filter",
-      text: this.project === ALL_PROJECTS ? "All objective tags" : (projectOptions.find((option) => option.key === this.project)?.name || selectedName),
-      attr: { type: "button", "aria-label": "Filter objectives by objective tag" }
-    });
-    projectPicker.addEventListener("click", () => {
-      new DashboardProjectPickerModal(
-        this.app,
-        this.project,
-        [
-          { key: ALL_PROJECTS, name: "All objective tags" },
-          ...projectOptions.map((project) => ({ key: project.key, name: project.name }))
-        ],
-        (projectKey) => {
-          this.project = projectKey;
-          this.render();
-        }
-      ).open();
-    });
+    const peopleFilter=filters.createEl("select",{attr:{"aria-label":"Filter objectives by People"}});
+    for(const [value,text] of [["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(name=>[name,name])])peopleFilter.createEl("option",{value,text});
+    peopleFilter.value=this.person;peopleFilter.addEventListener("change",()=>{this.person=peopleFilter.value;this.render();});
 
     root.createDiv({
       cls: "fjg-task-rows",
@@ -491,7 +467,7 @@ export class TaskDashboardView extends ItemView {
     });
     title.addEventListener("click", () => void this.taskPlugin.openTask(task.record.task_id));
     const meta = card.createDiv({ cls: "fjg-kanban-card-meta" });
-    if (task.record.project) meta.createSpan({ text: task.record.project, cls: "is-project" });
+    if (task.record.people?.length) meta.createSpan({ text: task.record.people.join(", "), cls: "is-project" });
     if (task.record.due) {
       meta.createSpan({
         text: `Due ${task.record.due}`,
@@ -648,7 +624,7 @@ export class TaskDashboardView extends ItemView {
     const query = normalize(this.query);
     const scopedTasks = this.taskPlugin.workspaceService
       .list({ includeArchived: true })
-      .filter((task) => matchesProject(task.record, this.project));
+      .filter((task) => matchesPerson(task.record, this.person));
     const viewTasks = this.view === "recent"
       ? mostRecentlyModifiedTasks(scopedTasks
         .filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned))
@@ -687,7 +663,7 @@ export class TaskDashboardView extends ItemView {
         text: statusLabel(task.record.status),
         cls: `fjg-status-badge is-${task.record.status}`
       });
-      if (!compact && task.record.project) meta.createSpan({ text: task.record.project, cls: "fjg-task-static-meta" });
+      if (task.record.people?.length) meta.createSpan({ text: task.record.people.join(", "), cls: "fjg-task-static-meta" });
       if (task.record.due) {
         meta.createSpan({
           text: `Due ${task.record.due}`,
@@ -711,13 +687,13 @@ export class TaskDashboardView extends ItemView {
           new Notice(error instanceof Error ? error.message : String(error));
         }
       });
-      if (!compact) {
+      {
       const project = meta.createEl("button", {
         cls: "fjg-task-meta-control fjg-task-project-picker-button",
-        text: task.record.project || "No objective tag",
-        attr: { type: "button", "aria-label": `Choose objective tag for ${task.record.title}` }
+        text: `People: ${(task.record.people||[]).join(", ")||"None"}${task.record.agenda_selected?" · On agendas":""}`,
+        attr: { type: "button", "aria-label": `Choose People for ${task.record.title}` }
       });
-      project.addEventListener("click", () => this.taskPlugin.openTaskProjectPicker(task.record.task_id));
+      project.addEventListener("click", () => this.taskPlugin.openPeoplePicker(task.record.task_id));
       }
       const dueDate = meta.createEl("button", {
         cls: `fjg-task-meta-control fjg-task-due-date-button${task.record.due ? "" : " is-empty"}${isDueOrOverdue(task.record) ? " is-overdue" : ""}`,

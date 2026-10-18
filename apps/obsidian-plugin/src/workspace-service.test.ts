@@ -1482,3 +1482,24 @@ describe("TaskWorkspaceService briefing", () => {
     await expect(service.refreshBriefingNote()).rejects.toThrow("Simulated write failure");
   });
 });
+
+describe("People persistence and agenda publication",()=>{
+  it("persists associations without moving or retagging and replaces the export on deselection or completion",async()=>{
+    const {service,vault}=createService();
+    await vault.createFolder("05 People/Agenda Items");
+    await vault.create("05 People/Agenda Items/_roster.json",JSON.stringify({members:["Leyla Recinos","Dr. Carter","CalWORKs Team"]}));
+    await service.initialize();
+    const task=await service.createTask({title:"People acceptance",project:"Existing project",details:"Keep notes and existing tags."});
+    const original=await vault.read(task.taskFile as never); const originalRecord=parseTaskMarkdown(original).record;
+    expect(service.peopleNames()).toEqual(["Dr. Carter","Leyla Recinos"]);
+    await service.changePeople(task.record.task_id,["Leyla Recinos","Dr. Carter"],true);
+    const saved=service.getById(task.record.task_id);
+    expect(saved.taskFile.path).toBe(task.taskFile.path);expect(saved.record.tags).toEqual(originalRecord.tags);expect(saved.record.project).toBe(originalRecord.project);
+    const snapshot=()=>JSON.parse((vault.getAbstractFileByPath("05 People/Agenda Items/_objectives.json") as InstanceType<typeof obsidianMock.MockTFile>).content);
+    expect(snapshot().objectives[0].people).toEqual(["Leyla Recinos","Dr. Carter"]);
+    await service.refresh();expect(service.getById(task.record.task_id).record.agenda_selected).toBe(true);
+    await service.changePeople(task.record.task_id,["Leyla Recinos"],false);expect(snapshot().objectives).toEqual([]);
+    await service.changePeople(task.record.task_id,["Leyla Recinos"],true);
+    await service.changeStatus(task.record.task_id,"completed");expect(snapshot().objectives).toEqual([]);
+  });
+});

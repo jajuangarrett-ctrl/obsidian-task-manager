@@ -42,6 +42,8 @@ export interface TaskRecord {
   completed_at: string;
   archived_at: string;
   project: string;
+  people?: string[];
+  agenda_selected?: boolean;
   delegated_to: string;
   source_type: SourceType;
   source_title: string;
@@ -78,6 +80,8 @@ export interface NewTaskInput {
   priority?: TaskPriority;
   due?: string;
   project?: string;
+  people?: string[];
+  agendaSelected?: boolean;
   delegatedTo?: string;
   source?: TaskSource;
   tags?: string[];

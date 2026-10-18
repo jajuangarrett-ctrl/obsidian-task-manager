@@ -1,3 +1,5 @@
+import { PeopleModal } from "./src/people-modal";
+import { OBJECTIVE_AGENDA_PATH } from "./src/people-model";
 import {
   Notice,
   normalizePath,
@@ -180,11 +182,11 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }});
 
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (!this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
+      if (file.path !== OBJECTIVE_AGENDA_PATH && !this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (!this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
+      if (file.path !== OBJECTIVE_AGENDA_PATH && !this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
@@ -374,6 +376,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         details: value.details,
         status: value.status,
         project: value.project,
+        people: value.people,
         due: value.due,
         delegatedTo: value.delegatedTo,
         tags: ["task"]
@@ -415,6 +418,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       this.refreshDashboard();
     }).open();
   }
+
+  openPeoplePicker(taskId: string, done?:()=>void): void { new PeopleModal(this.app,this,taskId,done).open(); }
 
   openTaskProjectPicker(taskId: string): void {
     const task = this.workspaceService.getById(taskId);
@@ -565,6 +570,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       details: value.details,
       status: value.status,
       project: value.project,
+      people: value.people,
       due: value.due,
       delegatedTo: value.delegatedTo,
       tags: ["task"],

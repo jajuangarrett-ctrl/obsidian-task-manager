@@ -16,6 +16,7 @@ export interface TaskCaptureDraft {
   title: string;
   details: string;
   status: TaskStatus;
+  people?: string[];
   project: string;
   due: string;
   delegatedTo: string;

@@ -1,3 +1,4 @@
+import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, normalizePeople } from "./people-model";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import {
   appendUpdateMarkdown,
@@ -150,6 +151,8 @@ interface TaskProjectMove {
 }
 
 export class TaskWorkspaceService {
+  private rosterPeople: string[] = [];
+  private agendaExportQueue: Promise<void> = Promise.resolve();
   private readonly index = new Map<string, IndexedTask>();
   private readonly projectIndex = new Map<string, IndexedProject>();
 
@@ -283,15 +286,50 @@ export class TaskWorkspaceService {
         task.relatedFiles.push({ file, kind, preview });
       }
     }
+    const roster = this.app.vault.getAbstractFileByPath(`${AGENDA_FOLDER}/_roster.json`);
+    if (roster instanceof TFile) {
+      try { const data = JSON.parse(await this.app.vault.read(roster)); this.rosterPeople = normalizePeople((data.members || []).filter((name: unknown) => typeof name === "string" && !/\b(team|program)\b|^(ISSP|BSSP)$/i.test(name))); }
+      catch (error) { console.warn("[FJG Objective Manager] Could not read agenda roster", error); }
+    }
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);
     this.projectIndex.clear();
     for (const [key, project] of nextProjects) this.projectIndex.set(key, project);
+    await this.exportObjectiveAgenda();
     try {
       await this.refreshBriefingNote();
     } catch (error) {
       console.error("[FJG Task Manager] Could not refresh Task Manager briefing", error);
     }
+  }
+
+  peopleNames(): string[] {
+    return normalizePeople([...this.rosterPeople, ...this.list({ includeArchived: true }).flatMap(task => task.record.people || [])]).sort((a,b)=>a.localeCompare(b));
+  }
+
+  async changePeople(taskId: string, people: string[], agendaSelected: boolean): Promise<IndexedTask> {
+    const task = this.getById(taskId);
+    if (task.archived) throw new Error("Reopen this objective before changing People.");
+    const before = await this.app.vault.read(task.taskFile);
+    const document = parseTaskMarkdown(before);
+    const next = updateTaskFields(document.record, { people: normalizePeople(people), agenda_selected: agendaSelected && people.length > 0 });
+    await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
+    await this.refresh();
+    return this.getById(taskId);
+  }
+
+  private async exportObjectiveAgenda(): Promise<void> {
+    // This derived snapshot lives beside the existing agenda sources for portable folder import.
+    // Do not create an agenda folder in vaults that do not already use the Agenda Dashboard.
+    if (!this.app.vault.getAbstractFileByPath(AGENDA_FOLDER)) return;
+    const content = JSON.stringify({ version: 1, vault: this.app.vault.getName?.() || "", objectives: agendaObjectives(this.list({includeArchived:true})) }, null, 2) + "\n";
+    const write = async () => {
+      const file = this.app.vault.getAbstractFileByPath(OBJECTIVE_AGENDA_PATH);
+      if (file instanceof TFile) { if (await this.app.vault.read(file) !== content) await this.app.vault.modify(file,content); }
+      else await this.app.vault.create(OBJECTIVE_AGENDA_PATH,content);
+    };
+    this.agendaExportQueue = this.agendaExportQueue.catch(()=>{}).then(write);
+    try { await this.agendaExportQueue; } catch(error) { console.error("[FJG Objective Manager] Agenda snapshot could not be updated",error); throw error; }
   }
 
   list(options: { includeArchived?: boolean } = {}): IndexedTask[] {

@@ -1,3 +1,11 @@
+## 0.23.0 — People and selected agenda objectives
+
+Associate employees with an objective using People, browse open objectives grouped by person, and filter Home or Objectives by People. Choose Show on agendas to include an objective for each associated person. Existing project metadata and tags are preserved without being reclassified as people.
+
+The plugin maintains a portable `_objectives.json` snapshot beside the existing agenda Markdown. Agenda Center merges it during folder refresh, retains normal agenda topics and browser notes, and removes completed, archived, or deselected objectives. Objective links open their canonical note in Obsidian. See `integrations/agenda-dashboard/README.md` for runtime deployment and refresh behavior.
+
+Validation: 179 automated tests plus 8 mail-capture tests; typecheck, production build and release packaging; live Obsidian People controls and grouping; live Agenda Center import of a selected objective alongside an existing topic, followed by restoration of the real agenda folder.
+
 ## 0.21.5 — Objective and action file lists
 
 Show each objective's own related files in a compact dashboard disclosure while keeping every action's attachment list beneath that action. Exclude all action attachment subtrees from the objective list to prevent duplicates, and preserve intentional objective links outside those subtrees.

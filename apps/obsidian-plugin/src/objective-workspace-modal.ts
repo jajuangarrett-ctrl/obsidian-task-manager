@@ -44,6 +44,7 @@ export class ObjectiveWorkspaceModal extends Modal {
       body.createEl("code",{text:task.taskFile.path,cls:"fjg-workspace-path"});
       const controls=body.createDiv({cls:"fjg-workspace-controls"});
       this.button(controls,"Open objective note",()=>void this.plugin.openTask(this.taskId));
+      if(!task.archived)this.button(controls,`People: ${(task.record.people||[]).join(", ")||"None"}`,()=>this.plugin.openPeoplePicker(this.taskId,()=>void this.render()));
       this.button(controls,"Update",()=>this.plugin.openUpdateModal(this.taskId));
       if(!task.archived)this.button(controls,"Add action",()=>this.plugin.openObjectiveActionModal(this.taskId,()=>void this.render()));
       if(this.tab==="actions") {

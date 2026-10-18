@@ -23,7 +23,7 @@ interface DraftFormControls {
   title: HTMLInputElement;
   details: HTMLTextAreaElement;
   status: HTMLSelectElement;
-  project: HTMLSelectElement;
+  people: HTMLSelectElement;
   due: HTMLInputElement;
   delegated: HTMLInputElement;
 }
@@ -244,13 +244,14 @@ export class QuickCaptureModal extends Modal {
         this.drafts[index].status = status.value as TaskStatus || "do-first";
       });
 
-      const project = this.selectRow(formCard, "Objective tag");
-      project.createEl("option", { value: "", text: "No objective tag" });
-      for (const projectName of this.taskPlugin.projectNames()) {
-        project.createEl("option", { value: projectName, text: projectName });
+      const people = this.selectRow(formCard, "People");
+      people.multiple = true;
+      people.setAttribute("aria-label", "People associated with this objective");
+      for (const name of this.taskPlugin.workspaceService.peopleNames()) {
+        const option = people.createEl("option", { value:name, text:name }); option.selected=(draft.people||[]).includes(name);
       }
-      project.value = draft.project;
-      project.addEventListener("change", () => this.drafts[index].project = project.value);
+      people.addEventListener("change",()=>this.drafts[index].people=Array.from(people.selectedOptions).map(option=>option.value));
+      formCard.createEl("p",{text:"Optional. Add people and choose agenda inclusion from the saved objective's People button.",cls:"setting-item-description"});
 
       const due = this.inputRow(formCard, "Due date", "date");
       due.value = draft.due;
@@ -280,7 +281,7 @@ export class QuickCaptureModal extends Modal {
       delegated.value = draft.delegatedTo;
       delegated.addEventListener("input", () => this.drafts[index].delegatedTo = delegated.value);
 
-      this.formControls.push({ title, details, status, project, due, delegated });
+      this.formControls.push({ title, details, status, people, due, delegated });
     });
     this.updateCreateButton();
     if (this.busy) this.setControlsDisabled(true);
@@ -303,7 +304,8 @@ export class QuickCaptureModal extends Modal {
         title: controls.title.value.trim(),
         details: controls.details.value.trim(),
         status: controls.status.value as TaskStatus || "do-first",
-        project: controls.project.value,
+        project: draft.project,
+        people: Array.from(controls.people.selectedOptions).map(option=>option.value),
         due: controls.due.value,
         delegatedTo: controls.delegated.value.trim()
       };
