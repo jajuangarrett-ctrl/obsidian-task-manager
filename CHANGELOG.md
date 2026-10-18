@@ -1,3 +1,7 @@
+## 0.23.1 — Collapsible People groups
+
+Each employee and No People now has a collapsed-by-default disclosure with an open-objective count. Expand only the people needed; expansion survives dashboard refreshes and tab switches while the dashboard remains open. Objective rows render only when their group is expanded.
+
 ## 0.23.0 — People and selected agenda objectives
 
 Associate employees with an objective using People, browse open objectives grouped by person, and filter Home or Objectives by People. Choose Show on agendas to include an objective for each associated person. Existing project metadata and tags are preserved without being reclassified as people.

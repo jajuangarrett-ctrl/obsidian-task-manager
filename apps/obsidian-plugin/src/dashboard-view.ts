@@ -1,4 +1,4 @@
-import { matchesPerson } from "./people-model";
+import { matchesPerson, personKey } from "./people-model";
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
@@ -35,6 +35,7 @@ export class TaskDashboardView extends ItemView {
   private homeQuery = "";
   private homeProject = "";
   private person = "";
+  private readonly expandedPeople = new Set<string>();
   private homeStatus = "";
   private homeSort: HomeSort = "updated";
   private homeList = false;
@@ -251,10 +252,29 @@ export class TaskDashboardView extends ItemView {
     const open=tasks.filter(task=>!task.archived && !["completed","archived"].includes(task.record.status));
     for(const name of [...this.taskPlugin.workspaceService.peopleNames(),"__none__"]) {
       const matches=open.filter(task=>matchesPerson(task.record,name));
-      const section=root.createEl("section",{cls:"fjg-people-group"});
-      section.createEl("h3",{text:`${name==="__none__"?"No People":name} · ${matches.length}`});
-      for(const task of matches)this.renderTask(section,task);
-      if(!matches.length)section.createEl("p",{text:"No open objectives."});
+      const key = personKey(name);
+      const label = name === "__none__" ? "No People" : name;
+      const section = root.createEl("details", { cls: "fjg-people-group" });
+      const summary = section.createEl("summary", {
+        attr: { "aria-label": `${label}: ${matches.length} open objectives` }
+      });
+      summary.createSpan({ text: label, cls: "fjg-people-name" });
+      summary.createSpan({ text: String(matches.length), cls: "fjg-people-count" });
+      const content = section.createDiv({ cls: "fjg-people-objectives" });
+      const renderContent = () => {
+        content.empty();
+        if (!section.open) return;
+        for (const task of matches) this.renderTask(content, task);
+        if (!matches.length) content.createEl("p", { text: "No open objectives." });
+      };
+      section.open = this.expandedPeople.has(key);
+      renderContent();
+      section.addEventListener("toggle", () => {
+        if (!section.isConnected) return;
+        if (section.open) this.expandedPeople.add(key);
+        else this.expandedPeople.delete(key);
+        renderContent();
+      });
     }
   }
 
