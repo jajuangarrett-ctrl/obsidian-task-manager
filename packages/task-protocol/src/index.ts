@@ -7,6 +7,7 @@ export interface CreateTaskItem {
   details: string;
   status: TaskStatus;
   project: string;
+  people?: string[];
   tags: string[];
   source: TaskSource;
 }
@@ -81,6 +82,7 @@ export function createCreatePayload(
       details: String(item.details || "").trim(),
       status: normalizeStatus(item.status),
       project: clean(item.project),
+      people: normalizePeople(item.people),
       tags: normalizeTags(item.tags),
       source: normalizeSource(item.source)
     }))
@@ -139,6 +141,7 @@ function normalizeLegacyV2(value: Record<string, unknown>): TaskProtocolPayload 
         details: clean(value.details),
         status: normalizeStatus(value.status),
         project: clean(value.project),
+        people: normalizePeople(value.people),
         tags: normalizeTags(value.tags),
         source: normalizeSource(value.source)
       }
@@ -184,4 +187,15 @@ function stableHash(value: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+}
+
+function normalizePeople(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names = new Map<string, string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const name = item.trim().replace(/\s+/g, " ");
+    if (name && !names.has(name.toLocaleLowerCase())) names.set(name.toLocaleLowerCase(), name);
+  }
+  return [...names.values()];
 }

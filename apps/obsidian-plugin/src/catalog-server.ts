@@ -15,6 +15,7 @@ export class TaskCatalogServer {
     token: string;
     getTasks: () => CatalogTask[];
     getProjects?: () => string[];
+    getPeople?: () => string[];
     queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
   }): Promise<void> {
     await this.stop();
@@ -64,6 +65,7 @@ export class TaskCatalogServer {
       token: string;
       getTasks: () => CatalogTask[];
       getProjects?: () => string[];
+      getPeople?: () => string[];
       queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
     }
   ): Promise<void> {
@@ -82,6 +84,10 @@ export class TaskCatalogServer {
     const url = new URL(request.url || "/", "http://127.0.0.1");
     if (url.pathname === "/health") {
       return sendJson(response, 200, { ok: true, service: "fjg-task-catalog", version: 1 });
+    }
+    if (url.pathname === "/people") {
+      const people = [...new Set(options.getPeople?.() || [])].filter(Boolean).sort((a, b) => a.localeCompare(b));
+      return sendJson(response, 200, { people });
     }
     if (url.pathname === "/projects") {
       const projects = [...new Set(

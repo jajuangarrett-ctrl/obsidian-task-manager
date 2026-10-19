@@ -63,6 +63,7 @@ vi.mock("obsidian", () => ({
   normalizePath: obsidianMock.normalizePath
 }));
 
+import { normalizeProtocolPayload } from "@fjg/task-protocol";
 import { TaskWorkspaceService } from "./workspace-service";
 import { LiveTaskTools } from "./live-tools";
 import { createTaskRecord, parseTaskMarkdown, renderTaskMarkdown, renderUpdatesMarkdown, updateTaskFields } from "@fjg/task-core";
@@ -1502,4 +1503,20 @@ describe("People persistence and agenda publication",()=>{
     await service.changePeople(task.record.task_id,["Leyla Recinos"],true);
     await service.changeStatus(task.record.task_id,"completed");expect(snapshot().objectives).toEqual([]);
   });
+});
+
+it("persists browser People through protocol normalization, workspace creation and refresh", async () => {
+ const {service,vault}=createService();
+ await service.initialize();
+ const payload=normalizeProtocolPayload({version:2,action:"create-task-note",title:"People capture",details:"Keep these details",status:"Waiting",people:["Alex Rivera","Sam Lee"],tags:["task"],source:{title:"Source",url:"https://example.com",sourceKind:"web"}});
+ if(payload.action!=="create-tasks") throw new Error("Unexpected payload");
+ const task=await service.createFromClip(payload.items[0],payload.request_id,payload.created_at);
+ await service.refresh();
+ const saved=parseTaskMarkdown(await vault.read(task.taskFile as never));
+ expect(saved.record.people).toEqual(["Alex Rivera","Sam Lee"]);
+ expect(saved.record.project).toBe("");
+ expect(saved.record.status).toBe("waiting");
+ expect(saved.record.agenda_selected).toBe(false);
+ expect(saved.body).toContain("Keep these details");
+ expect(service.getById(task.record.task_id).record.people).toEqual(["Alex Rivera","Sam Lee"]);
 });

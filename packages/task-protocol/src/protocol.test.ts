@@ -44,3 +44,16 @@ describe("task clipper protocol", () => {
     }
   });
 });
+
+describe("People capture", () => {
+  test("preserves names through both clipper formats without converting projects", () => {
+    const legacy = normalizeProtocolPayload({version: 2, action: "create-task-note", title: "Review", project: "Existing project", people: [" Alex  Rivera ", "alex rivera", "Sam Lee", 123], status: "Waiting"});
+    expect(legacy.action).toBe("create-tasks");
+    if (legacy.action !== "create-tasks") throw new Error("Unexpected action");
+    expect(legacy.items[0].people).toEqual(["Alex Rivera", "Sam Lee"]);
+    expect(legacy.items[0].project).toBe("Existing project");
+    expect(decodeProtocolPayload(encodeProtocolPayload(legacy))).toEqual(legacy);
+    const empty = createCreatePayload([{title: "Unassigned", details: "", project: "Legacy project"}]);
+    expect(empty.items[0].people).toEqual([]);
+  });
+});

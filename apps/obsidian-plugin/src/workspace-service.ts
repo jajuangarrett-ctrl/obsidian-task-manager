@@ -837,6 +837,7 @@ export class TaskWorkspaceService {
       details: item.details,
       status: item.status,
       project: item.project,
+      people: item.people,
       source: item.source,
       tags: item.tags,
       createdAt

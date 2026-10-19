@@ -352,6 +352,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         token: this.settings.catalogToken,
         getTasks: () => this.workspaceService.catalog(),
         getProjects: () => this.workspaceService.projectNames(),
+        getPeople: () => this.workspaceService.peopleNames(),
         queryTasks: (question, limit) => this.workspaceService.queryForClaudian(question, new Date(), limit)
       });
     } catch (error) {

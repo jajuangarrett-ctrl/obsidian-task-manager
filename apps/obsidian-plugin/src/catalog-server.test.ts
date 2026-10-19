@@ -30,6 +30,7 @@ describe("TaskCatalogServer", () => {
       token: "test-secret",
       getTasks: () => [task],
       getProjects: () => ["Empty Project", "Task Manager"],
+      getPeople: () => ["Sam Lee", "Alex Rivera", "Alex Rivera"],
       queryTasks: (question) => ({
         ok: true,
         mode: "search",
@@ -102,6 +103,15 @@ describe("TaskCatalogServer", () => {
     expect(extensionOrigin.status).toBe(200);
     expect(extensionOrigin.headers.get("access-control-allow-origin")).toBe("chrome-extension://abcdefghijklmnop");
     expect(await extensionOrigin.json()).toEqual({ projects: ["Empty Project", "Task Manager"] });
+  });
+
+  it("serves people only through the authenticated, read-only extension catalog", async () => {
+    const { url } = await start();
+    expect((await fetch(`${url}/people`)).status).toBe(401);
+    expect((await fetch(`${url}/people`, {headers: {Authorization: "Bearer test-secret", Origin: "https://example.com"}})).status).toBe(403);
+    const response = await fetch(`${url}/people`, {headers: {Authorization: "Bearer test-secret", Origin: "chrome-extension://abcdefghijklmnop"}});
+    expect(await response.json()).toEqual({people: ["Alex Rivera", "Sam Lee"]});
+    expect((await fetch(`${url}/people`, {method: "POST", headers: {Authorization: "Bearer test-secret"}})).status).toBe(405);
   });
 
   it("uses Electron's require function when it is available", async () => {
