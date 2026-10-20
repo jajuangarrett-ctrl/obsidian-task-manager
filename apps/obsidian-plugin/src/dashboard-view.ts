@@ -405,7 +405,7 @@ export class TaskDashboardView extends ItemView {
       text: "Scan every objective by status. Drag cards between columns or use the status menu on a card."
     });
     heading.createSpan({
-      text: taskCountLabel(tasks.length),
+      text: taskCountLabel(tasks.filter(task => task.record.status !== "archived").length),
       cls: "fjg-kanban-total"
     });
 
@@ -487,7 +487,18 @@ export class TaskDashboardView extends ItemView {
     });
     title.addEventListener("click", () => void this.taskPlugin.openTask(task.record.task_id));
     const meta = card.createDiv({ cls: "fjg-kanban-card-meta" });
-    if (task.record.people?.length) meta.createSpan({ text: task.record.people.join(", "), cls: "is-project" });
+    const peopleNames = task.record.people?.join(", ") || "Unassigned";
+    const people = meta.createEl("button", {
+      text: task.record.people?.length ? `People: ${peopleNames}` : "+ People",
+      cls: "fjg-kanban-people",
+      attr: {
+        type: "button",
+        "aria-label": `Assign People for ${task.record.title}. Current: ${peopleNames}`,
+        "aria-haspopup": "dialog",
+        title: `People: ${peopleNames}`
+      }
+    });
+    people.addEventListener("click", () => this.taskPlugin.openPeoplePicker(task.record.task_id));
     if (task.record.due) {
       meta.createSpan({
         text: `Due ${task.record.due}`,

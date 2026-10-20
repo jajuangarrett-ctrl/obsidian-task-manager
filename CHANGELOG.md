@@ -1,3 +1,7 @@
+## 0.23.3 — Kanban People controls
+
+Every Kanban card now has a compact People button, including unassigned objectives. It opens the existing multi-person picker and retains the separate Show on agendas choice. Assigned names remain visible with a full accessible label. The board no longer shows an Archived column; archived records and archive controls elsewhere remain available.
+
 ## 0.23.1 — Collapsible People groups
 
 Each employee and No People now has a collapsed-by-default disclosure with an open-objective count. Expand only the people needed; expansion survives dashboard refreshes and tab switches while the dashboard remains open. Objective rows render only when their group is expanded.

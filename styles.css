@@ -1928,3 +1928,20 @@
 .fjg-people-count { float: right; padding: 0 8px; border-radius: 12px; color: var(--text-muted); background: var(--background-secondary); font-variant-numeric: tabular-nums; }
 .fjg-people-objectives { padding: 0 12px; }
 .fjg-people-group[open] > .fjg-people-objectives { padding-bottom: 12px; }
+
+.fjg-task-dashboard button.fjg-kanban-people {
+  max-width: 100%;
+  min-height: 28px;
+  height: auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--fjg-teal);
+  font-size: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fjg-task-dashboard button.fjg-kanban-people:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}

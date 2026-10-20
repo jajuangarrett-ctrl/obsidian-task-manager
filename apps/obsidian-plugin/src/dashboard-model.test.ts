@@ -134,15 +134,16 @@ describe("dashboard task views", () => {
     expect(keys).not.toContain("unassigned");
   });
 
-  it("creates Kanban columns for every canonical status without losing tasks", () => {
+  it("omits Archived from Kanban without changing archived records", () => {
     const statuses: TaskStatus[] = [
       "inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed", "archived"
     ];
     const tasks = statuses.map((status) => ({ record: task({ task_id: status, status }) }));
     const columns = groupTasksForKanban(tasks);
 
-    expect(columns.map((column) => column.status)).toEqual(statuses);
-    expect(columns.flatMap((column) => column.tasks)).toHaveLength(tasks.length);
+    expect(columns.map((column) => column.status)).toEqual(statuses.filter(status => status !== "archived"));
+    expect(columns.flatMap((column) => column.tasks)).toHaveLength(tasks.length - 1);
+    expect(tasks.at(-1)?.record.status).toBe("archived");
     expect(columns.every((column) => column.tasks.length === 1)).toBe(true);
   });
 

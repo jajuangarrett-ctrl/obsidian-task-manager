@@ -1493,6 +1493,12 @@ describe("People persistence and agenda publication",()=>{
     const task=await service.createTask({title:"People acceptance",project:"Existing project",details:"Keep notes and existing tags."});
     const original=await vault.read(task.taskFile as never); const originalRecord=parseTaskMarkdown(original).record;
     expect(service.peopleNames()).toEqual(["Dr. Carter","Leyla Recinos"]);
+    await service.changePeople(task.record.task_id,["Leyla Recinos"],false);
+    await service.refresh();
+    expect(service.getById(task.record.task_id).record.people).toEqual(["Leyla Recinos"]);
+    expect(service.getById(task.record.task_id).record.agenda_selected).toBe(false);
+    const unselectedExport = JSON.parse((vault.getAbstractFileByPath("05 People/Agenda Items/_objectives.json") as InstanceType<typeof obsidianMock.MockTFile>).content);
+    expect(unselectedExport.objectives).toEqual([]);
     await service.changePeople(task.record.task_id,["Leyla Recinos","Dr. Carter"],true);
     const saved=service.getById(task.record.task_id);
     expect(saved.taskFile.path).toBe(task.taskFile.path);expect(saved.record.tags).toEqual(originalRecord.tags);expect(saved.record.project).toBe(originalRecord.project);

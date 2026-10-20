@@ -53,7 +53,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
 ] as const;
 
 export function groupTasksForKanban<TTask extends KanbanTask>(tasks: readonly TTask[]): KanbanColumn<TTask>[] {
-  return TASK_STATUSES.map((status) => ({
+  return TASK_STATUSES.filter((status) => status !== "archived").map((status) => ({
     status,
     tasks: tasks.filter((task) => task.record.status === status)
   }));
