@@ -1,3 +1,9 @@
+## 0.23.4 — Recover existing objective conversions
+
+When a standalone objective remains after it has already become an action, the conversion preview names its current parent. Choosing another parent moves the existing action and its attachment folder, preserving the action ID, notes, status, due date and history, then archives the remaining standalone objective. Choosing its current parent archives the standalone copy without duplicating the action. Ambiguous action copies and archived parents receive specific recovery guidance; failed moves roll back both parents, files and references.
+
+Validation: focused conversion, collision preservation, same-parent cleanup, ambiguity and archive-failure rollback scenarios, production checks, and live Obsidian verification.
+
 ## 0.23.3 — Kanban People controls
 
 Every Kanban card now has a compact People button, including unassigned objectives. It opens the existing multi-person picker and retains the separate Show on agendas choice. Assigned names remain visible with a full accessible label. The board no longer shows an Archived column; archived records and archive controls elsewhere remain available.

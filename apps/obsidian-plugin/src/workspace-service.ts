@@ -1060,7 +1060,7 @@ export class TaskWorkspaceService {
     const to = `${this.relatedFilesPath(parent)}/${relative}`;
     await this.ensureFolder(`${this.relatedFilesPath(parent)}/Subtasks`);
     const rewrites = [{ from, to }];
-    const references = await this.projectChangeReferenceSnapshots(previous.record.task_id, rewrites);
+    const references = await this.projectChangeReferenceSnapshots("", rewrites);
     const snapshots = new Map<TFile, string>();
     for (const task of [previous, parent, source, ...references.map((snapshot) => snapshot.task)]) {
       if (!snapshots.has(task.taskFile)) snapshots.set(task.taskFile, await this.app.vault.read(task.taskFile));

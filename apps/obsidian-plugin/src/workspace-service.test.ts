@@ -412,6 +412,88 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(await vault.read(promoted.updatesFile as never)).toContain("Approval requested");
   });
 
+  it("moves a previously converted action with its history, files and references instead of duplicating it", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const previous = await service.createTask({ title: "Previous parent" });
+    const parent = await service.createTask({ title: "New parent" });
+    const source = await service.createTask({ title: "Existing converted source" });
+    const action = await service.addSubtask(previous.record.task_id, source.record.title, { status: "waiting", due: "2026-10-25", notes: "Retain action edits" });
+    const previousDocument = parseTaskMarkdown(await vault.read(previous.taskFile as never));
+    await vault.modify(previous.taskFile as never, renderTaskMarkdown(updateTaskFields(previousDocument.record, {
+      subtasks: [{ ...action, source_task_id: source.record.task_id, history: "Original update history" }]
+    }), previousDocument.body));
+    const from = service.subtaskFolder(previous.record.task_id, action.id);
+    const evidence = await vault.create(`${from}/Email.md`, "Keep the email");
+    const sourceDocument = parseTaskMarkdown(await vault.read(source.taskFile as never));
+    await vault.modify(source.taskFile as never, renderTaskMarkdown(updateTaskFields(sourceDocument.record, { related_files: [evidence.path] }), sourceDocument.body));
+    // An existing action directory must survive, even when the title matches.
+    const sibling = await service.addSubtask(parent.record.task_id, action.title);
+    await vault.create(`${service.subtaskFolder(parent.record.task_id, sibling.id)}/Other.md`, "Keep sibling");
+    await service.refresh();
+    await service.convertTaskToSubtask(source.record.task_id, parent.record.task_id);
+    const stored = service.getById(parent.record.task_id).record.subtasks;
+    expect(stored).toHaveLength(2);
+    expect(stored[1]).toMatchObject({ ...action, source_task_id: source.record.task_id, history: "Original update history", attachment_folder: `Subtasks/${action.title} (2)` });
+    expect(service.getById(previous.record.task_id).record.subtasks).toEqual([]);
+    expect(service.subtaskFiles(parent.record.task_id, action.id).map((file) => file.name)).toEqual(["Email.md"]);
+    expect(service.getById(source.record.task_id).archived).toBe(true);
+    expect(service.getById(source.record.task_id).record.related_files).toContain(`${service.subtaskFolder(parent.record.task_id, action.id)}/Email.md`);
+    expect(service.subtaskFiles(parent.record.task_id, sibling.id).map((file) => file.name)).toEqual(["Other.md"]);
+  });
+
+  it("archives a remaining standalone copy when its action is already in the selected parent", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const parent = await service.createTask({ title: "Existing parent" });
+    const source = await service.createTask({ title: "Remaining standalone copy" });
+    const action = await service.addSubtask(parent.record.task_id, source.record.title);
+    const document = parseTaskMarkdown(await vault.read(parent.taskFile as never));
+    await vault.modify(parent.taskFile as never, renderTaskMarkdown(updateTaskFields(document.record, {
+      subtasks: [{ ...action, source_task_id: source.record.task_id }]
+    }), document.body));
+    await service.refresh();
+    await service.convertTaskToSubtask(source.record.task_id, parent.record.task_id);
+    expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(1);
+    expect(service.getById(source.record.task_id).archived).toBe(true);
+  });
+
+  it("restores both parents, attachments and references when archiving after an action move fails", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const previous = await service.createTask({ title: "Move rollback previous" });
+    const parent = await service.createTask({ title: "Move rollback target" });
+    const source = await service.createTask({ title: "Move rollback source" });
+    const action = await service.addSubtask(previous.record.task_id, source.record.title);
+    const document = parseTaskMarkdown(await vault.read(previous.taskFile as never));
+    await vault.modify(previous.taskFile as never, renderTaskMarkdown(updateTaskFields(document.record, {
+      subtasks: [{ ...action, source_task_id: source.record.task_id }]
+    }), document.body));
+    const original = `${service.subtaskFolder(previous.record.task_id, action.id)}/Evidence.md`;
+    await vault.create(original, "Keep evidence");
+    await service.refresh();
+    const before = await vault.read(previous.taskFile as never);
+    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Move rollback source/task.md";
+    await expect(service.convertTaskToSubtask(source.record.task_id, parent.record.task_id)).rejects.toThrow();
+    expect(await vault.read(previous.taskFile as never)).toBe(before);
+    expect(service.getById(parent.record.task_id).record.subtasks).toEqual([]);
+    expect(service.getById(source.record.task_id).archived).toBe(false);
+    expect(vault.getAbstractFileByPath(original)).not.toBeNull();
+  });
+
+  it("blocks ambiguous converted actions without moving either copy", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const source = await service.createTask({ title: "Ambiguous source" });
+    const parent = await service.createTask({ title: "Ambiguous target" });
+    for (const title of ["First existing parent", "Second existing parent"]) {
+      const existing = await service.createTask({ title });
+      const action = await service.addSubtask(existing.record.task_id, source.record.title);
+      const document = parseTaskMarkdown(await vault.read(existing.taskFile as never));
+      await vault.modify(existing.taskFile as never, renderTaskMarkdown(updateTaskFields(document.record, { subtasks: [{ ...action, source_task_id: source.record.task_id }] }), document.body));
+    }
+    await service.refresh();
+    await expect(service.convertTaskToSubtask(source.record.task_id, parent.record.task_id)).rejects.toThrow("multiple actions");
+    expect(service.getById(parent.record.task_id).record.subtasks).toEqual([]);
+    expect(service.getById(source.record.task_id).archived).toBe(false);
+  });
+
   it("rolls conversion back if archiving the original fails", async () => {
     const { service, vault } = createService();
     await service.initialize();
