@@ -134,7 +134,15 @@ export class ConvertSubtasksModal extends Modal {
       preview.createEl("p", { text: `${selected.size} selected. Their notes, due dates, statuses and update histories will carry over. Owned attachment folders move into the parent objective's action attachment area. Original objectives are archived. Shared external references remain in those original records.` });
       for (const id of selected) {
         const task = tasks.find((item) => item.record.task_id === id);
-        if (task) preview.createEl("p", { text: `${task.record.title} → ${tasks.find((item) => item.record.task_id === parentId)?.record.title || "Choose parent"}` });
+        if (task) {
+          preview.createEl("p", { text: `${task.record.title} → ${tasks.find((item) => item.record.task_id === parentId)?.record.title || "Choose parent"}` });
+          try {
+            const existing = this.service.convertedAction(id);
+            if (existing) preview.createEl("p", { text: existing.parent.record.task_id === parentId
+              ? `This action is already under the selected parent. Its remaining standalone objective will be archived.`
+              : `Move the existing action from “${existing.parent.record.title}”, keeping its notes, history and attachments. Its remaining standalone objective will be archived.` });
+          } catch (error) { preview.createEl("p", { text: String(error) }); }
+        }
       }
     };
     search.addEventListener("input", render);

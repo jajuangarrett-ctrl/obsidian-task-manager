@@ -1036,15 +1036,63 @@ export class TaskWorkspaceService {
     await this.refresh();
   }
 
+  convertedAction(sourceId: string): { parent: IndexedTask; action: TaskSubtask } | null {
+    const matches = this.list({ includeArchived: true }).flatMap((parent) =>
+      parent.record.subtasks.filter((action) => action.source_task_id === sourceId).map((action) => ({ parent, action })));
+    if (matches.length > 1) throw new Error("This objective is linked to multiple actions. Resolve those copies before converting it.");
+    return matches[0] || null;
+  }
+
+  private async moveConvertedAction(source: IndexedTask, parent: IndexedTask, previous: IndexedTask, action: TaskSubtask): Promise<void> {
+    if (previous.archived) throw new Error(`Reopen “${previous.record.title}” before moving its action.`);
+    if (previous.record.task_id === parent.record.task_id) {
+      await this.changeStatus(source.record.task_id, "archived");
+      return;
+    }
+    const from = this.subtaskFolder(previous.record.task_id, action.id);
+    const folder = this.app.vault.getAbstractFileByPath(from);
+    if (!(folder instanceof TFolder)) throw new Error(`The action folder under “${previous.record.title}” is missing. Restore it before moving the action.`);
+    const base = `Subtasks/${sanitizeTitleForPath(action.title)}`;
+    let relative = base;
+    let suffix = 2;
+    while (parent.record.subtasks.some((item) => item.attachment_folder.toLowerCase() === relative.toLowerCase())
+      || await this.app.vault.adapter.stat(`${this.relatedFilesPath(parent)}/${relative}`)) relative = `${base} (${suffix++})`;
+    const to = `${this.relatedFilesPath(parent)}/${relative}`;
+    await this.ensureFolder(`${this.relatedFilesPath(parent)}/Subtasks`);
+    const rewrites = [{ from, to }];
+    const references = await this.projectChangeReferenceSnapshots(previous.record.task_id, rewrites);
+    const snapshots = new Map<TFile, string>();
+    for (const task of [previous, parent, source, ...references.map((snapshot) => snapshot.task)]) {
+      if (!snapshots.has(task.taskFile)) snapshots.set(task.taskFile, await this.app.vault.read(task.taskFile));
+    }
+    let moved = false;
+    try {
+      await this.app.fileManager.renameFile(folder, to);
+      moved = true;
+      for (const snapshot of references) {
+        await this.app.vault.modify(snapshot.task.taskFile, renderTaskMarkdown(updateTaskFields(snapshot.document.record, {
+          related_files: snapshot.document.record.related_files.map((path) => rewriteVaultPath(path, rewrites))
+        }), snapshot.document.body));
+      }
+      await this.writeSubtasks(parent.record.task_id, (items) => [...items, { ...action, attachment_folder: relative }]);
+      await this.writeSubtasks(previous.record.task_id, (items) => items.filter((item) => item.id !== action.id));
+      await this.changeStatus(source.record.task_id, "archived");
+    } catch (error) {
+      if (moved) await this.app.fileManager.renameFile(folder, from);
+      for (const [file, content] of snapshots) await this.app.vault.modify(file, content);
+      await this.refresh();
+      throw error;
+    }
+  }
+
   async convertTaskToSubtask(sourceId: string, parentId: string): Promise<void> {
     if (sourceId === parentId) throw new Error("A task cannot be its own parent.");
     const source = this.getById(sourceId);
     const parent = this.getById(parentId);
     if (source.archived || parent.archived) throw new Error("Select open tasks for conversion.");
     if (source.record.subtasks.length) throw new Error("Promote or move this task's subtasks before converting it.");
-    if (this.list({ includeArchived: true }).some((task) => task.record.subtasks.some((sub) => sub.source_task_id === sourceId))) {
-      throw new Error("This task has already been converted.");
-    }
+    const existing = this.convertedAction(sourceId);
+    if (existing) return this.moveConvertedAction(source, parent, existing.parent, existing.action);
     const sourceContent = await this.app.vault.read(source.taskFile);
     const parentContent = await this.app.vault.read(parent.taskFile);
     const sourceFiles = this.relatedFilesPath(source);
