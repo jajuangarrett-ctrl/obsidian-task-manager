@@ -21,6 +21,7 @@ export interface TaskCaptureDraft {
   due: string;
   delegatedTo: string;
   source?: TaskSource;
+  destination?: string;
 }
 
 export interface TaskCaptureDraftContext {

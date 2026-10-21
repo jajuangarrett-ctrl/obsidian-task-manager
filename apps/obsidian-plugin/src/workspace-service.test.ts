@@ -72,6 +72,7 @@ class MockVault {
   private readonly entries = new Map<string, InstanceType<typeof obsidianMock.MockTFile> | InstanceType<typeof obsidianMock.MockTFolder>>();
   failNextRenameTarget = "";
   failNextWriteTarget = "";
+  failNextFolderTarget = "";
   failRemovePath = "";
   readonly hiddenFiles = new Set<string>();
 
@@ -120,6 +121,7 @@ class MockVault {
   }
 
   async createFolder(value: string) {
+    if (value === this.failNextFolderTarget) { this.failNextFolderTarget = ""; throw new Error("Simulated folder failure"); }
     const folder = new obsidianMock.MockTFolder(value);
     if (this.entries.has(folder.path)) throw new Error(`Already exists: ${folder.path}`);
     this.entries.set(folder.path, folder);
@@ -942,6 +944,74 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
     expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
+  });
+
+  it("creates captured objectives directly in Program and Area folders with their workspace and metadata intact", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    for (const destination of ["02 Programs/CalWORKs", "03 Areas/Career"]) {
+      await vault.createFolder(destination);
+      const created = await service.createTask({ title: "Capture in chosen folder", destination, details: "Preserve context", people: ["Franklin"], project: "Existing project", due: "2026-11-01", status: "waiting", source: { type: "manual", title: "Capture reference", url: "" } });
+      const root = destination + (destination.startsWith("02") ? "/CalWORKs Tasks" : "/Career Tasks") + "/Capture in chosen folder";
+      expect(created.taskFile.path).toBe(`${root}/task.md`);
+      expect(created.updatesFile?.path).toBe(`${root}/updates.md`);
+      expect(await vault.adapter.stat(`${root}/Files`)).toEqual({ type: "folder" });
+      expect(created.record).toMatchObject({ people: ["Franklin"], project: "Existing project", agenda_selected: false, due: "2026-11-01", status: "waiting", source_title: "Capture reference", location: root });
+      expect(created.notes).toContain("Preserve context");
+      expect(await vault.read(created.updatesFile as never)).toContain("Task workspace created.");
+      expect(vault.getFiles().filter((file) => file.path.startsWith("08 Tasks/Inbox/") && file.content.includes(created.record.task_id))).toEqual([]);
+    }
+    expect(service.list()).toHaveLength(2);
+  });
+
+  it("keeps the default Inbox destination and assigns separate folders to repeated selected-folder titles", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const defaultTask = await service.createTask({ title: "Default capture", destination: "" });
+    expect(defaultTask.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Default capture/task.md");
+    await vault.createFolder("02 Programs/Foundation");
+    const first = await service.createTask({ title: "Same name", destination: "02 Programs/Foundation" });
+    await service.createRelatedNote(first.record.task_id, "Evidence", "Preserve first attachment");
+    const second = await service.createTask({ title: "Same name", destination: "02 Programs/Foundation" });
+    expect(second.taskFile.path).toBe("02 Programs/Foundation/Foundation Tasks/Same name (2)/task.md");
+    expect(first.record.task_id).not.toBe(second.record.task_id);
+    expect(service.getById(first.record.task_id).relatedFiles[0].preview).toContain("Preserve first attachment");
+  });
+
+  it("rejects unavailable or disallowed capture folders before writing objective records", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    await vault.createFolder("02 Programs/.hidden");
+    const before = vault.getFiles().map((file) => file.path);
+    for (const destination of ["08 Tasks/Other", "02 Programs", "02 Programs/Missing", "02 Programs/.hidden", "02 Programs/../../Other"]) {
+      await expect(service.createTask({ title: "Invalid destination", destination })).rejects.toThrow();
+    }
+    expect(vault.getFiles().map((file) => file.path)).toEqual(before);
+    expect(service.list()).toEqual([]);
+  });
+
+  it("cleans up a capture when attachment-folder creation fails and supports a destination named Tasks", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const destination = "03 Areas/Career/Tasks";
+    await vault.createFolder(destination);
+    vault.failNextFolderTarget = `${destination}/Objective Tasks/New objective/Files`;
+    await expect(service.createTask({ title: "New objective", destination })).rejects.toThrow("folder failure");
+    expect(await vault.adapter.stat(`${destination}/Objective Tasks/New objective`)).toBeNull();
+    expect(service.list()).toEqual([]);
+    const created = await service.createTask({ title: "New objective", destination });
+    expect(created.relocatedBundle).toBe(true);
+    expect(created.updatesFile?.path).toBe(`${destination}/Objective Tasks/New objective/updates.md`);
+  });
+
+  it.each([undefined, "02 Programs/Foundation"])("removes complete captured workspaces after batch failure, with first destination %s", async (destination) => {
+    const { service, vault } = createService(); await service.initialize();
+    await vault.createFolder("02 Programs/Foundation"); await vault.createFolder("03 Areas/Career");
+    vault.failNextWriteTarget = "03 Areas/Career/Career Tasks/Failed capture/updates.md";
+    await expect(service.createTasks([
+      { title: "First capture", destination },
+      { title: "Failed capture", destination: "03 Areas/Career" }
+    ])).rejects.toThrow("rolled back");
+    expect(service.list()).toEqual([]);
+    expect(vault.getFiles().filter((file) => /First capture|Failed capture/.test(file.path))).toEqual([]);
+    expect(await vault.adapter.stat("03 Areas/Career/Career Tasks/Failed capture")).toBeNull();
+    if (destination) expect(await vault.adapter.stat("02 Programs/Foundation/Foundation Tasks/First capture")).toBeNull();
   });
 
   it("lists only visible Program and Area subfolders as relocation destinations", async () => {

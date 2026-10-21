@@ -1,3 +1,7 @@
+## 0.24.0 — Choose a folder during objective capture
+
+Native new-objective capture now shows an optional Save location on each draft card, using the existing searchable Programs and Areas picker with capture-specific wording. Cancel retains the current choice and Use Inbox restores the configured default. Creation writes the objective, update log and Files folder directly in the chosen destination, preserves People/project/source fields and agenda opt-in behavior, and avoids duplicate Inbox copies. Repeated titles receive separate workspaces, unavailable destinations are rejected, and failed batch writes remove created records and update logs.
+
 ## 0.23.4 — Recover existing objective conversions
 
 When a standalone objective remains after it has already become an action, the conversion preview names its current parent. Choosing another parent moves the existing action and its attachment folder, preserving the action ID, notes, status, due date and history, then archives the remaining standalone objective. Choosing its current parent archives the standalone copy without duplicating the action. Ambiguous action copies and archived parents receive specific recovery guidance; failed moves roll back both parents, files and references.

@@ -34,6 +34,7 @@ import {
 } from "@fjg/task-core";
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
 import type { TaskManagerSettings } from "./settings";
+
 import { parseTaskUpdatePreviews, TaskUpdatePreview } from "./update-preview";
 import {
   queryTaskContext,
@@ -79,6 +80,8 @@ export interface TaskRelatedFile {
   kind: RelatedFileKind;
   preview: string;
 }
+
+export type NewTaskWorkspaceInput = NewTaskInput & { destination?: string };
 
 export interface IndexedTask {
   record: TaskRecord;
@@ -845,21 +848,36 @@ export class TaskWorkspaceService {
   }
 
   async createTask(
-    input: NewTaskInput,
+    input: NewTaskWorkspaceInput,
     audit: { requestId?: string; actor?: string } = {}
   ): Promise<IndexedTask> {
-    const record = createTaskRecord(input);
+    let record = createTaskRecord(input);
     if (this.index.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
-    const folderPath = await this.workspaceForRecord(record);
-    await this.ensureWorkspaceFolders(folderPath);
-    const paths = await this.availableTaskPaths(folderPath, record);
+    const destination = input.destination?.trim();
+    let folderPath: string;
+    let paths: { taskPath: string; updatesPath: string };
+    let filesPath: string;
+    if (destination) {
+      const normalized = normalizeTaskRelocationDestination(destination);
+      if (!this.listRelocationDestinations().includes(normalized)) throw new Error("Choose an existing folder from Programs or Areas.");
+      if (record.status === "archived") throw new Error("New objectives in Programs or Areas must be open.");
+      const bundle = await this.availableRelocationPaths(normalized, record);
+      folderPath = bundle.bundlePath;
+      paths = bundle;
+      filesPath = bundle.filesPath;
+      record = updateTaskFields(record, { location: folderPath });
+    } else {
+      folderPath = await this.workspaceForRecord(record);
+      await this.ensureWorkspaceFolders(folderPath);
+      paths = await this.availableTaskPaths(folderPath, record);
+      filesPath = taskArtifactFilesPath(folderPath, artifactFolderFromTaskPath(paths.taskPath));
+    }
     const taskPath = paths.taskPath;
     const updatesPath = paths.updatesPath;
-    const filesPath = taskArtifactFilesPath(folderPath, artifactFolderFromTaskPath(taskPath));
-    await this.ensureFolder(filesPath);
     const body = buildTaskBody(record, input.details || "", input.outcome || "");
     let taskFile: TFile | null = null;
     try {
+      await this.ensureFolder(filesPath);
       taskFile = await this.app.vault.create(taskPath, renderTaskMarkdown(record, body));
       const updates = appendUpdateMarkdown(renderUpdatesMarkdown(), {
         actor: audit.actor || "Franklin",
@@ -874,6 +892,7 @@ export class TaskWorkspaceService {
       if (taskFile) await this.app.vault.delete(taskFile, true);
       const updateFile = this.app.vault.getAbstractFileByPath(updatesPath);
       if (updateFile instanceof TFile) await this.app.vault.delete(updateFile, true);
+      if (destination) await this.removeEmptyArchivedSourceFolders(folderPath);
       throw error;
     }
     await this.refresh();
@@ -881,7 +900,7 @@ export class TaskWorkspaceService {
   }
 
   async createTasks(
-    inputs: NewTaskInput[],
+    inputs: NewTaskWorkspaceInput[],
     audit: { requestId?: string; actor?: string } = {}
   ): Promise<IndexedTask[]> {
     if (!inputs.length) throw new Error("Add at least one task.");
@@ -2353,19 +2372,24 @@ export class TaskWorkspaceService {
       `${normalizePath(settings.archiveRoot)}/`
     ];
     const files: TFile[] = [];
+    const cleanupRoots = new Set<string>();
     for (const file of this.app.vault.getMarkdownFiles()) {
       const inLegacyRoot = file.name === "task.md" && roots.some((root) => file.path.startsWith(root));
       const inManagedTasks = file.path.includes("/Tasks/");
-      if (!inLegacyRoot && !inManagedTasks) continue;
+      const relocatedBundle = isTaskRelocationBundlePath(file.path);
+      if (!inLegacyRoot && !inManagedTasks && !relocatedBundle) continue;
       try {
         const document = parseTaskMarkdown(await this.app.vault.read(file));
         if (taskIds.has(document.record.task_id)) {
           files.push(file);
-          const workspace = inLegacyRoot ? file.parent?.path || "" : workspaceRootFromTaskPath(file.path);
+          const workspace = inLegacyRoot || relocatedBundle ? file.parent?.path || "" : workspaceRootFromTaskPath(file.path);
           const update = this.app.vault.getAbstractFileByPath(
-            inLegacyRoot ? updatesFilePath(workspace) : `${taskUpdatesFolderPath(workspace)}/${file.name}`
+            inLegacyRoot || relocatedBundle ? updatesFilePath(workspace)
+              : usesTaskArtifactLayout(file) ? taskArtifactUpdatesPath(workspace, artifactFolderFromTaskPath(file.path))
+              : `${taskUpdatesFolderPath(workspace)}/${file.name}`
           );
           if (update instanceof TFile) files.push(update);
+          if (relocatedBundle) cleanupRoots.add(workspace);
         }
       } catch {
         // An unrelated invalid task file must not prevent rollback of this batch.
@@ -2374,6 +2398,7 @@ export class TaskWorkspaceService {
     for (const file of [...new Set(files)].reverse()) {
       await this.app.vault.delete(file, true);
     }
+    for (const root of cleanupRoots) await this.removeEmptyArchivedSourceFolders(root);
   }
 }
 

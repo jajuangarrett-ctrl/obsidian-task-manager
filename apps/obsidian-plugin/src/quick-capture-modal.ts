@@ -7,6 +7,7 @@ import {
 } from "obsidian";
 import { statusLabel, TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
+import { TaskRelocationModal } from "./modals";
 import {
   draftTasksFromCapture,
   startVoiceRecording,
@@ -196,7 +197,8 @@ export class QuickCaptureModal extends Modal {
       this.generatedDrafts = true;
       this.detailsWereEdited.clear();
       const source = this.drafts.find((draft) => draft.source)?.source;
-      this.drafts = source ? drafts.map((draft) => ({ ...draft, source })) : drafts;
+      const destination = this.drafts.length === 1 ? this.drafts[0].destination : undefined;
+      this.drafts = drafts.map((draft) => ({ ...draft, ...(source ? { source } : {}), ...(destination ? { destination } : {}) }));
       this.renderDraftForms();
       new Notice(
         drafts.length === 1
@@ -231,6 +233,28 @@ export class QuickCaptureModal extends Modal {
       title.placeholder = "What needs to be done?";
       title.value = draft.title;
       title.addEventListener("input", () => this.drafts[index].title = title.value);
+
+      const locationRow = formCard.createDiv({ cls: "fjg-capture-form-row" });
+      locationRow.createEl("label", { text: "Save location" });
+      const location = locationRow.createDiv({ cls: "fjg-capture-location" });
+      const locationText = location.createEl("span", { text: draft.destination || this.taskPlugin.settings.inboxRoot,
+        attr: { "aria-live": "polite" } });
+      const reset = this.iconButton(location, "undo-2", "Use Inbox", () => {
+        delete this.drafts[index].destination;
+        locationText.setText(this.taskPlugin.settings.inboxRoot);
+        reset.hidden = true;
+      });
+      reset.hidden = !draft.destination;
+      this.iconButton(location, "folder", "Choose folder", () => {
+        if (this.busy) return;
+        new TaskRelocationModal(this.app, this.drafts[index].title || "New objective", this.drafts[index].destination || this.taskPlugin.settings.inboxRoot,
+          this.taskPlugin.workspaceService.listRelocationDestinations(), async (destination) => {
+            if (this.closed || this.busy) return;
+            this.drafts[index].destination = destination;
+            locationText.setText(destination);
+            reset.hidden = false;
+          }, "capture").open();
+      });
 
       const status = this.selectRow(formCard, "Status");
       for (const option of CAPTURE_STATUSES) {
@@ -301,6 +325,7 @@ export class QuickCaptureModal extends Modal {
       const controls = this.formControls[index];
       if (!controls) return draft;
       return {
+        ...draft,
         title: controls.title.value.trim(),
         details: controls.details.value.trim(),
         status: controls.status.value as TaskStatus || "do-first",

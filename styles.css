@@ -1713,6 +1713,25 @@
   font-weight: 650;
 }
 
+.fjg-capture-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0;
+  min-width: 0;
+}
+
+.fjg-capture-location > span {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.fjg-capture-location button[hidden] { display: none; }
+
 .fjg-capture-form-row > input,
 .fjg-capture-form-row > select {
   width: 100%;

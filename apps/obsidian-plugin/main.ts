@@ -575,7 +575,8 @@ export default class FjgTaskManagerPlugin extends Plugin {
       due: value.due,
       delegatedTo: value.delegatedTo,
       tags: ["task"],
-      source: value.source
+      source: value.source,
+      destination: value.destination
     })), { actor: "Franklin" });
     new Notice(
       tasks.length === 1

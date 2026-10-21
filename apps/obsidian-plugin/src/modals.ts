@@ -318,14 +318,15 @@ export class TaskRelocationModal extends Modal {
     private readonly taskTitle: string,
     private readonly currentLocation: string,
     private readonly destinations: readonly string[],
-    private readonly submit: (destination: string) => Promise<void>
+    private readonly submit: (destination: string) => Promise<void>,
+    private readonly purpose: "move" | "capture" = "move"
   ) {
     super(app);
   }
 
   onOpen(): void {
     this.modalEl.addClass("fjg-task-project-picker-modal");
-    this.setTitle(`Move objective: ${this.taskTitle}`);
+    this.setTitle(this.purpose === "capture" ? "Choose objective save folder" : `Move objective: ${this.taskTitle}`);
     this.render();
   }
 
@@ -336,11 +337,13 @@ export class TaskRelocationModal extends Modal {
   private render(): void {
     this.contentEl.empty();
     this.contentEl.createEl("p", {
-      text: "Choose a folder inside 02 Programs or 03 Areas. The complete objective-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and objective tag stay unchanged.",
+      text: this.purpose === "capture"
+        ? "Choose a folder inside 02 Programs or 03 Areas. The new objective, update log and attachment folder will be created together here when you save."
+        : "Choose a folder inside 02 Programs or 03 Areas. The complete objective-named workspace, including user-created notes and subfolders inside it, will move together; sibling material stays in place, and status and objective tag stay unchanged.",
       cls: "fjg-project-picker-intro"
     });
     this.contentEl.createEl("p", {
-      text: `Current location: ${this.currentLocation}`,
+      text: `${this.purpose === "capture" ? "Save location" : "Current location"}: ${this.currentLocation}`,
       cls: "setting-item-description"
     });
     const search = this.contentEl.createEl("input", {
@@ -400,7 +403,7 @@ export class TaskRelocationModal extends Modal {
         .setDisabled(this.moving)
         .onClick(() => this.close()))
       .addButton((button) => button
-        .setButtonText(this.moving ? "Moving…" : "Move objective")
+        .setButtonText(this.purpose === "capture" ? (this.moving ? "Selecting…" : "Use this folder") : (this.moving ? "Moving…" : "Move objective"))
         .setCta()
         .setDisabled(this.moving || !this.selectedDestination)
         .onClick(async () => {

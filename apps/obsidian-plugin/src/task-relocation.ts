@@ -40,6 +40,8 @@ export function taskRelocationCollectionName(destination: string): string {
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  // A literal Tasks collection is interpreted as the older split workspace layout.
+  if (folderName.toLocaleLowerCase() === "tasks") return "Objective Tasks";
   return /\bTasks$/i.test(folderName) ? folderName : `${folderName} Tasks`;
 }
 

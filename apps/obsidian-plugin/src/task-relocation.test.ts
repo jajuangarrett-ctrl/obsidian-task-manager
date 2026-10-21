@@ -43,5 +43,6 @@ describe("task relocation paths", () => {
     expect(taskRelocationCollectionName("02 Programs/Basic-Needs")).toBe("Basic Needs Tasks");
     expect(taskRelocationCollectionName("03 Areas/Career")).toBe("Career Tasks");
     expect(taskRelocationCollectionName("03 Areas/Operations Tasks")).toBe("Operations Tasks");
+    expect(taskRelocationCollectionName("03 Areas/Career/Tasks")).toBe("Objective Tasks");
   });
 });

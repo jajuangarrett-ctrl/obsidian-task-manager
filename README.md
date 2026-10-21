@@ -172,6 +172,8 @@ automatically complete its parent. Existing tasks are never converted on startup
 
 ## Quick capture
 
+Each native **Capture objective** card shows **Save location**, initially the configured Inbox. Choose **Choose folder**, search the same Programs and Areas picker used by Move objective, select a folder, then **Use this folder**. The selected path stays visible before **Create Objective**. **Cancel** leaves the current choice unchanged; **Use Inbox** restores the default for that card. Each card in a multiple-objective capture can have its own destination. The new objective, `updates.md`, and `Files/` are created directly in the selected objective-named workspace; no Inbox copy is created. Folder selection does not change People, project metadata, or agenda inclusion.
+
 Use **FJG Task Manager: Quick Capture Task**, the circle-plus ribbon icon, or **Capture Task** on the dashboard.
 
 1. Type a rough task description or select **Dictate** and record it.
