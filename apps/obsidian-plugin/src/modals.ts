@@ -356,46 +356,50 @@ export class TaskRelocationModal extends Modal {
     search.addEventListener("input", () => {
       this.query = search.value;
       this.error = "";
-      this.render();
+      error.hidden = true;
+      renderChoices();
     });
-    if (this.error) this.contentEl.createDiv({ cls: "fjg-project-picker-error", text: this.error });
+    const error = this.contentEl.createDiv({ cls: "fjg-project-picker-error", text: this.error });
+    error.hidden = !this.error;
 
-    const normalizedQuery = normalizeProjectPickerText(this.query);
-    const matches = this.destinations.filter((path) => {
-      return path !== this.currentLocation
-        && normalizeProjectPickerText(path).includes(normalizedQuery);
-    });
     const choices = this.contentEl.createDiv({
       cls: "fjg-project-picker-choices",
       attr: { role: "listbox", "aria-label": "Objective destination folders" }
     });
-    if (!matches.length) {
-      choices.createDiv({
-        cls: "fjg-project-picker-empty",
-        text: this.destinations.length
-          ? "No destination folders match this search."
-          : "No eligible Program or Area folders are available."
-      });
-    } else {
-      for (const path of matches) {
-        const selected = path === this.selectedDestination;
-        const button = choices.createEl("button", {
-          cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
-          text: path,
-          attr: {
-            type: "button",
-            role: "option",
-            "aria-selected": String(selected)
-          }
+    const renderChoices = () => {
+      choices.empty();
+      const normalizedQuery = normalizeProjectPickerText(this.query);
+      const matches = this.destinations.filter((path) => path !== this.currentLocation
+        && normalizeProjectPickerText(path).includes(normalizedQuery));
+      if (!matches.length) {
+        choices.createDiv({
+          cls: "fjg-project-picker-empty",
+          text: this.destinations.length
+            ? "No destination folders match this search."
+            : "No eligible Program or Area folders are available."
         });
-        button.disabled = this.moving;
-        button.addEventListener("click", () => {
-          this.selectedDestination = path;
-          this.error = "";
-          this.render();
-        });
+      } else {
+        for (const path of matches) {
+          const selected = path === this.selectedDestination;
+          const button = choices.createEl("button", {
+            cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
+            text: path,
+            attr: {
+              type: "button",
+              role: "option",
+              "aria-selected": String(selected)
+            }
+          });
+          button.disabled = this.moving;
+          button.addEventListener("click", () => {
+            this.selectedDestination = path;
+            this.error = "";
+            this.render();
+          });
+        }
       }
-    }
+    };
+    renderChoices();
 
     new Setting(this.contentEl)
       .addButton((button) => button
