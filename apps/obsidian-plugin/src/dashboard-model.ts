@@ -1,7 +1,7 @@
 import { isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
-export type DashboardMode = "home" | "move" | "tasks" | "kanban" | "projects" | "people";
+export type DashboardMode = "home" | "overview" | "move" | "tasks" | "kanban" | "projects" | "people";
 export type TaskViewKey = "recent" | "all-open" | "due" | "no-project" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;

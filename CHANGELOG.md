@@ -1,3 +1,7 @@
+## 0.25.0 — Compact Overview
+
+Adds a separate Overview tab with compact objective titles grouped by status in a wrapping grid. Search names, see matching counts, open objectives, assign People or change status from each row’s menu, and drag between groups. Archived objectives are excluded; existing archive access, People agenda opt-in and objective data are preserved.
+
 ## 0.24.0 — Choose a folder during objective capture
 
 Native new-objective capture now shows an optional Save location on each draft card, using the existing searchable Programs and Areas picker with capture-specific wording. Cancel retains the current choice and Use Inbox restores the configured default. Creation writes the objective, update log and Files folder directly in the chosen destination, preserves People/project/source fields and agenda opt-in behavior, and avoids duplicate Inbox copies. Repeated titles receive separate workspaces, unavailable destinations are rejected, and failed batch writes remove created records and update logs.

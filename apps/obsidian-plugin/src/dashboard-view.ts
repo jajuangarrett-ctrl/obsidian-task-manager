@@ -1,3 +1,4 @@
+import { renderOverviewGroups } from "./overview-view";
 import { matchesPerson, personKey } from "./people-model";
 import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
@@ -33,6 +34,7 @@ export class TaskDashboardView extends ItemView {
   private tabPosition = 0;
   private homeScope: HomeScope = "open";
   private homeQuery = "";
+  private overviewQuery = "";
   private homeProject = "";
   private person = "";
   private readonly expandedPeople = new Set<string>();
@@ -106,6 +108,8 @@ export class TaskDashboardView extends ItemView {
       this.renderPeople(root, allTasks);
     } else if (this.mode === "move") {
       this.renderMove(root, allTasks);
+    } else if (this.mode === "overview") {
+      this.renderOverview(root, allTasks.filter(task => !task.archived && task.record.status !== "archived"));
     } else if (this.mode === "kanban") {
       this.renderKanban(root, allTasks.filter((task) => task.record.status !== "archived"));
     } else {
@@ -177,6 +181,7 @@ export class TaskDashboardView extends ItemView {
     });
     this.sectionTab(tabs, "home", "Home", "house");
     this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
+    this.sectionTab(tabs, "overview", "Overview", "layout-grid", taskCount);
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
     this.sectionTab(tabs, "people", "People", "users");
     this.sectionTab(tabs, "move", "Move", "folder-input");
@@ -395,6 +400,24 @@ export class TaskDashboardView extends ItemView {
       }
     });
     this.renderRows(root);
+  }
+
+  private renderOverview(root: HTMLElement, tasks: IndexedTask[]): void {
+    const heading = root.createDiv({ cls: "fjg-section-heading" });
+    heading.createEl("h2", { text: "Overview" });
+    const search = root.createEl("input", { cls: "fjg-overview-search", attr: {
+      type: "search", placeholder: "Search objective names…", "aria-label": "Search Overview objectives", "data-focus-key": "overview-search"
+    } });
+    search.value = this.overviewQuery;
+    search.addEventListener("input", () => { this.overviewQuery = search.value; this.render(); });
+    const query = this.overviewQuery.trim().toLocaleLowerCase();
+    const matches = tasks.filter(task => task.record.title.toLocaleLowerCase().includes(query));
+    root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} of ${tasks.length} objectives · Drag to change status, or use each objective’s menu.`, attr: { "aria-live": "polite" } });
+    renderOverviewGroups(root, matches, {
+      open: id => void this.taskPlugin.openTask(id),
+      people: id => this.taskPlugin.openPeoplePicker(id),
+      move: (id, status) => void this.moveKanbanTask(id, status)
+    });
   }
 
   private renderKanban(root: HTMLElement, tasks: IndexedTask[]): void {
