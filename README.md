@@ -2,6 +2,12 @@
 
 Objective workspaces with nested Actions for Obsidian, with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
+## Area: organize by task folders (0.26.0)
+
+Open **Area** and choose a folder such as **Admin leadership Tasks** or **Basic Needs Tasks**. The selector discovers folders ending in **Task** or **Tasks** under `02 Programs` and `03 Areas`, including empty folders. New, renamed, and removed folders update automatically through the existing vault refresh. Moving an objective updates its area from its current path; no tags or metadata edits are required.
+
+**Uncategorized** includes objectives in `08 Tasks` and objectives outside a matching task folder. **All areas** includes categorized and uncategorized objectives. Completed objectives remain visible; archived objectives are excluded. Search filters objective names within the selected area. Titles and menus use the existing objective navigation, People, folder-path copying, and status controls. Nested collections use the closest matching folder, and duplicate folder names display parent paths.
+
 ## Horizontal Home and Move queue (0.22.0)
 
 The dashboard opens on **Home**, with one horizontal row per status. Scope buttons separate open, completed, archived and all objectives. Search covers every objective in the selected scope, including off-screen cards and action titles. Home, Objectives, Kanban and Move stay in a single horizontal tab row, scrolling sideways in narrow panes. Mobile layouts wrap filters and use 44-pixel touch targets. Use Previous/Next, the row scrollbar, or View all; filters and row positions survive dashboard refreshes. Cards retain the existing Folder, Show in file, Copy, Update and More controls; objective tags remain available as a filter rather than a Home card field. Add action opens the existing action editor for that exact objective.

@@ -1,3 +1,10 @@
+## 0.26.0 — Folder-based Area tab
+
+- Adds Area with a live folder selector, counts, name search, compact status groups, and existing objective controls.
+- Discovers named Task/Tasks folders under Programs and Areas, including empty folders; vault events refresh choices after folder creation, renaming, removal, and objective moves.
+- Membership follows the closest matching folder path. Duplicate names show their parent paths; tags and objective records are unchanged.
+- Objectives under 08 Tasks and objectives outside matching collections appear as Uncategorized. Completed objectives remain visible; archived objectives are excluded.
+
 ## 0.25.1 — Overview navigation and folder paths
 
 - Overview titles now reveal the exact objective in the Objectives tab, clearing stale filters and focusing its row, including completed objectives.

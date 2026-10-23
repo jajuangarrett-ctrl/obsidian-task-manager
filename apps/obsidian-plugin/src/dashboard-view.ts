@@ -1,6 +1,7 @@
 import { renderOverviewGroups } from "./overview-view";
+import { filterAreaObjectives, NO_AREA, objectiveAreas } from "./area-model";
 import { matchesPerson, personKey } from "./people-model";
-import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, TFolder, WorkspaceLeaf } from "obsidian";
 import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
@@ -35,6 +36,8 @@ export class TaskDashboardView extends ItemView {
   private homeScope: HomeScope = "open";
   private homeQuery = "";
   private overviewQuery = "";
+  private areaPath = "";
+  private areaQuery = "";
   private homeProject = "";
   private person = "";
   private readonly expandedPeople = new Set<string>();
@@ -110,6 +113,8 @@ export class TaskDashboardView extends ItemView {
       this.renderMove(root, allTasks);
     } else if (this.mode === "overview") {
       this.renderOverview(root, allTasks.filter(task => !task.archived && task.record.status !== "archived"));
+    } else if (this.mode === "area") {
+      this.renderArea(root, allTasks);
     } else if (this.mode === "kanban") {
       this.renderKanban(root, allTasks.filter((task) => task.record.status !== "archived"));
     } else {
@@ -182,6 +187,7 @@ export class TaskDashboardView extends ItemView {
     this.sectionTab(tabs, "home", "Home", "house");
     this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
     this.sectionTab(tabs, "overview", "Overview", "layout-grid", taskCount);
+    this.sectionTab(tabs, "area", "Area", "folder-tree");
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
     this.sectionTab(tabs, "people", "People", "users");
     this.sectionTab(tabs, "move", "Move", "folder-input");
@@ -419,6 +425,38 @@ export class TaskDashboardView extends ItemView {
       .find(candidate => candidate.dataset.taskId === id);
     row?.scrollIntoView({ block: "center" });
     row?.querySelector<HTMLButtonElement>(".fjg-task-title")?.focus({ preventScroll: true });
+  }
+
+  private renderArea(root: HTMLElement, tasks: IndexedTask[]): void {
+    const folders = this.app.vault.getAllLoadedFiles().filter(file => file instanceof TFolder).map(file => file.path);
+    const areas = objectiveAreas(folders, tasks);
+    if (this.areaPath && this.areaPath !== NO_AREA && !areas.some(area => area.path === this.areaPath)) this.areaPath = "";
+    const heading = root.createDiv({ cls: "fjg-section-heading" });
+    heading.createEl("h2", { text: "Area" });
+    heading.createEl("p", { text: "Browse objectives by folders ending in Task or Tasks under Programs and Areas. New folders appear automatically. Objectives in 08 Tasks are Uncategorized." });
+    const filters = root.createDiv({ cls: "fjg-home-filters" });
+    const select = filters.createEl("select", { attr: { "aria-label": "Filter objectives by Area" } });
+    const total = filterAreaObjectives(tasks, areas, "", "").length;
+    select.createEl("option", { value: "", text: `All areas (${total})` });
+    for (const area of areas) select.createEl("option", { value: area.path, text: `${area.label} (${area.count})` });
+    select.createEl("option", { value: NO_AREA, text: `Uncategorized (${filterAreaObjectives(tasks, areas, NO_AREA, "").length})` });
+    select.value = this.areaPath;
+    select.addEventListener("change", () => { this.areaPath = select.value; this.render(); });
+    const search = filters.createEl("input", { attr: { type: "search", placeholder: "Search objective names…", "aria-label": "Search Area objectives", "data-focus-key": "area-search" } });
+    search.value = this.areaQuery;
+    search.addEventListener("input", () => { this.areaQuery = search.value; this.render(); });
+    const matches = filterAreaObjectives(tasks, areas, this.areaPath, this.areaQuery);
+    root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} objectives · ${areas.length} task folders`, attr: { "aria-live": "polite" } });
+    if (!matches.length) {
+      root.createDiv({ cls: "fjg-empty", text: "No objectives match this area and search. Choose another folder or clear the search." });
+      return;
+    }
+    renderOverviewGroups(root, matches, {
+      open: id => this.revealOverviewObjective(id),
+      copyPath: id => void this.taskPlugin.copyTaskFolderPath(id),
+      people: id => this.taskPlugin.openPeoplePicker(id),
+      move: (id, status) => void this.moveKanbanTask(id, status)
+    });
   }
 
   private renderOverview(root: HTMLElement, tasks: IndexedTask[]): void {
