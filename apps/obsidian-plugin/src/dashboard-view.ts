@@ -346,7 +346,9 @@ export class TaskDashboardView extends ItemView {
       attr: { "aria-label": "Objective views" }
     });
     const scopedTasks = tasks.filter((task) => matchesPerson(task.record, this.person));
-    for (const definition of TASK_VIEWS) {
+    for (const definition of this.view === "completed"
+      ? [...TASK_VIEWS, { key: "completed" as const, label: "Completed", icon: "check-circle" }]
+      : TASK_VIEWS) {
       const button = viewNav.createEl("button", {
         cls: `fjg-view-card${this.view === definition.key ? " is-active" : ""}`,
         attr: {
@@ -402,6 +404,23 @@ export class TaskDashboardView extends ItemView {
     this.renderRows(root);
   }
 
+  private revealOverviewObjective(id: string): void {
+    const task = this.taskPlugin.workspaceService.list({ includeArchived: true })
+      .find(candidate => candidate.record.task_id === id);
+    if (!task) { new Notice("This objective is no longer available. Refresh Overview and try again."); return; }
+    this.mode = "tasks";
+    this.project = ALL_PROJECTS;
+    this.person = "";
+    this.query = "";
+    this.view = task.record.status === "inbox" && !task.statusAssigned ? "all-open" : task.record.status;
+    this.render();
+    const root = this.containerEl.children[1] as HTMLElement;
+    const row = Array.from(root.querySelectorAll<HTMLElement>(".fjg-task-row"))
+      .find(candidate => candidate.dataset.taskId === id);
+    row?.scrollIntoView({ block: "center" });
+    row?.querySelector<HTMLButtonElement>(".fjg-task-title")?.focus({ preventScroll: true });
+  }
+
   private renderOverview(root: HTMLElement, tasks: IndexedTask[]): void {
     const heading = root.createDiv({ cls: "fjg-section-heading" });
     heading.createEl("h2", { text: "Overview" });
@@ -414,7 +433,8 @@ export class TaskDashboardView extends ItemView {
     const matches = tasks.filter(task => task.record.title.toLocaleLowerCase().includes(query));
     root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} of ${tasks.length} objectives · Drag to change status, or use each objective’s menu.`, attr: { "aria-live": "polite" } });
     renderOverviewGroups(root, matches, {
-      open: id => void this.taskPlugin.openTask(id),
+      open: id => this.revealOverviewObjective(id),
+      copyPath: id => void this.taskPlugin.copyTaskFolderPath(id),
       people: id => this.taskPlugin.openPeoplePicker(id),
       move: (id, status) => void this.moveKanbanTask(id, status)
     });

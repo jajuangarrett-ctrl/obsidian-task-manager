@@ -6,6 +6,7 @@ import type { IndexedTask } from "./workspace-service";
 export function renderOverviewGroups(root: HTMLElement, tasks: IndexedTask[], actions: {
   open: (id: string) => void;
   people: (id: string) => void;
+  copyPath: (id: string) => void;
   move: (id: string, status: TaskStatus) => void;
 }): void {
   const grid = root.createDiv({ cls: "fjg-overview-grid", attr: { "aria-label": "Objective overview by status" } });
@@ -47,6 +48,7 @@ export function renderOverviewGroups(root: HTMLElement, tasks: IndexedTask[], ac
       more.addEventListener("click", () => {
         const menu = new Menu();
         menu.addItem(item => item.setTitle("Assign People…").setIcon("users").onClick(() => actions.people(id)));
+        menu.addItem(item => item.setTitle("Copy vault folder path").setIcon("copy").onClick(() => actions.copyPath(id)));
         menu.addSeparator();
         for (const status of TASK_STATUSES) menu.addItem(item => item.setTitle(statusLabel(status)).setChecked(status === task.record.status).onClick(() => actions.move(id, status)));
         const rect = more.getBoundingClientRect();

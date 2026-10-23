@@ -23,13 +23,14 @@ it("routes title, People, status and drag actions by stable ID without changing 
   const root = new Element();
   const task = { record: { task_id: "stable-id", title: "Objective", status: "do-first", people: ["Alex"], agenda_selected: false } } as IndexedTask;
   const before = JSON.stringify(task);
-  const actions = { open: vi.fn(), people: vi.fn(), move: vi.fn() };
+  const actions = { open: vi.fn(), copyPath: vi.fn(), people: vi.fn(), move: vi.fn() };
   renderOverviewGroups(root as unknown as HTMLElement, [task], actions);
   expect(root.find("fjg-overview-group")).toHaveLength(8);
   expect(root.find("fjg-overview-row")).toHaveLength(1);
   root.find("fjg-overview-title")[0].events.click({}); expect(actions.open).toHaveBeenCalledWith("stable-id");
   root.find("fjg-overview-menu")[0].events.click({});
   menus.at(-1).items.find((item: any) => item.title === "Assign People…").run(); expect(actions.people).toHaveBeenCalledWith("stable-id");
+  menus.at(-1).items.find((item: any) => item.title === "Copy vault folder path").run(); expect(actions.copyPath).toHaveBeenCalledWith("stable-id");
   menus.at(-1).items.find((item: any) => item.title === "Waiting").run(); expect(actions.move).toHaveBeenCalledWith("stable-id", "waiting");
   const payload = new Map<string,string>();
   root.find("fjg-overview-row")[0].events.dragstart({dataTransfer: {setData: (key: string, value: string) => payload.set(key,value)}});

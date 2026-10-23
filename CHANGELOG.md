@@ -1,3 +1,8 @@
+## 0.25.1 — Overview navigation and folder paths
+
+- Overview titles now reveal the exact objective in the Objectives tab, clearing stale filters and focusing its row, including completed objectives.
+- Overview options now include Copy vault folder path using the same attachment-folder action as Objectives.
+
 ## 0.25.0 — Compact Overview
 
 Adds a separate Overview tab with compact objective titles grouped by status in a wrapping grid. Search names, see matching counts, open objectives, assign People or change status from each row’s menu, and drag between groups. Archived objectives are excluded; existing archive access, People agenda opt-in and objective data are preserved.
