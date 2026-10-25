@@ -44,6 +44,7 @@ export interface TaskRecord {
   project: string;
   people?: string[];
   agenda_selected?: boolean;
+  agenda_preference_set?: boolean;
   delegated_to: string;
   source_type: SourceType;
   source_title: string;

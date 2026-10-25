@@ -61,7 +61,8 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     archived_at: archivedAt,
     project,
     people: uniqueStrings(input.people),
-    agenda_selected: input.agendaSelected === true,
+    agenda_selected: input.agendaSelected !== false,
+    ...(input.agendaSelected !== undefined ? { agenda_preference_set: true } : {}),
     delegated_to: cleanInline(input.delegatedTo),
     source_type: input.source?.type || "manual",
     source_title: cleanInline(input.source?.title),
@@ -127,7 +128,7 @@ export function transitionTaskRecord(record: TaskRecord, target: string, at = ne
 
 export function updateTaskFields(
   record: TaskRecord,
-  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "subtasks" | "tags" | "location" | "people" | "agenda_selected">>,
+  patch: Partial<Pick<TaskRecord, "title" | "priority" | "due" | "project" | "delegated_to" | "related_files" | "subtasks" | "tags" | "location" | "people" | "agenda_selected" | "agenda_preference_set">>,
   at = new Date()
 ): TaskRecord {
   const project = patch.project === undefined ? record.project : cleanInline(patch.project);
@@ -212,6 +213,7 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     project,
     people: uniqueStrings(record.people),
     agenda_selected: record.agenda_selected === true,
+    ...(record.agenda_preference_set === true ? { agenda_preference_set: true } : {}),
     delegated_to: cleanInline(record.delegated_to),
     source_type: record.source_type === "web" || record.source_type === "email" || record.source_type === "migration" ? record.source_type : "manual",
     source_title: cleanInline(record.source_title),

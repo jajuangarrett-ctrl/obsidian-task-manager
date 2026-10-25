@@ -325,3 +325,7 @@ Live search ranks individual keywords and common word forms instead of requiring
 ## Create actions with dashboard voice
 
 In **Talk to dashboard**, say “Add an action under my Work Study objective to review invoices, due September 20.” The assistant finds and reads the parent objective, asks which one you mean when necessary, then creates the action under its exact ID. Requested notes, due date and status are retained; the default action status is Do Soon. A saved-action receipt names both the action and its parent. Archiving remains manual. The separate capture forms still require their Save buttons.
+
+### People agenda defaults
+
+New objectives and the first future People assignment on an unconfigured objective default **Show on agendas** on. Turn it off and save to exclude that objective. Explicit choices survive removing and re-adding People. Existing objectives already associated with People keep their saved setting; untouched objectives are not migrated. Saving an unchanged, unassigned legacy objective does not enable agendas. Completed and archived objectives remain excluded.

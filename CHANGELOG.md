@@ -1,3 +1,8 @@
+# 0.28.0
+
+- Default Show on agendas on for new objectives and first future People assignments on unconfigured objectives.
+- Preserve explicit off choices through People edits, removal, and reassignment; retain existing associated objectives’ saved choices. No existing objectives are migrated.
+
 ## 0.27.0 — Overview details panel
 
 Overview titles now open the existing objective workspace inside the same page. The right panel includes Start Here, Actions, Folder browser and existing People/update/action controls. Click another objective to switch, click the selected title again or Close to dismiss. Search and board scroll remain in place, and closing restores board width. Narrow panes stack details above the board. Other tabs retain their existing behavior.

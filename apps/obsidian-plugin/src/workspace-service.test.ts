@@ -955,7 +955,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
       expect(created.taskFile.path).toBe(`${root}/task.md`);
       expect(created.updatesFile?.path).toBe(`${root}/updates.md`);
       expect(await vault.adapter.stat(`${root}/Files`)).toEqual({ type: "folder" });
-      expect(created.record).toMatchObject({ people: ["Franklin"], project: "Existing project", agenda_selected: false, due: "2026-11-01", status: "waiting", source_title: "Capture reference", location: root });
+      expect(created.record).toMatchObject({ people: ["Franklin"], project: "Existing project", agenda_selected: true, due: "2026-11-01", status: "waiting", source_title: "Capture reference", location: root });
       expect(created.notes).toContain("Preserve context");
       expect(await vault.read(created.updatesFile as never)).toContain("Task workspace created.");
       expect(vault.getFiles().filter((file) => file.path.startsWith("08 Tasks/Inbox/") && file.content.includes(created.record.task_id))).toEqual([]);
@@ -1674,7 +1674,38 @@ it("persists browser People through protocol normalization, workspace creation a
  expect(saved.record.people).toEqual(["Alex Rivera","Sam Lee"]);
  expect(saved.record.project).toBe("");
  expect(saved.record.status).toBe("waiting");
- expect(saved.record.agenda_selected).toBe(false);
+ expect(saved.record.agenda_selected).toBe(true);
  expect(saved.body).toContain("Keep these details");
  expect(service.getById(task.record.task_id).record.people).toEqual(["Alex Rivera","Sam Lee"]);
+});
+
+it("defaults first People assignment on without changing existing opt-outs or untouched legacy files", async () => {
+  const {service,vault}=createService();
+  await vault.createFolder("05 People/Agenda Items");
+  await service.initialize();
+  const fresh=await service.createTask({title:"New default"});
+  expect(fresh.record.agenda_selected).toBe(true);
+  await service.changePeople(fresh.record.task_id,["Leyla Recinos"]);
+  expect(service.getById(fresh.record.task_id).record.agenda_selected).toBe(true);
+  await service.changePeople(fresh.record.task_id,["Leyla Recinos"],false);
+  await service.refresh();
+  await service.changePeople(fresh.record.task_id,["Leyla Recinos","Dr. Carter"]);
+  expect(service.getById(fresh.record.task_id).record.agenda_selected).toBe(false);
+  await service.changePeople(fresh.record.task_id,[]);
+  await service.changePeople(fresh.record.task_id,["Leyla Recinos"]);
+  expect(service.getById(fresh.record.task_id).record.agenda_selected).toBe(false);
+  const legacy=await service.createTask({title:"Legacy empty"});
+  const markdown=(await vault.read(legacy.taskFile as never)).replace("agenda_selected: true","agenda_selected: false");
+  await vault.modify(legacy.taskFile as never,markdown);
+  await service.refresh();
+  expect(await vault.read(legacy.taskFile as never)).toBe(markdown);
+  await service.changePeople(legacy.record.task_id,[]);
+  expect(service.getById(legacy.record.task_id).record.agenda_selected).toBe(false);
+  await service.changePeople(legacy.record.task_id,["Leyla Recinos"]);
+  expect(service.getById(legacy.record.task_id).record.agenda_selected).toBe(true);
+  const associated=await service.createTask({title:"Legacy associated",people:["Leyla Recinos"]});
+  const old=(await vault.read(associated.taskFile as never)).replace("agenda_selected: true","agenda_selected: false");
+  await vault.modify(associated.taskFile as never,old); await service.refresh();
+  await service.changePeople(associated.record.task_id,["Leyla Recinos","Dr. Carter"]);
+  expect(service.getById(associated.record.task_id).record.agenda_selected).toBe(false);
 });

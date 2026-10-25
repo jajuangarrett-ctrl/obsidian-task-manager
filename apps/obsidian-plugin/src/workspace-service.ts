@@ -1,4 +1,4 @@
-import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, normalizePeople } from "./people-model";
+import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, agendaChoice, normalizePeople } from "./people-model";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import {
   appendUpdateMarkdown,
@@ -310,12 +310,17 @@ export class TaskWorkspaceService {
     return normalizePeople([...this.rosterPeople, ...this.list({ includeArchived: true }).flatMap(task => task.record.people || [])]).sort((a,b)=>a.localeCompare(b));
   }
 
-  async changePeople(taskId: string, people: string[], agendaSelected: boolean): Promise<IndexedTask> {
+  async changePeople(taskId: string, people: string[], agendaSelected?: boolean): Promise<IndexedTask> {
     const task = this.getById(taskId);
     if (task.archived) throw new Error("Reopen this objective before changing People.");
     const before = await this.app.vault.read(task.taskFile);
     const document = parseTaskMarkdown(before);
-    const next = updateTaskFields(document.record, { people: normalizePeople(people), agenda_selected: agendaSelected && people.length > 0 });
+    const normalizedPeople = normalizePeople(people);
+    const next = updateTaskFields(document.record, {
+      people: normalizedPeople,
+      agenda_selected: agendaChoice(document.record, normalizedPeople, agendaSelected),
+      ...(agendaSelected !== undefined || document.record.people?.length ? { agenda_preference_set: true } : {}),
+    });
     await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
     await this.refresh();
     return this.getById(taskId);

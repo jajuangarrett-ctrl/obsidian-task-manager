@@ -15,3 +15,10 @@ export function agendaObjectives(tasks: readonly {record:TaskRecord; archived:bo
     .map(({record,taskFile})=>({id:record.task_id,title:record.title,people:normalizePeople(record.people || []),status:record.status,due:record.due,priority:record.priority,path:taskFile.path}))
     .sort((a,b)=>a.id.localeCompare(b.id));
 }
+
+/** Preserve saved choices; only an unconfigured first assignment receives the default. */
+export function agendaChoice(record: Pick<TaskRecord, "people" | "agenda_selected" | "agenda_preference_set">, people: readonly string[], explicit?: boolean): boolean {
+  if (explicit !== undefined) return explicit;
+  if (record.agenda_preference_set || record.people?.length || !people.length) return record.agenda_selected === true;
+  return true;
+}
