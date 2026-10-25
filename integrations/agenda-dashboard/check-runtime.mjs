@@ -1,0 +1,21 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {integrate} from './install.mjs';
+const html=readFileSync(join(process.argv[2], 'Artifacts/Agenda Dashboard/agenda.html'),'utf8');
+assert.equal(integrate(html),html,'Integration is current and idempotent');
+const bridge=html.match(/<script id="fjg-objective-agendas">([\s\S]*?)<\/script>/)[1];
+const importer=html.slice(html.indexOf('    async function importAgendaFiles(event)'),html.indexOf('    function parseOpenTasks('));
+const state={roster:[{name:'Alex',fileName:'Alex.md',tasks:[]}],progress:{existing:{note:'Keep meeting note',completed:true}}};
+const context=vm.createContext({state,els:{sourceInput:{value:''}},isAgentsSource:()=>false,getKind:()=> 'Person',parseOpenTasks:()=>[{key:'existing',title:'Markdown topic'}],simpleHash:()=> 'hash',saveState(){},render(){},announce(){},totalOpenCount:()=>state.roster.reduce((sum,member)=>sum+member.tasks.length,0)});
+vm.runInContext(bridge+'\n'+importer,context);
+const objective={id:'stable',title:'Selected objective',people:['Alex','New person'],status:'do-first',path:'08 Tasks/Selected/task.md'};
+const file=(name,text)=>({name,text:async()=>text});
+const refresh=async(snapshot)=>context.importAgendaFiles({target:{files:[file('_roster.json','{"members":["Alex"]}'),file('Alex.md','- [ ] Markdown topic'),...(snapshot===undefined?[]:[file('_objectives.json',snapshot)])]}});
+await refresh(JSON.stringify({version:1,objectives:[objective]}));assert.equal(state.roster[0].tasks.length,2);assert.equal(state.roster[1].name,'New person');
+await refresh(JSON.stringify({version:1,objectives:[objective]}));assert.equal(state.roster[0].tasks.length,2);
+for(const objectives of [[],[{...objective,status:'completed'}],[{...objective,status:'archived'}]]) {await refresh(JSON.stringify({version:1,objectives}));assert.equal(state.roster[0].tasks.length,1);}
+const before=JSON.stringify(state);await refresh('{broken');assert.equal(JSON.stringify(state),before);
+await refresh();assert.equal(state.roster[0].tasks.length,1);assert.deepEqual(state.progress,{existing:{note:'Keep meeting note',completed:true}});
+console.log('Legacy runtime: selected + Markdown, repeat refresh, completed/archived/deselected/missing cleanup, malformed snapshot preservation and meeting progress passed.');

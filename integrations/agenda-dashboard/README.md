@@ -13,3 +13,11 @@ Meeting checkmarks and notes stay browser-local and are separate per person and 
 No code change is needed. On an objective choose **People → Add a person**, enter the staff member’s exact display name, press **Add**, then **Save People**. Saving makes the name available in the other objective pickers and the People view. Enable **Show on agendas** and refresh Agenda Center’s Agenda Items folder to create that person’s objective agenda automatically. For regular Markdown agenda topics, also add the exact name to `_roster.json` and create the matching `<Name>.md` in Agenda Items.
 
 The People view starts collapsed, with a count beside each name. Click the name to expand or collapse its objectives. Expanded groups remain open across refreshes and tab switches in that dashboard session.
+
+## Restore/check the legacy HTML integration
+
+The native **Open Agenda Center** button belongs to `agenda-capture`, whose 0.11.0 release reads this snapshot directly. This directory maintains the separate legacy HTML runtime.
+
+After any HTML rebuild or replacement, run `node integrations/agenda-dashboard/install.mjs <vault-path>` to embed the bridge and import/source-link hooks, then `node integrations/agenda-dashboard/install.mjs <vault-path> --check`. The installer is idempotent and refuses changed/missing template anchors. It preserves the existing HTML layout and seed data. `node integrations/agenda-dashboard/check-runtime.mjs <vault-path>` exercises the actual installed importer with in-memory files, without changing agenda files or browser state.
+
+The overwritten HTML had a July seed and no integration hooks; the exact overwrite actor was not established. Keep this check as a post-build requirement for that legacy runtime.
