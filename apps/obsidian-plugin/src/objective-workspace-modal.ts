@@ -3,20 +3,23 @@ import { statusLabel } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import { nextObjectiveAction } from "./home-model";
 
-export class ObjectiveWorkspaceModal extends Modal {
+export class ObjectiveWorkspaceContent {
   private tab: "brief" | "actions" | "folder";
   private browsePath = "";
   private generation = 0;
   private readonly markdownComponent = new Component();
-  constructor(app: App, private readonly plugin: FjgTaskManagerPlugin, private readonly taskId: string, folder = false, actions = false) {
-    super(app); this.tab = folder ? "folder" : actions ? "actions" : "brief";
+  private disposed = false;
+  constructor(private readonly app: App, private readonly plugin: FjgTaskManagerPlugin, private readonly taskId: string,
+    readonly contentEl: HTMLElement, private readonly setTitle: (title: string) => void, folder = false, actions = false) {
+    this.tab = folder ? "folder" : actions ? "actions" : "brief";
   }
-  onOpen(): void { this.modalEl.addClass("fjg-objective-workspace-shell"); void this.render(); }
-  onClose(): void { this.generation++; this.markdownComponent.unload(); this.contentEl.empty(); }
+  dispose(): void { this.disposed = true; this.generation++; this.markdownComponent.unload(); this.contentEl.empty(); }
+  refresh(): void { void this.render(); }
   private button(parent: HTMLElement, label: string, action: () => void): HTMLButtonElement {
     const button = parent.createEl("button", { text: label, attr: { type: "button" } }); button.addEventListener("click", action); return button;
   }
   private async render(): Promise<void> {
+    if (this.disposed) return;
     const generation = ++this.generation;
     this.markdownComponent.unload(); this.markdownComponent.load();
     this.contentEl.empty();
@@ -60,4 +63,15 @@ export class ObjectiveWorkspaceModal extends Modal {
       const files=service.objectiveFiles(this.taskId);for(const related of files){this.button(body,related.file.name,()=>void this.app.workspace.getLeaf("tab").openFile(related.file));body.createEl("code",{text:related.file.path,cls:"fjg-workspace-path"});}if(!files.length)body.createEl("p",{text:"No supporting files yet."});
     } catch(error){this.contentEl.createEl("p",{text:`Unable to open this objective: ${String(error)}`,cls:"fjg-workspace-error"});}
   }
+}
+
+export class ObjectiveWorkspaceModal extends Modal {
+  private workspace?: ObjectiveWorkspaceContent;
+  constructor(app: App, private readonly plugin: FjgTaskManagerPlugin, private readonly taskId: string, private readonly folder = false, private readonly actions = false) { super(app); }
+  onOpen(): void {
+    this.modalEl.addClass("fjg-objective-workspace-shell");
+    this.workspace = new ObjectiveWorkspaceContent(this.app, this.plugin, this.taskId, this.contentEl, title => this.setTitle(title), this.folder, this.actions);
+    this.workspace.refresh();
+  }
+  onClose(): void { this.workspace?.dispose(); this.workspace = undefined; }
 }

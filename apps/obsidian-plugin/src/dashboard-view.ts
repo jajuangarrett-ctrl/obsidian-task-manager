@@ -1,3 +1,4 @@
+import { ObjectiveWorkspaceContent } from "./objective-workspace-modal";
 import { renderOverviewGroups } from "./overview-view";
 import { filterAreaObjectives, NO_AREA, objectiveAreas } from "./area-model";
 import { matchesPerson, personKey } from "./people-model";
@@ -36,6 +37,18 @@ export class TaskDashboardView extends ItemView {
   private homeScope: HomeScope = "open";
   private homeQuery = "";
   private overviewQuery = "";
+  private overviewSelected = "";
+  private overviewWorkspace?: ObjectiveWorkspaceContent;
+  private overviewWorkspaceId = "";
+  private overviewPanelTitle?: HTMLElement;
+
+  async onClose(): Promise<void> { this.overviewWorkspace?.dispose(); }
+
+  private toggleOverviewObjective(id: string): void {
+    this.overviewSelected = this.overviewSelected === id ? "" : id;
+    this.render();
+  }
+
   private areaPath = "";
   private areaQuery = "";
   private homeProject = "";
@@ -89,6 +102,7 @@ export class TaskDashboardView extends ItemView {
   render(): void {
     const root = this.containerEl.children[1] as HTMLElement;
     const top = root.scrollTop;
+    const panelTop = root.querySelector<HTMLElement>(".fjg-overview-details")?.scrollTop ?? 0;
     this.tabPosition = root.querySelector<HTMLElement>(".fjg-dashboard-tabs")?.scrollLeft ?? this.tabPosition;
     root.querySelectorAll<HTMLElement>("[data-home-row]").forEach(row => this.rowPositions.set(row.dataset.homeRow!, row.scrollLeft));
     const focused = root.querySelector<HTMLInputElement>("input:focus");
@@ -130,6 +144,8 @@ export class TaskDashboardView extends ItemView {
       this.tabPosition = navigation.scrollLeft;
     }
     root.scrollTop = top;
+    const details = root.querySelector<HTMLElement>(".fjg-overview-details");
+    if (details) details.scrollTop = panelTop;
     if (focusKey) { const input = root.querySelector<HTMLInputElement>(`input[data-focus-key="${focusKey}"]`); input?.focus(); if (caret != null) input?.setSelectionRange(caret,caret); }
   }
 
@@ -470,12 +486,34 @@ export class TaskDashboardView extends ItemView {
     const query = this.overviewQuery.trim().toLocaleLowerCase();
     const matches = tasks.filter(task => task.record.title.toLocaleLowerCase().includes(query));
     root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} of ${tasks.length} objectives · Drag to change status, or use each objective’s menu.`, attr: { "aria-live": "polite" } });
-    renderOverviewGroups(root, matches, {
-      open: id => this.revealOverviewObjective(id),
+    const selected = tasks.find(task => task.record.task_id === this.overviewSelected);
+    if (!selected) this.overviewSelected = "";
+    const layout = root.createDiv({ cls: `fjg-overview-layout${selected ? " has-details" : ""}` });
+    const board = layout.createDiv({ cls: "fjg-overview-board" });
+    renderOverviewGroups(board, matches, {
+      open: id => this.toggleOverviewObjective(id),
       copyPath: id => void this.taskPlugin.copyTaskFolderPath(id),
       people: id => this.taskPlugin.openPeoplePicker(id),
       move: (id, status) => void this.moveKanbanTask(id, status)
-    });
+    }, this.overviewSelected);
+    if (selected) {
+      const panel = layout.createEl("aside", { cls: "fjg-overview-details", attr: { "aria-label": "Objective details", id: "fjg-overview-details" } });
+      const top = panel.createDiv({ cls: "fjg-overview-details-heading" });
+      this.overviewPanelTitle = top.createEl("h3", { text: selected.record.title });
+      const close = top.createEl("button", { text: "Close", attr: { type: "button", "aria-label": "Close objective details" } });
+      close.addEventListener("click", () => this.toggleOverviewObjective(selected.record.task_id));
+      if (this.overviewWorkspaceId !== selected.record.task_id) {
+        this.overviewWorkspace?.dispose();
+        const content = createDiv({ cls: "fjg-overview-details-content" });
+        this.overviewWorkspace = new ObjectiveWorkspaceContent(this.app, this.taskPlugin, selected.record.task_id, content,
+          title => { if (this.overviewPanelTitle) this.overviewPanelTitle.textContent = title; });
+        this.overviewWorkspaceId = selected.record.task_id;
+      }
+      panel.appendChild(this.overviewWorkspace!.contentEl);
+      this.overviewWorkspace!.refresh();
+    } else {
+      this.overviewWorkspace?.dispose(); this.overviewWorkspace = undefined; this.overviewWorkspaceId = "";
+    }
   }
 
   private renderKanban(root: HTMLElement, tasks: IndexedTask[]): void {

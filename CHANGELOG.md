@@ -1,3 +1,7 @@
+## 0.27.0 — Overview details panel
+
+Overview titles now open the existing objective workspace inside the same page. The right panel includes Start Here, Actions, Folder browser and existing People/update/action controls. Click another objective to switch, click the selected title again or Close to dismiss. Search and board scroll remain in place, and closing restores board width. Narrow panes stack details above the board. Other tabs retain their existing behavior.
+
 ## 0.26.0 — Folder-based Area tab
 
 - Adds Area with a live folder selector, counts, name search, compact status groups, and existing objective controls.

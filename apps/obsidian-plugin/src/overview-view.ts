@@ -8,7 +8,7 @@ export function renderOverviewGroups(root: HTMLElement, tasks: IndexedTask[], ac
   people: (id: string) => void;
   copyPath: (id: string) => void;
   move: (id: string, status: TaskStatus) => void;
-}): void {
+}, selectedId?: string): void {
   const grid = root.createDiv({ cls: "fjg-overview-grid", attr: { "aria-label": "Objective overview by status" } });
   for (const column of groupTasksForKanban(tasks)) {
     const section = grid.createEl("section", { cls: "fjg-overview-group", attr: { "data-overview-status": column.status, "aria-label": statusLabel(column.status) } });
@@ -41,7 +41,7 @@ export function renderOverviewGroups(root: HTMLElement, tasks: IndexedTask[], ac
         row.removeClass("is-dragging");
         grid.querySelectorAll(".is-drag-over").forEach(el => el.removeClass("is-drag-over"));
       });
-      const title = row.createEl("button", { text: task.record.title, cls: "fjg-overview-title", attr: { type: "button" } });
+      const title = row.createEl("button", { text: task.record.title, cls: "fjg-overview-title", attr: { type: "button", ...(selectedId !== undefined ? { "aria-expanded": String(id === selectedId), "aria-controls": "fjg-overview-details" } : {}) } });
       title.addEventListener("click", () => actions.open(id));
       const more = row.createEl("button", { cls: "fjg-overview-menu", attr: { type: "button", "aria-label": `Options for ${task.record.title}`, "aria-haspopup": "menu" } });
       setIcon(more, "ellipsis");
