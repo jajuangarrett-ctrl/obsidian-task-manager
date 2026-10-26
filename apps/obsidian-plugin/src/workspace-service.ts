@@ -157,6 +157,8 @@ export class TaskWorkspaceService {
   private rosterPeople: string[] = [];
   private agendaExportQueue: Promise<void> = Promise.resolve();
   private readonly index = new Map<string, IndexedTask>();
+  private duplicatePaths = new Map<string, string[]>();
+  private refreshGeneration = 0;
   private readonly projectIndex = new Map<string, IndexedProject>();
 
   constructor(
@@ -178,6 +180,8 @@ export class TaskWorkspaceService {
   }
 
   async refresh(): Promise<void> {
+    const generation = ++this.refreshGeneration;
+    const duplicates = new Map<string, string[]>();
     const settings = this.getSettings();
     const activePrefix = `${normalizePath(settings.activeRoot)}/`;
     const inboxPrefix = `${normalizePath(settings.inboxRoot)}/`;
@@ -186,7 +190,12 @@ export class TaskWorkspaceService {
     const projectArchivePrefix = `${normalizePath(settings.projectArchiveRoot)}/`;
     const next = new Map<string, IndexedTask>();
     const nextProjects = new Map<string, IndexedProject>();
-    for (const file of this.app.vault.getMarkdownFiles()) {
+    // Stable active-first ordering prevents Archive traversal order hiding an active copy.
+    // Duplicate records remain an explicit conflict; never mutate a selected copy silently.
+    const files = [...this.app.vault.getMarkdownFiles()].sort((a, b) =>
+      Number(a.path.startsWith(archivePrefix)) - Number(b.path.startsWith(archivePrefix))
+      || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    for (const file of files) {
       // Captured emails and preserved source notes inside subtask folders are attachments.
       if (file.path.includes("/Subtasks/")) continue;
       const legacyWorkspace = file.name === "task.md"
@@ -195,12 +204,21 @@ export class TaskWorkspaceService {
       const projectTask = file.path.startsWith(projectPrefix) && file.path.includes("/Tasks/");
       const inboxTask = file.path.startsWith(inboxPrefix) && file.path.includes("/Tasks/");
       const archivedTask = file.path.startsWith(archivePrefix) && file.path.includes("/Tasks/");
+      const inboxBundle = file.name === "task.md" && file.path.startsWith(`${inboxPrefix}Files/`)
+        && !file.path.slice(`${inboxPrefix}Files/`.length).includes("/Tasks/");
       const relocatedTask = isTaskRelocationPath(file.path);
-      const relocatedBundle = relocatedTask && isTaskRelocationBundlePath(file.path);
-      if (legacyWorkspace || projectTask || inboxTask || archivedTask || relocatedTask) {
+      const relocatedBundle = inboxBundle || (relocatedTask && isTaskRelocationBundlePath(file.path));
+      if (legacyWorkspace || projectTask || inboxTask || inboxBundle || archivedTask || relocatedTask) {
         try {
           const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
-          if (next.has(document.record.task_id)) throw new Error(`Duplicate task ID ${document.record.task_id}`);
+          const existing = next.get(document.record.task_id);
+          if (existing) {
+            const paths = duplicates.get(document.record.task_id) || [existing.taskFile.path];
+            paths.push(file.path);
+            duplicates.set(document.record.task_id, paths);
+            console.warn("[FJG Task Manager] Conflicting objective copies; reconcile before editing", document.record.task_id, paths);
+            continue;
+          }
           const folderPath = legacyWorkspace || relocatedBundle
             ? file.parent?.path || ""
             : workspaceRootFromTaskPath(file.path);
@@ -294,6 +312,8 @@ export class TaskWorkspaceService {
       try { const data = JSON.parse(await this.app.vault.read(roster)); this.rosterPeople = normalizePeople((data.members || []).filter((name: unknown) => typeof name === "string" && !/\b(team|program)\b|^(ISSP|BSSP)$/i.test(name))); }
       catch (error) { console.warn("[FJG Objective Manager] Could not read agenda roster", error); }
     }
+    if (generation !== this.refreshGeneration) return;
+    this.duplicatePaths = duplicates;
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);
     this.projectIndex.clear();
@@ -773,6 +793,8 @@ export class TaskWorkspaceService {
   }
 
   getById(taskId: string): IndexedTask {
+    const conflicts = this.duplicatePaths.get(taskId);
+    if (conflicts) throw new Error(`Objective ${taskId} has conflicting copies. Reconcile them before editing: ${conflicts.join("; ")}`);
     const task = this.index.get(taskId);
     if (!task) throw new Error(`No task matched ID ${taskId}.`);
     return task;

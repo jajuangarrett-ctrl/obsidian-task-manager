@@ -1709,3 +1709,41 @@ it("defaults first People assignment on without changing existing opt-outs or un
   await service.changePeople(associated.record.task_id,["Leyla Recinos","Dr. Carter"]);
   expect(service.getById(associated.record.task_id).record.agenda_selected).toBe(false);
 });
+
+
+describe("objective discovery and duplicate safety", () => {
+  it("keeps active copies visible regardless of discovery order and blocks ambiguous edits", async () => {
+    for (const archiveFirst of [true, false]) {
+      const { service, vault } = createService();
+      const record = createTaskRecord({ taskId: "tsk_duplicate_safety", title: "Preserve both", status: "on-hold" });
+      const paths = ["08 Tasks/Archive/Preserve both/task.md", "08 Tasks/Inbox/Files/Preserve both/task.md"];
+      if (!archiveFirst) paths.reverse();
+      for (const path of paths) await vault.create(path, renderTaskMarkdown(record, path));
+      await service.refresh();
+      expect(service.list()).toHaveLength(1);
+      expect(service.list()[0].taskFile.path).toContain("Inbox/Files");
+      await expect(service.changeStatus(record.task_id, "completed")).rejects.toThrow("conflicting copies");
+      for (const path of paths) expect(await vault.read(vault.getAbstractFileByPath(path) as never)).toContain(path);
+    }
+  });
+
+  it("indexes Files bundles and preserves identity and attachments through repeated archive/reopen", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const record = createTaskRecord({ taskId: "tsk_files_cycles", title: "Recovered objective", status: "inbox" });
+    const root = "08 Tasks/Inbox/Files/Recovered objective";
+    await vault.create(`${root}/task.md`, renderTaskMarkdown(record, "Source-backed recovery notes"));
+    await vault.create(`${root}/updates.md`, renderUpdatesMarkdown());
+    await vault.createFolder(`${root}/Files`);
+    await vault.create(`${root}/Files/evidence.txt`, "Unique evidence");
+    await service.refresh();
+    expect(service.getById(record.task_id).record.status).toBe("inbox");
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await service.changeStatus(record.task_id, "archived");
+      await service.changeStatus(record.task_id, "inbox");
+      expect(service.list({ includeArchived: true }).filter(t => t.record.task_id === record.task_id)).toHaveLength(1);
+      expect(vault.getFiles().filter(f => f.name === "task.md")).toHaveLength(1);
+      expect(vault.getFiles().filter(f => f.content === "Unique evidence")).toHaveLength(1);
+    }
+  });
+});
