@@ -1747,3 +1747,15 @@ describe("objective discovery and duplicate safety", () => {
     }
   });
 });
+
+
+it("reserves explicit objective IDs across overlapping creation requests", async () => {
+  const { service, vault } = createService(); await service.initialize();
+  const results = await Promise.allSettled([
+    service.createTask({ taskId: "tsk_concurrent_id", title: "First copy" }),
+    service.createTask({ taskId: "tsk_concurrent_id", title: "Second copy" })
+  ]);
+  expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+  expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
+  expect(vault.getFiles().filter(f => f.name === "task.md")).toHaveLength(1);
+});

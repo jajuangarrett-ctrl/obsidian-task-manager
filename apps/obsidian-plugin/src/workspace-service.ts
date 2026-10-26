@@ -159,6 +159,7 @@ export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
   private duplicatePaths = new Map<string, string[]>();
   private refreshGeneration = 0;
+  private readonly creatingIds = new Set<string>();
   private readonly projectIndex = new Map<string, IndexedProject>();
 
   constructor(
@@ -879,7 +880,9 @@ export class TaskWorkspaceService {
     audit: { requestId?: string; actor?: string } = {}
   ): Promise<IndexedTask> {
     let record = createTaskRecord(input);
-    if (this.index.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
+    if (this.index.has(record.task_id) || this.creatingIds.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
+    this.creatingIds.add(record.task_id);
+    try {
     const destination = input.destination?.trim();
     let folderPath: string;
     let paths: { taskPath: string; updatesPath: string };
@@ -924,6 +927,9 @@ export class TaskWorkspaceService {
     }
     await this.refresh();
     return this.getById(record.task_id);
+    } finally {
+      this.creatingIds.delete(record.task_id);
+    }
   }
 
   async createTasks(
