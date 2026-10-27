@@ -159,6 +159,7 @@ export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
   private duplicatePaths = new Map<string, string[]>();
   private refreshGeneration = 0;
+  private latestRefresh: Promise<void> = Promise.resolve();
   private readonly creatingIds = new Set<string>();
   private readonly projectIndex = new Map<string, IndexedProject>();
 
@@ -180,8 +181,14 @@ export class TaskWorkspaceService {
     await this.normalizeVisibleFolderNames();
   }
 
-  async refresh(): Promise<void> {
+  refresh(): Promise<void> {
     const generation = ++this.refreshGeneration;
+    const pending = Promise.resolve().then(() => this.scanWorkspace(generation));
+    this.latestRefresh = pending;
+    return pending;
+  }
+
+  private async scanWorkspace(generation: number): Promise<void> {
     const duplicates = new Map<string, string[]>();
     const settings = this.getSettings();
     const activePrefix = `${normalizePath(settings.activeRoot)}/`;
@@ -313,7 +320,9 @@ export class TaskWorkspaceService {
       try { const data = JSON.parse(await this.app.vault.read(roster)); this.rosterPeople = normalizePeople((data.members || []).filter((name: unknown) => typeof name === "string" && !/\b(team|program)\b|^(ISSP|BSSP)$/i.test(name))); }
       catch (error) { console.warn("[FJG Objective Manager] Could not read agenda roster", error); }
     }
-    if (generation !== this.refreshGeneration) return;
+    // Mutation callers need a committed index, not merely a discarded scan.
+    // Newer scans never wait on older scans, so following the newest promise is acyclic.
+    if (generation !== this.refreshGeneration) return this.latestRefresh;
     this.duplicatePaths = duplicates;
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);

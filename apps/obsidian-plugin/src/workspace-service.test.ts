@@ -1759,3 +1759,30 @@ it("reserves explicit objective IDs across overlapping creation requests", async
   expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
   expect(vault.getFiles().filter(f => f.name === "task.md")).toHaveLength(1);
 });
+
+it.each([undefined, "02 Programs/QA Fixture"])("creation waits for a superseding scan with destination %s", async (destination) => {
+  const {service,vault}=createService(); await service.initialize();
+  await service.createTask({title:"Existing scan anchor"});
+  if(destination) await vault.createFolder(destination);
+  const original=vault.cachedRead.bind(vault);
+  let trigger=true, blockOnce=true, settled=false;
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>release=resolve);
+  let newer:Promise<void>|undefined;
+  vault.cachedRead=async(file) => {
+    if(trigger) {trigger=false; newer=service.refresh();}
+    else if(blockOnce) {blockOnce=false; await gate;}
+    return original(file);
+  };
+  const creating=service.createTasks([{title:"Create during scan", people:["Fixture Person"],agendaSelected:false,destination}, {title:"Batch second objective",agendaSelected:false,destination}]);
+  void creating.then(()=>settled=true,()=>settled=true);
+  await new Promise(resolve=>setTimeout(resolve,20));
+  const returnedBeforeLatestScan=settled;
+  release();
+  const results=await creating;
+  await newer;
+  expect(returnedBeforeLatestScan).toBe(false);
+  expect(results).toHaveLength(2);
+  expect(service.getById(results[0].record.task_id).record.people).toEqual(["Fixture Person"]);
+  expect(vault.getFiles().filter(f=>f.name==="task.md")).toHaveLength(3);
+});

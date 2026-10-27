@@ -1,3 +1,7 @@
+# 0.28.3
+
+- Fix objective creation rolling back with No task matched ID when a background refresh supersedes the creation scan. Refresh callers now wait for the newest scan to commit, retaining stale-scan and duplicate-copy protections.
+
 # 0.28.0
 
 - Default Show on agendas on for new objectives and first future People assignments on unconfigured objectives.
