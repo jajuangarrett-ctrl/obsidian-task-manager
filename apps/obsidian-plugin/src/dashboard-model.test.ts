@@ -86,18 +86,20 @@ describe("dashboard task views", () => {
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("archived");
   });
 
-  it("filters No Project independently of active task status and preserves Inbox behavior", () => {
-    const noProjectOpen = task({ task_id: "no-project-open", status: "do-soon", project: "" });
-    const noProjectArchived = task({ task_id: "no-project-archived", status: "archived", project: "" });
-    const assigned = task({ task_id: "assigned", status: "inbox", project: "CalWORKs" });
-    const inboxWithoutProject = task({ task_id: "inbox-no-project", status: "inbox", project: "" });
-
-    expect(taskMatchesView(noProjectOpen, "no-project")).toBe(true);
-    expect(taskMatchesView(noProjectArchived, "no-project")).toBe(false);
-    expect(taskMatchesView(assigned, "no-project")).toBe(false);
-    expect(taskMatchesView(inboxWithoutProject, "inbox")).toBe(true);
-    expect(taskMatchesView(noProjectOpen, "inbox")).toBe(false);
-    expect(countTasksForView([noProjectOpen, noProjectArchived, assigned, inboxWithoutProject], "no-project")).toBe(2);
+  it("filters the Inbox folder by location, independently of tags and status", () => {
+    const assigned = task({status:"inbox",project:"CalWORKs"});
+    const untagged = task({status:"do-soon",project:""});
+    for (const record of [assigned, untagged, task({status:"completed"}), task({status:"archived"})]) {
+      expect(taskMatchesView(record,"no-project",undefined,true,"08 Tasks/Inbox/Files/Nested/Objective/task.md")).toBe(true);
+      expect(taskMatchesView(record,"no-project",undefined,true,"02 Programs/Veterans/Veterans Tasks/Objective/task.md")).toBe(false);
+    }
+    for(const path of ["08 Tasks/Inbox-old/Test/task.md","08 Tasks/Inbox2/Test/task.md","08 Tasks/Inbox/../../Elsewhere/Test/task.md", ""]) {
+      expect(taskMatchesView(untagged,"no-project",undefined,true,path)).toBe(false);
+    }
+    expect(taskMatchesView(assigned,"no-project",undefined,true,"08 Tasks\\Inbox\\Files\\Test\\task.md")).toBe(true);
+    expect(taskMatchesView(assigned,"no-project",undefined,true,"08 Tasks//Inbox/./Files/Test/task.md")).toBe(true);
+    expect(taskMatchesView(assigned,"inbox",undefined,true,"02 Programs/Veterans/Tasks/Test/task.md")).toBe(true);
+    expect(taskMatchesView(untagged,"all-open",undefined,true,"02 Programs/Veterans/Tasks/Test/task.md")).toBe(true);
   });
 
   it("shows legacy archived tasks in Completed", () => {
@@ -130,7 +132,7 @@ describe("dashboard task views", () => {
 
   it("places No Project directly before Completed without restoring Unassigned", () => {
     const keys = TASK_VIEWS.map((view) => view.key);
-    expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "No objective tag" });
+    expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "Inbox folder" });
     expect(keys.indexOf("no-project")).toBe(keys.indexOf("completed") - 1);
     expect(keys).not.toContain("unassigned");
   });

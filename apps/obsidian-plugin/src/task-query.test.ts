@@ -86,14 +86,15 @@ describe("queryTaskContext", () => {
   });
 
   it("returns a grounded weekly project status with attention tasks", () => {
-    const utcBoundaryTask = task({
+    const localSundayTask = task({
       task_id: "tsk_boundary",
       title: "Late Sunday project update",
       status: "ongoing",
       project: "Summer VAR",
-      updated_at: "2026-08-17T03:30:00.000Z"
+      // A Sunday evening in the user’s timezone, including UTC CI runners.
+      updated_at: new Date(2026, 7, 16, 20, 30).toISOString()
     });
-    const result = queryTaskContext([...tasks, utcBoundaryTask], projects, "What is the status of my projects this week?", now);
+    const result = queryTaskContext([...tasks, localSundayTask], projects, "What is the status of my projects this week?", now);
     expect(result.mode).toBe("weekly-project-status");
     expect(result.week).toEqual({ start: "2026-08-10", end: "2026-08-16" });
     expect(result.projects).toEqual(expect.arrayContaining([

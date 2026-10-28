@@ -382,12 +382,12 @@ export class TaskDashboardView extends ItemView {
       copy.createSpan({ text: definition.label, cls: "fjg-view-label" });
       const viewTasks = definition.key === "recent"
         ? mostRecentlyModifiedTasks(scopedTasks
-          .filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned))
+          .filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned, task.taskFile.path))
           .map((task) => ({
           ...task,
           modifiedAt: task.taskFile.stat.mtime
         })))
-        : scopedTasks.filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned));
+        : scopedTasks.filter((task) => taskMatchesView(task.record, definition.key, undefined, task.statusAssigned, task.taskFile.path));
       copy.createSpan({
         text: taskCountLabel(viewTasks.length),
         cls: "fjg-view-count"
@@ -775,12 +775,12 @@ export class TaskDashboardView extends ItemView {
       .filter((task) => matchesPerson(task.record, this.person));
     const viewTasks = this.view === "recent"
       ? mostRecentlyModifiedTasks(scopedTasks
-        .filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned))
+        .filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned, task.taskFile.path))
         .map((task) => ({
         ...task,
         modifiedAt: task.taskFile.stat.mtime
       })))
-      : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned));
+      : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned, task.taskFile.path));
     const tasks = viewTasks.filter((task) => taskMatchesSearch(task, query));
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No objectives match this view." });

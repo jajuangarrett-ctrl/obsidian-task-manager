@@ -1,3 +1,9 @@
+## 0.28.5
+
+- Replace No objective tag with Inbox folder, using the objective workspace path under `08 Tasks/Inbox/` independently of tags and status.
+- Refresh folder membership after creation or relocation while preserving other views and the current Completed behavior.
+- Make the weekly-query Sunday fixture timezone-independent; validate UTC and Pacific time.
+
 # 0.28.4
 
 - Complete and reopen objectives in place, preserving folders, attachments, custom metadata, and previous status. Serialize competing status writes and roll back interrupted history writes.

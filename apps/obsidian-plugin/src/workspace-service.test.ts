@@ -1905,3 +1905,23 @@ it("filters Completed by saved status across refreshes without rewriting source 
   expect(matchesHomeScope(completed.record, "completed")).toBe(true);
   expect(taskMatchesView(completed.record, "completed")).toBe(true);
 });
+
+it("updates Inbox folder membership after creation and relocation without changing metadata or files", async () => {
+  const {service,vault}=createService(); await service.initialize();
+  await vault.createFolder("02 Programs/Veterans");
+  const inside=await service.createTask({title:"Inbox location fixture",status:"waiting"});
+  const matches=(id:string) => { const t=service.getById(id); return taskMatchesView(t.record,"no-project",undefined,t.statusAssigned,t.taskFile.path); };
+  expect(matches(inside.record.task_id)).toBe(true);
+  const note=await service.createRelatedNote(inside.record.task_id,"Evidence","Retain attachment bytes");
+  const original=await vault.read(note as never);
+  const moved=await service.relocateTask(inside.record.task_id,"02 Programs/Veterans");
+  expect(matches(inside.record.task_id)).toBe(false);
+  expect(moved.record.status).toBe("waiting");
+  expect(moved.record.task_id).toBe(inside.record.task_id);
+  expect(moved.record.tags).toEqual(inside.record.tags);
+  expect(await vault.read(vault.getAbstractFileByPath(moved.record.related_files[0]) as never)).toBe(original);
+  expect(taskMatchesView(moved.record,"all-open",undefined,true,moved.taskFile.path)).toBe(true);
+  const filed=await service.createTask({title:"Chosen destination fixture",destination:"02 Programs/Veterans",status:"inbox"});
+  expect(matches(filed.record.task_id)).toBe(false);
+  expect(taskMatchesView(filed.record,"inbox",undefined,true,filed.taskFile.path)).toBe(true);
+});

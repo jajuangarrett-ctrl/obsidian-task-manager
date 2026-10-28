@@ -48,7 +48,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
-  { key: "no-project", label: "No objective tag", icon: "folder-minus" },
+  { key: "no-project", label: "Inbox folder", icon: "folder-input" },
   { key: "completed", label: "Completed", icon: "check-circle" }
 ] as const;
 
@@ -71,12 +71,27 @@ export function isDueOrOverdue(record: TaskRecord, today = todayKey()): boolean 
   return Boolean(record.due) && isOpenTask(record) && record.due <= today;
 }
 
+/** Uses the actual workspace path, never tag/status metadata. */
+export function isInInboxFolder(taskFilePath: string): boolean {
+  const segments: string[] = [];
+  for (const part of taskFilePath.replace(/\\/g, "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") { if (!segments.length) return false; segments.pop(); }
+    else segments.push(part);
+  }
+  segments.pop(); // task record filename; the remaining path is its own folder.
+  const folder = segments.join("/");
+  return folder === "08 Tasks/Inbox" || folder.startsWith("08 Tasks/Inbox/");
+}
+
 export function taskMatchesView(
   record: TaskRecord,
   view: TaskViewKey,
   today = todayKey(),
-  statusAssigned = true
+  statusAssigned = true,
+  taskFilePath = ""
 ): boolean {
+  if (view === "no-project") return isInInboxFolder(taskFilePath);
   if (view === "completed" && record.__fjgSourceArchived) return false;
   if (view === "archived") return record.status === "completed" || record.status === "archived";
   // Compatibility fallback for unindexed records; scanned saved-Archived records are excluded above.
@@ -84,7 +99,6 @@ export function taskMatchesView(
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
-  if (view === "no-project") return !record.project.trim();
   if (view === "inbox") return statusAssigned && record.status === "inbox";
   return record.status === view;
 }
