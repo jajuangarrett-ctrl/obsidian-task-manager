@@ -1925,3 +1925,16 @@ it("updates Inbox folder membership after creation and relocation without changi
   expect(matches(filed.record.task_id)).toBe(false);
   expect(taskMatchesView(filed.record,"inbox",undefined,true,filed.taskFile.path)).toBe(true);
 });
+
+it("keeps Completed state and attachments when moving an Inbox folder objective to a Program", async () => {
+ const {service,vault}=createService();await service.initialize();await vault.createFolder("02 Programs/Delete QA");
+ const task=await service.createTask({title:"Completed move fixture",status:"completed"});
+ const file=await service.createRelatedNote(task.record.task_id,"Evidence","Keep completed evidence");
+ const originalBytes=await vault.read(file as never);
+ expect(taskMatchesView(task.record,"no-project",undefined,true,task.taskFile.path)).toBe(true);
+ const moved=await service.relocateTask(task.record.task_id,"02 Programs/Delete QA");
+ expect(moved.record.status).toBe("completed");expect(moved.record.task_id).toBe(task.record.task_id);
+ expect(taskMatchesView(moved.record,"no-project",undefined,true,moved.taskFile.path)).toBe(false);
+ expect(taskMatchesView(moved.record,"completed",undefined,true,moved.taskFile.path)).toBe(true);
+ expect(await vault.read(vault.getAbstractFileByPath(moved.record.related_files[0]) as never)).toBe(originalBytes);
+});

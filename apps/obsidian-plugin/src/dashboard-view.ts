@@ -1,3 +1,4 @@
+import { renderObjectiveMoreMenu } from "./objective-more-menu";
 import { ObjectiveWorkspaceContent } from "./objective-workspace-modal";
 import { renderOverviewGroups } from "./overview-view";
 import { filterAreaObjectives, NO_AREA, objectiveAreas } from "./area-model";
@@ -899,12 +900,6 @@ export class TaskDashboardView extends ItemView {
           new Notice(error instanceof Error ? error.message : String(error));
         }
       });
-      const rename = controls.createEl("button", {
-        text: "Rename",
-        cls: "fjg-task-rename-button",
-        attr: { type: "button", "aria-label": `Rename objective ${task.record.title}` }
-      });
-      rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
     } else {
       const update = controls.createEl("button", {
         text: "Update",
@@ -912,42 +907,15 @@ export class TaskDashboardView extends ItemView {
         attr: { type: "button", "aria-label": `Add an update to ${task.record.title}` }
       });
       update.addEventListener("click", () => this.taskPlugin.openUpdateModal(task.record.task_id));
-      const more = controls.createEl("details", { cls: "fjg-task-more" });
-      more.createEl("summary", {
-        text: "More",
-        attr: { "aria-label": `More actions for ${task.record.title}` }
-      });
-      const menu = more.createDiv({ cls: "fjg-task-more-menu" });
-      const rename = menu.createEl("button", {
-        text: "Rename",
-        cls: "fjg-task-rename-button",
-        attr: { type: "button", "aria-label": `Rename objective ${task.record.title}` }
-      });
-      rename.addEventListener("click", () => this.taskPlugin.openRenameTaskModal(task.record.task_id));
-      const relocate = menu.createEl("button", {
-        text: "Move folder",
-        attr: {
-          type: "button",
-          "aria-label": `Move ${task.record.title} to a Program or Area folder`
-        }
-      });
-      relocate.addEventListener("click", () => this.taskPlugin.openTaskRelocationModal(task.record.task_id));
-      const addFile = menu.createEl("button", {
-        text: "Add file",
-        attr: { type: "button", "aria-label": `Add a file to ${task.record.title}` }
-      });
-      addFile.addEventListener("click", () => this.taskPlugin.openTaskFileModal(task.record.task_id));
-      const convert = menu.createEl("button", { text: "Convert to action" });
-      convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open());
-      const archive = menu.createEl("button", {
-        text: "Complete",
-        attr: { type: "button", "aria-label": `Complete ${task.record.title}` }
-      });
-      archive.addEventListener("click", () => {
-        more.open = false;
-        this.taskPlugin.openArchiveTaskModal(task.record.task_id);
-      });
     }
+    renderObjectiveMoreMenu(controls, task.record.title, {
+      rename: () => this.taskPlugin.openRenameTaskModal(task.record.task_id),
+      move: () => this.taskPlugin.openTaskRelocationModal(task.record.task_id),
+      addFile: () => this.taskPlugin.openTaskFileModal(task.record.task_id),
+      convert: () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open(),
+      complete: task.record.status === "completed" || task.record.status === "archived" ? undefined : () => this.taskPlugin.openArchiveTaskModal(task.record.task_id),
+      remove: () => void this.taskPlugin.openDeleteObjectiveModal(task.record.task_id)
+    });
     if (compact) {
       const summary = row.createEl("button", { cls: "fjg-home-action-summary", text: task.record.subtasks.length
         ? `Actions · ${task.record.subtasks.filter(sub => sub.completed).length} of ${task.record.subtasks.length} complete` : "Actions · Add your first step" });

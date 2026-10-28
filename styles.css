@@ -1994,3 +1994,9 @@
   .fjg-overview-layout.has-details { grid-template-columns: minmax(0, 1fr); }
   .fjg-overview-details { position: static; grid-row: 1; max-height: 50vh; }
 }
+
+/* Visible tap targets for objective actions, including Completed cards. */
+@media (pointer: coarse) {
+  .fjg-task-more > summary, .fjg-task-more-menu button { min-height: 44px; }
+}
+.is-mobile .fjg-task-more > summary, .is-mobile .fjg-task-more-menu button { min-height: 44px; }

@@ -1,3 +1,4 @@
+import { DeleteObjectiveModal } from "./src/delete-objective-modal";
 import { PeopleModal } from "./src/people-modal";
 import { OBJECTIVE_AGENDA_PATH } from "./src/people-model";
 import {
@@ -451,6 +452,17 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Objective renamed to ${renamed.record.title}.`);
       this.refreshDashboard();
     }).open();
+  }
+
+  async openDeleteObjectiveModal(taskId: string): Promise<void> {
+    try {
+      const preview = await this.workspaceService.previewDelete(taskId);
+      new DeleteObjectiveModal(this.app, preview, async confirmation => {
+        const recovery = await this.workspaceService.deleteObjective(preview, confirmation);
+        new Notice(`Objective moved to recoverable vault Trash: ${recovery}`, 12000);
+        this.refreshDashboard();
+      }).open();
+    } catch(error) { new Notice(error instanceof Error ? error.message : String(error), 10000); }
   }
 
   openArchiveTaskModal(taskId: string): void {

@@ -1,3 +1,8 @@
+## 0.29.0
+
+- Add separate Delete objective preview and explicit confirmation, using recoverable vault Trash only. Preserve complete contents and a recovery manifest; block ambiguous/shared/nested ownership and detect stale previews.
+- Keep More, Move folder and Delete available on Completed cards, including Inbox folder, with native tap/keyboard controls. Complete and Reopen keep files in place.
+
 ## 0.28.5
 
 - Replace No objective tag with Inbox folder, using the objective workspace path under `08 Tasks/Inbox/` independently of tags and status.

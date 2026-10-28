@@ -1,3 +1,4 @@
+import { DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
 import YAML from "yaml";
 import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, agendaChoice, normalizePeople } from "./people-model";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
@@ -1974,6 +1975,22 @@ export class TaskWorkspaceService {
   private folderIsEmpty(path: string): boolean {
     const prefix = `${normalizePath(path)}/`;
     return !this.app.vault.getAllLoadedFiles().some((entry) => normalizePath(entry.path).startsWith(prefix));
+  }
+
+  private deletion?: ObjectiveDeleteTransaction;
+
+  async previewDelete(taskId: string): Promise<DeletePreview> {
+    const indexed = this.getById(taskId);
+    const task = {...indexed, record:parseTaskMarkdown(await this.app.vault.read(indexed.taskFile)).record};
+    const others = await Promise.all(this.list({includeArchived:true}).map(async other => ({...other, record:parseTaskMarkdown(await this.app.vault.read(other.taskFile)).record})));
+    return previewObjectiveDelete(this.app, task, this.taskOwnedFolderRoots(task), others, [this.briefingPath()]);
+  }
+
+  async deleteObjective(preview: DeletePreview, confirmation: {title:string;acknowledgeLinks:boolean}): Promise<string> {
+    this.deletion ||= new ObjectiveDeleteTransaction(this.app, id => this.previewDelete(id));
+    const recovery = await this.deletion.execute(preview, confirmation);
+    await this.refresh();
+    return recovery;
   }
 
   private taskOwnedFolderRoots(task: IndexedTask): string[] {
