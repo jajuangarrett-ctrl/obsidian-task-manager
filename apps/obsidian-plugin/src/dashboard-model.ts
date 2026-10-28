@@ -49,7 +49,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
   { key: "no-project", label: "No objective tag", icon: "folder-minus" },
-  { key: "archived", label: "Archived", icon: "archive" }
+  { key: "completed", label: "Completed", icon: "check-circle" }
 ] as const;
 
 export function groupTasksForKanban<TTask extends KanbanTask>(tasks: readonly TTask[]): KanbanColumn<TTask>[] {
@@ -77,9 +77,10 @@ export function taskMatchesView(
   today = todayKey(),
   statusAssigned = true
 ): boolean {
-  if (view === "archived") return record.status === "archived";
-  // Archived tasks have a single home in the dashboard: the Archived view.
-  if (record.status === "archived") return false;
+  if (view === "completed" && record.__fjgSourceArchived) return false;
+  if (view === "archived") return record.status === "completed" || record.status === "archived";
+  // Compatibility fallback for unindexed records; scanned saved-Archived records are excluded above.
+  if (record.status === "archived") return view === "completed";
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);

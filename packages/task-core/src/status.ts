@@ -38,7 +38,7 @@ const ALLOWED_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   waiting: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "on-hold", "completed", "archived"],
   "on-hold": ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "completed", "archived"],
   completed: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "archived"],
-  archived: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold"]
+  archived: ["inbox", "do-first", "do-soon", "ongoing", "delegate", "waiting", "on-hold", "completed"]
 };
 
 export function normalizeStatus(value: unknown, fallback: TaskStatus = "inbox"): TaskStatus {
@@ -82,7 +82,7 @@ export function statusLabel(status: TaskStatus): string {
     waiting: "Waiting",
     "on-hold": "On Hold",
     completed: "Completed",
-    archived: "Archived"
+    archived: "Completed"
   };
   return labels[status];
 }

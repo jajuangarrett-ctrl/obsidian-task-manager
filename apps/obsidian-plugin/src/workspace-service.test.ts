@@ -1,3 +1,5 @@
+import { matchesHomeScope, filterHomeTasks } from "./home-model";
+import { taskMatchesView, countTasksForView } from "./dashboard-model";
 import { describe, expect, it, vi } from "vitest";
 
 const obsidianMock = vi.hoisted(() => {
@@ -264,7 +266,7 @@ describe("Live voice writes to authoritative task Markdown", () => {
     expect(duplicate.error).toContain("already has");expect(changed).toHaveBeenCalledTimes(1);
     active=false;await expect(tools.execute("create_action",JSON.stringify(args),"cancelled")).rejects.toThrow("ended");
     active=true;await service.changeStatus(parent.record.task_id,"archived");current=await read();
-    await expect(tools.execute("create_action",JSON.stringify({...args,expected_revision:current.revision,title:"Another"}),"archive")).rejects.toThrow("Reopen");
+    await expect(tools.execute("create_action",JSON.stringify({...args,expected_revision:current.revision,title:"Another"}),"completed")).resolves.toMatchObject({saved:true});
   });
 
   it("searches all indexed notes, updates and nested actions with ranked non-phrase matching", async () => {
@@ -348,7 +350,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await expect(service.moveSubtask(id, "missing", "up")).rejects.toThrow("Action not found");
     expect(service.getById(id).record.subtasks).toEqual([b, c, a]);
     await service.changeStatus(id, "archived");
-    await expect(service.moveSubtask(id, a.id, "up")).rejects.toThrow("Reopen");
+    await expect(service.moveSubtask(id, a.id, "up")).resolves.toBeUndefined();
   });
 
   it("captures a complete action under the exact objective with a ready attachment folder", async () => {
@@ -366,7 +368,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(await vault.read(stored.taskFile as never)).toContain("task_id:");
     await expect(service.addSubtask(parent.record.task_id, "  ")).rejects.toThrow("Enter an action title");
     await service.changeStatus(parent.record.task_id, "archived");
-    await expect(service.addSubtask(parent.record.task_id, "Blocked")).rejects.toThrow("Reopen the parent objective");
+    await expect(service.addSubtask(parent.record.task_id, "Allowed completed action")).resolves.toMatchObject({title:"Allowed completed action"});
   });
   it("keeps subtask destinations and captured emails through parent rename, relocation and archive/reopen", async () => {
     const { service, vault } = createService();
@@ -405,7 +407,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(sub.notes).toContain("Keep the context");
     expect(sub.history).toContain("Approval requested");
     expect(sub.status).toBe("waiting");
-    expect(service.getById(source.record.task_id).archived).toBe(true);
+    expect(service.getById(source.record.task_id).record.status).toBe("completed");
     expect(service.subtaskFiles(parent.record.task_id, sub.id)).toHaveLength(1);
     const promoted = await service.promoteSubtask(parent.record.task_id, sub.id);
     expect(promoted.record).toMatchObject({ status: "waiting", due: "2026-09-19" });
@@ -438,7 +440,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(stored[1]).toMatchObject({ ...action, source_task_id: source.record.task_id, history: "Original update history", attachment_folder: `Subtasks/${action.title} (2)` });
     expect(service.getById(previous.record.task_id).record.subtasks).toEqual([]);
     expect(service.subtaskFiles(parent.record.task_id, action.id).map((file) => file.name)).toEqual(["Email.md"]);
-    expect(service.getById(source.record.task_id).archived).toBe(true);
+    expect(service.getById(source.record.task_id).record.status).toBe("completed");
     expect(service.getById(source.record.task_id).record.related_files).toContain(`${service.subtaskFolder(parent.record.task_id, action.id)}/Email.md`);
     expect(service.subtaskFiles(parent.record.task_id, sibling.id).map((file) => file.name)).toEqual(["Other.md"]);
   });
@@ -455,7 +457,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await service.refresh();
     await service.convertTaskToSubtask(source.record.task_id, parent.record.task_id);
     expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(1);
-    expect(service.getById(source.record.task_id).archived).toBe(true);
+    expect(service.getById(source.record.task_id).record.status).toBe("completed");
   });
 
   it("restores both parents, attachments and references when archiving after an action move fails", async () => {
@@ -472,7 +474,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await vault.create(original, "Keep evidence");
     await service.refresh();
     const before = await vault.read(previous.taskFile as never);
-    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Move rollback source/task.md";
+    vault.failNextWriteTarget = source.taskFile.path;
     await expect(service.convertTaskToSubtask(source.record.task_id, parent.record.task_id)).rejects.toThrow();
     expect(await vault.read(previous.taskFile as never)).toBe(before);
     expect(service.getById(parent.record.task_id).record.subtasks).toEqual([]);
@@ -503,7 +505,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const source = await service.createTask({ title: "Rollback source" });
     const file = await service.createRelatedNote(source.record.task_id, "Evidence", "Keep me");
     const original = file.path;
-    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Rollback source/task.md";
+    vault.failNextWriteTarget = source.taskFile.path;
     await expect(service.convertTaskToSubtask(source.record.task_id, parent.record.task_id)).rejects.toThrow();
     expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(0);
     expect(service.getById(source.record.task_id).archived).toBe(false);
@@ -548,24 +550,24 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const archived = await service.changeStatus(task.record.task_id, "archived");
 
     expect(archived).toMatchObject({
-      archived: true,
+      archived: false,
       record: {
         task_id: "tsk_confirmed_archive",
         title: "Archive after confirmation",
-        status: "archived",
+        status: "completed",
         project: "Basic Needs Expansion"
       }
     });
     expect(archived.record.tags).toContain("project/Basic_Needs_Expansion");
-    expect(archived.taskFile.path).toBe("08 Tasks/Archive/Tasks/Archive after confirmation/task.md");
-    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Archive after confirmation/task.md")).toBeNull();
+    expect(archived.taskFile.path).toBe("08 Tasks/Inbox/Tasks/Archive after confirmation/task.md");
+    expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Tasks/Archive after confirmation/task.md")).not.toBeNull();
     for (const collection of ["Tasks", "Updates", "Files"]) {
-      expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}/Archive after confirmation`)).toBeNull();
+      expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}/Archive after confirmation`)).not.toBeNull();
       expect(vault.getAbstractFileByPath(`08 Tasks/Inbox/${collection}`)).not.toBeNull();
     }
   });
 
-  it("cleans a relocated objective's empty tree while preserving its collection and neighboring files", async () => {
+  it("archives a relocated objective in place with its empty folders and neighboring files", async () => {
     const { service, vault } = createService();
     await service.initialize();
     await vault.createFolder("03 Areas");
@@ -580,13 +582,14 @@ describe("TaskWorkspaceService project-centered moves", () => {
 
     const archived = await service.changeStatus(task.record.task_id, "archived");
 
-    expect(vault.getAbstractFileByPath(source)).toBeNull();
+    expect(vault.getAbstractFileByPath(source)).not.toBeNull();
     expect(vault.getAbstractFileByPath("03 Areas/Career/Career Tasks")).not.toBeNull();
     expect(vault.getAbstractFileByPath("03 Areas/Career/Career Tasks/neighbor.md")).not.toBeNull();
-    const evidence = vault.getAbstractFileByPath("08 Tasks/Archive/Files/Cleanup bundle/evidence.md");
+    const evidence = vault.getAbstractFileByPath(`${source}/Files/evidence.md`);
     expect(evidence).toBeInstanceOf(obsidianMock.MockTFile);
     expect(await vault.read(evidence as InstanceType<typeof obsidianMock.MockTFile>)).toContain("Keep archived evidence");
-    expect(archived.archived).toBe(true);
+    expect(archived.archived).toBe(false);
+      expect(archived.record.status).toBe("completed");
   });
 
   it("preserves source folders with remaining notes and hidden files", async () => {
@@ -600,7 +603,8 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const archived = await service.changeStatus(task.record.task_id, "archived");
-      expect(archived.archived).toBe(true);
+      expect(archived.archived).toBe(false);
+      expect(archived.record.status).toBe("completed");
       expect(vault.getAbstractFileByPath(`${taskRoot}/personal.md`)).not.toBeNull();
       expect(vault.getAbstractFileByPath(taskRoot)).not.toBeNull();
       expect(vault.getAbstractFileByPath(updatesRoot)).not.toBeNull();
@@ -608,15 +612,15 @@ describe("TaskWorkspaceService project-centered moves", () => {
     } finally { warning.mockRestore(); }
   });
 
-  it("leaves the source tree intact when an archive move fails", async () => {
+  it("rolls history back when an archive record write fails", async () => {
     const { service, vault } = createService();
     await service.initialize();
     const task = await service.createTask({ taskId: "tsk_cleanup_rollback", title: "Failed archive" });
     const originalTaskPath = task.taskFile.path;
     const originalUpdatesPath = task.updatesFile!.path;
-    vault.failNextRenameTarget = "08 Tasks/Archive/Tasks/Failed archive/task.md";
+    vault.failNextWriteTarget = originalTaskPath;
 
-    await expect(service.changeStatus(task.record.task_id, "archived")).rejects.toThrow("Simulated rename failure");
+    await expect(service.changeStatus(task.record.task_id, "archived")).rejects.toThrow();
 
     expect(vault.getAbstractFileByPath(originalTaskPath)).not.toBeNull();
     expect(vault.getAbstractFileByPath(originalUpdatesPath)).not.toBeNull();
@@ -634,9 +638,10 @@ describe("TaskWorkspaceService project-centered moves", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const archived = await service.changeStatus(task.record.task_id, "archived");
-      expect(archived.archived).toBe(true);
+      expect(archived.archived).toBe(false);
+      expect(archived.record.status).toBe("completed");
       expect(vault.getAbstractFileByPath(vault.failRemovePath)).not.toBeNull();
-      expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Locked source")).toBeNull();
+      expect(vault.getAbstractFileByPath("08 Tasks/Inbox/Updates/Locked source")).not.toBeNull();
     } finally { warning.mockRestore(); }
   });
 
@@ -1760,6 +1765,82 @@ it("reserves explicit objective IDs across overlapping creation requests", async
   expect(vault.getFiles().filter(f => f.name === "task.md")).toHaveLength(1);
 });
 
+
+it("archives and restores in place repeatedly, serializes competing requests, and preserves unknown metadata and hidden/shared/nested files", async () => {
+  const {service,vault}=createService(); await service.initialize();
+  const task=await service.createTask({taskId:"tsk_status_cycles", title:"Status cycles",status:"waiting"});
+  const path=task.taskFile.path, history=task.updatesFile!.path;
+  const original=await vault.read(task.taskFile as never);
+  await vault.modify(task.taskFile as never,original.replace("schema_version:","custom_metadata: {important: true}\nschema_version:"));
+  const files=["08 Tasks/Inbox/Files/Status cycles/nested/deep/evidence.bin","08 Tasks/Inbox/Files/Status cycles/.private","Shared/reference.md"];
+  for(const f of files) await vault.create(f,`bytes:${f}`);
+  vault.hiddenFiles.add("08 Tasks/Inbox/Files/Status cycles/.hidden-dir/secret");
+  await service.refresh();
+  for(let cycle=0;cycle<3;cycle++) {
+    await Promise.all([service.changeStatus(task.record.task_id,"archived"), service.changeStatus(task.record.task_id,"archived")]);
+    expect(service.list().find(t=>t.record.task_id===task.record.task_id)?.record.status).toBe("completed");
+    expect(service.getById(task.record.task_id).record.completed_from_status).toBe("waiting");
+    await service.restoreTask(task.record.task_id);
+    expect(service.getById(task.record.task_id).record.status).toBe("waiting");
+    expect(service.getById(task.record.task_id).taskFile.path).toBe(path);
+    expect(service.getById(task.record.task_id).updatesFile!.path).toBe(history);
+    for(const f of files) expect((vault.getAbstractFileByPath(f) as any).content).toBe(`bytes:${f}`);
+  }
+  expect(await vault.read(task.taskFile as never)).toContain("custom_metadata:");
+  expect((await vault.read(task.updatesFile as never)).match(/Status changed from waiting to completed/g)).toHaveLength(3);
+  expect(vault.hiddenFiles.size).toBe(1);
+});
+
+it("restores legacy archived records to Inbox when previous status is unknown, without relocating",async()=>{
+  const {service,vault}=createService(); await service.initialize();
+  const record=createTaskRecord({taskId:"tsk_old_archived",title:"Old archive",status:"archived"});
+  const path="08 Tasks/Archive/Old archive/task.md";
+  await vault.create(path,renderTaskMarkdown(record)); await service.refresh();
+  const restored=await service.restoreTask(record.task_id);
+  expect(restored.record.status).toBe("inbox");expect(restored.taskFile.path).toBe(path);expect(restored.archived).toBe(false);
+});
+
+it("restores a known legacy status from history and preserves completed timestamps through archive",async()=>{
+  const {service,vault}=createService();await service.initialize();
+  const task=await service.createTask({taskId:"tsk_completed_restore",title:"Completed restore",status:"completed"});
+  const completed=task.record.completed_at;
+  await service.changeStatus(task.record.task_id,"archived");
+  const restored=await service.restoreTask(task.record.task_id);
+  expect(restored.record.status).toBe("inbox");expect(restored.record.completed_at).toBe("");expect(completed).toBeTruthy();
+  const record=createTaskRecord({taskId:"tsk_history_restore",title:"History restore",status:"archived"});
+  const root="08 Tasks/Archive/History restore";
+  await vault.create(root+"/task.md",renderTaskMarkdown(record));
+  await vault.create(root+"/updates.md","# Updates\n\n### 2026-01-02 09:00 — Franklin\n\n- Type: `archived`\n- Status: `waiting` → `archived`\n\nArchived.\n");
+  await service.refresh();expect((await service.restoreTask(record.task_id)).record.status).toBe("waiting");
+});
+
+ it("exposes legacy archived records as Completed and preserves Inbox exceptions on refresh", async()=>{
+ const {service,vault}=createService(); await service.initialize();
+ for(let n=0;n<18;n++){const record=createTaskRecord({taskId:`tsk_inbox_exception_${n}`,title:`Exception ${n}`,status:"inbox"}); await vault.create(`08 Tasks/Inbox/Files/Exception ${n}/task.md`,renderTaskMarkdown(record));}
+ const record=createTaskRecord({taskId:"tsk_legacy_completed_visibility",title:"Legacy completed",status:"archived"});
+ const path="08 Tasks/Archive/Legacy/task.md"; const original=renderTaskMarkdown(record);await vault.create(path,original);await service.refresh();
+ expect(service.list().filter(t=>t.record.status==="inbox")).toHaveLength(18);
+ expect(service.getById(record.task_id).record.status).toBe("completed");
+ expect(service.getById(record.task_id).archived).toBe(false);
+ expect(await vault.read(vault.getAbstractFileByPath(path) as never)).toBe(original);
+ });
+
+it("rolls history back after an interrupted completion write and permits a clean retry",async()=>{
+ const {service,vault}=createService();await service.initialize();
+ const task=await service.createTask({taskId:"tsk_completion_interruption",title:"Interrupted completion",status:"waiting"});
+ const beforeTask=await vault.read(task.taskFile as never),beforeHistory=await vault.read(task.updatesFile as never);
+ vault.failNextWriteTarget=task.taskFile.path;
+ await expect(service.changeStatus(task.record.task_id,"completed")).rejects.toThrow("Simulated write failure");
+ expect(await vault.read(task.taskFile as never)).toBe(beforeTask);
+ expect(await vault.read(task.updatesFile as never)).toBe(beforeHistory);
+ await service.changeStatus(task.record.task_id,"completed");
+ expect(service.getById(task.record.task_id).record.status).toBe("completed");
+ expect(service.getById(task.record.task_id).taskFile.path).toBe(task.taskFile.path);
+ await service.restoreTask(task.record.task_id);
+ expect(service.getById(task.record.task_id).record.status).toBe("waiting");
+});
+
+
 it.each([undefined, "02 Programs/QA Fixture"])("creation waits for a superseding scan with destination %s", async (destination) => {
   const {service,vault}=createService(); await service.initialize();
   await service.createTask({title:"Existing scan anchor"});
@@ -1785,4 +1866,42 @@ it.each([undefined, "02 Programs/QA Fixture"])("creation waits for a superseding
   expect(results).toHaveLength(2);
   expect(service.getById(results[0].record.task_id).record.people).toEqual(["Fixture Person"]);
   expect(vault.getFiles().filter(f=>f.name==="task.md")).toHaveLength(3);
+});
+
+
+it("filters Completed by saved status across refreshes without rewriting source records", async () => {
+  const { service, vault } = createService();
+  await service.initialize();
+  const fixtures = [
+    { title: "Saved Archived", status: "archived", legacy_archive_status: "" },
+    { title: "Saved Completed", status: "completed", legacy_archive_status: "" },
+    { title: "Completed with history", status: "completed", legacy_archive_status: "archived" },
+    { title: "Open with history", status: "waiting", legacy_archive_status: "archived" }
+  ] as const;
+  const sources: { id: string; path: string; text: string }[] = [];
+  for (const [i, fixture] of fixtures.entries()) {
+    const record = { ...createTaskRecord({ taskId: `tsk_saved_status_${i}`, title: fixture.title, status: fixture.status }),
+      legacy_archive_status: fixture.legacy_archive_status, legacy_archived_at: "2026-10-01T00:00:00Z" };
+    const path = `08 Tasks/Archive/Fixture ${i}/task.md`;
+    const text = renderTaskMarkdown(record);
+    await vault.create(path, text);
+    sources.push({ id: record.task_id, path, text });
+  }
+  for (let scan = 0; scan < 2; scan++) {
+    await service.refresh();
+    const tasks = sources.map(source => service.getById(source.id));
+    expect(tasks.map(task => matchesHomeScope(task.record, "completed"))).toEqual([false, true, true, false]);
+    expect(tasks.map(task => taskMatchesView(task.record, "completed"))).toEqual([false, true, true, false]);
+    expect(countTasksForView(tasks.map(task => task.record), "completed")).toBe(2);
+    expect(filterHomeTasks(tasks, "completed", "Saved Archived", "", "", "updated")).toEqual([]);
+    expect(filterHomeTasks(tasks, "completed", "", "", "", "updated")).toHaveLength(2);
+    for (const source of sources) expect(await vault.read(vault.getAbstractFileByPath(source.path) as never)).toBe(source.text);
+    expect(renderTaskMarkdown(tasks[0].record)).not.toContain("__fjgSourceArchived");
+  }
+  // Explicit completion must clear the derived archive-origin marker on the next scan.
+  await service.changeStatus(sources[0].id, "completed");
+  const completed = service.getById(sources[0].id);
+  expect(completed.taskFile.path).toBe(sources[0].path);
+  expect(matchesHomeScope(completed.record, "completed")).toBe(true);
+  expect(taskMatchesView(completed.record, "completed")).toBe(true);
 });

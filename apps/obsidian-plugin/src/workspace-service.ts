@@ -1,3 +1,4 @@
+import YAML from "yaml";
 import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, agendaChoice, normalizePeople } from "./people-model";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 import {
@@ -7,6 +8,7 @@ import {
   TaskSubtask,
   NewTaskInput,
   normalizeStatus,
+  isRecognizedTaskStatus,
   parseTaskMarkdown,
   renameTaskHeading,
   renderTaskMarkdown,
@@ -219,6 +221,13 @@ export class TaskWorkspaceService {
       if (legacyWorkspace || projectTask || inboxTask || inboxBundle || archivedTask || relocatedTask) {
         try {
           const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
+          // Preserve the saved status for Completed filtering; do not rewrite legacy records on read.
+          if (document.record.status === "archived") document.record = {
+            ...document.record, __fjgSourceArchived: true, status: "completed",
+            legacy_archive_status: "archived", legacy_archived_at: document.record.archived_at,
+            completed_from_status: document.record.archived_from_status || "inbox",
+            archived_at: ""
+          };
           const existing = next.get(document.record.task_id);
           if (existing) {
             const paths = duplicates.get(document.record.task_id) || [existing.taskFile.path];
@@ -248,7 +257,7 @@ export class TaskWorkspaceService {
             updatesFile: updateFile instanceof TFile ? updateFile : null,
             updates,
             relatedFiles: [],
-            archived: file.path.startsWith(archivePrefix),
+            archived: false,
             legacyWorkspace,
             relocatedBundle
           });
@@ -257,12 +266,12 @@ export class TaskWorkspaceService {
         }
       } else if (
         file.name === "project.md"
-        && (file.path.startsWith(projectPrefix) || file.path.startsWith(projectArchivePrefix))
+        && (file.path.startsWith(projectPrefix) || file.path.startsWith(projectArchivePrefix) || file.path.startsWith(`${inboxPrefix}Files/`))
       ) {
         try {
           const document = parseProjectDocument(await this.app.vault.cachedRead(file));
           const record = document.record;
-          const archived = file.path.startsWith(projectArchivePrefix);
+          const archived = record.status === "archived";
           const key = projectIndexKey(record.name, archived);
           if (nextProjects.has(key)) throw new Error(`Duplicate project name ${record.name}`);
           nextProjects.set(key, {
@@ -708,7 +717,7 @@ export class TaskWorkspaceService {
     const nextRecord = archiveProjectRecord(document.record);
     try {
       await this.app.vault.modify(project.projectFile, renderProjectDocument(nextRecord, document.body));
-      await this.moveProjectWorkspace(project.folderPath, this.getSettings().projectArchiveRoot, nextRecord.name);
+      // Archiving changes metadata only, including project containers.
     } catch (error) {
       const currentFile = this.app.vault.getAbstractFileByPath(project.projectFile.path);
       if (currentFile instanceof TFile) await this.app.vault.modify(currentFile, oldContent);
@@ -731,7 +740,7 @@ export class TaskWorkspaceService {
     const nextRecord = reopenProjectRecord(document.record);
     try {
       await this.app.vault.modify(project.projectFile, renderProjectDocument(nextRecord, document.body));
-      await this.moveProjectWorkspace(project.folderPath, this.getSettings().projectRoot, nextRecord.name);
+      // Restoring leaves the complete workspace hierarchy in place.
     } catch (error) {
       const currentFile = this.app.vault.getAbstractFileByPath(project.projectFile.path);
       if (currentFile instanceof TFile) await this.app.vault.modify(currentFile, oldContent);
@@ -1360,55 +1369,72 @@ export class TaskWorkspaceService {
     return moved;
   }
 
-  async changeStatus(
-    taskId: string,
-    target: string,
-    actor = "Franklin",
-    text = ""
-  ): Promise<IndexedTask> {
+  private readonly statusWrites = new Map<string, Promise<IndexedTask>>();
+
+  async changeStatus(taskId: string, target: string, actor = "Franklin", text = ""): Promise<IndexedTask> {
+    const prior = this.statusWrites.get(taskId);
+    const operation = (async () => {
+      if (prior) await prior.catch(() => undefined);
+      return this.changeStatusInPlace(taskId, target, actor, text);
+    })();
+    this.statusWrites.set(taskId, operation);
+    try { return await operation; }
+    finally { if (this.statusWrites.get(taskId) === operation) this.statusWrites.delete(taskId); }
+  }
+
+  async restoreTask(taskId: string, actor = "Franklin"): Promise<IndexedTask> {
+    return this.changeStatus(taskId, "restore", actor);
+  }
+
+  private async changeStatusInPlace(taskId: string, target: string, actor: string, text: string): Promise<IndexedTask> {
     const task = this.getById(taskId);
-    const status = normalizeStatus(target);
-    const archiveCleanupRoots = status === "archived" && !task.archived
-      ? this.taskOwnedFolderRoots(task)
-      : [];
-    const at = new Date();
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
-    const transitionedRecord = transitionTaskRecord(taskDocument.record, status, at);
-    const nextRecord = task.archived && status !== "archived"
-      ? await this.recordForReopen(transitionedRecord)
-      : transitionedRecord;
+    const previous = taskDocument.record.status;
+    if (target === "restore" && previous !== "archived" && previous !== "completed") return task;
+    const existingHistory = task.updatesFile ? await this.app.vault.read(task.updatesFile) : "";
+    const archivedTransitions = [...existingHistory.matchAll(/^- Status: `([^`]+)` → `archived`\s*$/gm)];
+    const historicStatus = archivedTransitions.at(-1)?.[1];
+    const restoreStatus = taskDocument.record.completed_from_status || taskDocument.record.archived_from_status
+      || (historicStatus && historicStatus !== "archived" && isRecognizedTaskStatus(historicStatus) ? normalizeStatus(historicStatus) : "inbox");
+    const status = target === "restore"
+      ? restoreStatus
+      : normalizeStatus(target === "archived" ? "completed" : target);
+    if (previous === status) return task;
+    const at = new Date();
+    const nextRecord = transitionTaskRecord(taskDocument.record, status, at);
+    const frontmatter = oldTaskContent.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!frontmatter) throw new Error("Objective frontmatter is missing.");
+    const metadata = YAML.parseDocument(frontmatter[1]);
+    for (const key of ["status", "updated_at", "completed_at", "archived_at", "archived_from_status", "completed_from_status"] as const) {
+      if (nextRecord[key] !== undefined) metadata.set(key, nextRecord[key]);
+    }
+    const nextTaskContent = `---\n${metadata.toString()}---${oldTaskContent.slice(frontmatter[0].length)}`;
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
-    const type = status === "completed" ? "completed" : status === "archived" ? "archived" : task.record.status === "archived" ? "reopened" : "status-change";
     const nextUpdates = appendUpdateMarkdown(oldUpdates, {
       actor,
-      type,
-      text: text || (
-        transitionedRecord.project && !nextRecord.project
-          ? `Status changed from ${task.record.status} to ${status}. The previous project is not active, so the task returned to Inbox.`
-          : `Status changed from ${task.record.status} to ${status}.`
-      ),
-      previousStatus: task.record.status,
+      type: status === "archived" ? "archived" : previous === "archived" ? "reopened" : status === "completed" ? "completed" : "status-change",
+      text: text || `Status changed from ${previous} to ${status}. Files remain in place.`,
+      previousStatus: previous,
       newStatus: status,
       createdAt: at.toISOString()
     });
+    // Detect edits made while preparing the change; never overwrite those edits during rollback.
+    if (await this.app.vault.read(task.taskFile) !== oldTaskContent || await this.app.vault.read(updatesFile) !== oldUpdates)
+      throw new Error("Objective changed while preparing status update. Refresh and try again.");
+    let historyWritten = false;
     try {
       await this.app.vault.modify(updatesFile, nextUpdates);
-      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
-      if (status === "archived" && !task.archived) {
-        await this.moveTaskFiles(task, await this.archiveWorkspace(), nextRecord, { includeRelatedFiles: true });
-      } else if (task.archived && status !== "archived") {
-        await this.moveTaskFiles(task, await this.workspaceForRecord(nextRecord), nextRecord, { includeRelatedFiles: true });
-      }
+      historyWritten = true;
+      if (await this.app.vault.read(task.taskFile) !== oldTaskContent)
+        throw new Error("Objective changed while saving status update. Refresh and try again.");
+      await this.app.vault.modify(task.taskFile, nextTaskContent);
     } catch (error) {
-      const currentTask = this.app.vault.getAbstractFileByPath(task.taskFile.path);
-      if (currentTask instanceof TFile) await this.app.vault.modify(currentTask, oldTaskContent);
-      const currentUpdates = this.app.vault.getAbstractFileByPath(updatesFile.path);
-      if (currentUpdates instanceof TFile) await this.app.vault.modify(currentUpdates, oldUpdates);
+      if (historyWritten && await this.app.vault.read(updatesFile) === nextUpdates)
+        await this.app.vault.modify(updatesFile, oldUpdates);
       throw error;
     }
-    for (const root of archiveCleanupRoots) await this.removeEmptyArchivedSourceFolders(root);
     await this.refresh();
     return this.getById(taskId);
   }
@@ -1918,7 +1944,7 @@ export class TaskWorkspaceService {
   }
 
   private async workspaceForRecord(record: TaskRecord): Promise<string> {
-    if (record.status === "archived") return this.archiveWorkspace();
+    // New records use Inbox storage even when legacy callers request a closed status.
     return normalizePath(this.getSettings().inboxRoot);
   }
 

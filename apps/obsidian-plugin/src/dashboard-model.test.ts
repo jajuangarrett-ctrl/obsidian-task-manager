@@ -74,7 +74,7 @@ describe("dashboard task views", () => {
     ];
     expect(countTasksForView(records, "all-open")).toBe(1);
     expect(taskMatchesView(records[1], "completed")).toBe(true);
-    expect(countTasksForView(records, "archived")).toBe(1);
+    expect(countTasksForView(records, "archived")).toBe(2);
   });
 
   it("keeps explicitly assigned Inbox tasks in the Inbox view", () => {
@@ -82,7 +82,8 @@ describe("dashboard task views", () => {
     expect(taskMatchesView(task({ status: "inbox" }), "inbox", "2026-07-27", false)).toBe(false);
     expect(TASK_VIEWS.map((view) => view.key)).toContain("inbox");
     expect(TASK_VIEWS.map((view) => view.key)).not.toContain("unassigned");
-    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("completed");
+    expect(TASK_VIEWS.map((view) => view.key)).toContain("completed");
+    expect(TASK_VIEWS.map((view) => view.key)).not.toContain("archived");
   });
 
   it("filters No Project independently of active task status and preserves Inbox behavior", () => {
@@ -99,10 +100,10 @@ describe("dashboard task views", () => {
     expect(countTasksForView([noProjectOpen, noProjectArchived, assigned, inboxWithoutProject], "no-project")).toBe(2);
   });
 
-  it("shows archived tasks only in the Archived view", () => {
+  it("shows legacy archived tasks in Completed", () => {
     const archived = task({ task_id: "archived", status: "archived", project: "Finished" });
 
-    for (const view of TASK_VIEWS.filter((candidate) => candidate.key !== "archived")) {
+    for (const view of TASK_VIEWS.filter((candidate) => candidate.key !== "completed")) {
       expect(taskMatchesView(archived, view.key)).toBe(false);
     }
     expect(taskMatchesView(archived, "archived")).toBe(true);
@@ -127,10 +128,10 @@ describe("dashboard task views", () => {
     expect(TASK_VIEWS).toContainEqual({ key: "ongoing", label: "Ongoing", icon: "play-circle" });
   });
 
-  it("places No Project directly before Archived without restoring Unassigned", () => {
+  it("places No Project directly before Completed without restoring Unassigned", () => {
     const keys = TASK_VIEWS.map((view) => view.key);
     expect(TASK_VIEWS[keys.indexOf("no-project")]).toMatchObject({ label: "No objective tag" });
-    expect(keys.indexOf("no-project")).toBe(keys.indexOf("archived") - 1);
+    expect(keys.indexOf("no-project")).toBe(keys.indexOf("completed") - 1);
     expect(keys).not.toContain("unassigned");
   });
 
@@ -205,4 +206,11 @@ describe("dashboard project summaries", () => {
     expect(canArchiveProject({ key: "Active", name: "Active", openCount: 1, totalCount: 3 })).toBe(false);
     expect(canArchiveProject({ key: NO_PROJECT, name: "No project", openCount: 0, totalCount: 3 })).toBe(false);
   });
+});
+
+it("offers exactly one Completed tab and filters it to closed objectives", () => {
+  expect(TASK_VIEWS.filter(view => view.key === "completed")).toHaveLength(1);
+  expect(TASK_VIEWS.some(view => /archiv/i.test(view.label))).toBe(false);
+  expect(taskMatchesView(task({status:"completed"}),"completed")).toBe(true);
+  expect(taskMatchesView(task({status:"inbox"}),"completed")).toBe(false);
 });

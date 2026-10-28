@@ -153,16 +153,16 @@ export default class FjgTaskManagerPlugin extends Plugin {
       if (!checking) this.changeStatus(task.record.task_id, "completed");
       return true;
     }});
-    this.addCommand({ id: "archive-task", name: "Archive Objective", checkCallback: (checking) => {
+    this.addCommand({ id: "archive-task", name: "Complete Objective (confirm)", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
       if (!task || task.archived) return false;
       if (!checking) this.openArchiveTaskModal(task.record.task_id);
       return true;
     }});
-    this.addCommand({ id: "reopen-task-do-first", name: "Reopen Objective to Do First", checkCallback: (checking) => {
+    this.addCommand({ id: "reopen-task-do-first", name: "Reopen Completed Objective", checkCallback: (checking) => {
       const task = this.workspaceService.resolveFromFile(this.app.workspace.getActiveFile());
-      if (!task?.archived) return false;
-      if (!checking) this.changeStatus(task.record.task_id, "do-first");
+      if (!task || !["completed", "archived"].includes(task.record.status)) return false;
+      if (!checking) this.changeStatus(task.record.task_id, "restore");
       return true;
     }});
     this.addCommand({ id: "copy-task-id", name: "Copy Objective ID", checkCallback: (checking) => {

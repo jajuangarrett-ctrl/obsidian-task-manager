@@ -238,7 +238,7 @@ export class TaskDashboardView extends ItemView {
     heading.createEl("h2",{text:"Home"});
     heading.createEl("p",{text:"Scan status, browse objectives, and open a workspace. Shift-click a card to browse its folder."});
     const scope=root.createDiv({cls:"fjg-home-scopes"});
-    for(const [key,label] of [["open","All Open"],["completed","Completed"],["archived","Archived"],["all","All objectives"]] as const){
+    for(const [key,label] of [["open","All Open"],["completed","Completed"],["all","All objectives"]] as const){
       const button=scope.createEl("button",{text:`${label} ${tasks.filter(task=>matchesHomeScope(task.record,key)).length}`,attr:{"aria-pressed":String(this.homeScope===key)}});
       button.toggleClass("is-active",this.homeScope===key);button.addEventListener("click",()=>{this.homeScope=key;this.render();});
     }
@@ -368,9 +368,7 @@ export class TaskDashboardView extends ItemView {
       attr: { "aria-label": "Objective views" }
     });
     const scopedTasks = tasks.filter((task) => matchesPerson(task.record, this.person));
-    for (const definition of this.view === "completed"
-      ? [...TASK_VIEWS, { key: "completed" as const, label: "Completed", icon: "check-circle" }]
-      : TASK_VIEWS) {
+    for (const definition of TASK_VIEWS) {
       const button = viewNav.createEl("button", {
         cls: `fjg-view-card${this.view === definition.key ? " is-active" : ""}`,
         attr: {
@@ -808,7 +806,7 @@ export class TaskDashboardView extends ItemView {
       this.taskPlugin.openObjectiveWorkspace(task.record.task_id, event.shiftKey);
     });
     const meta = main.createDiv({ cls: "fjg-task-meta" });
-    if (task.archived || task.record.status === "archived") {
+    if (task.record.status === "completed" || task.record.status === "archived") {
       meta.createSpan({
         text: statusLabel(task.record.status),
         cls: `fjg-status-badge is-${task.record.status}`
@@ -887,15 +885,15 @@ export class TaskDashboardView extends ItemView {
     setIcon(copyPathIcon, "copy");
     copyPath.createSpan({ text: "Copy" });
     copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
-    if (task.archived || task.record.status === "archived") {
+    if (task.record.status === "completed" || task.record.status === "archived") {
       const reopen = controls.createEl("button", {
-        text: "Reopen to Do First",
+        text: "Reopen",
         cls: "mod-cta",
-        attr: { type: "button", "aria-label": `Reopen ${task.record.title} to Do First` }
+        attr: { type: "button", "aria-label": `Reopen ${task.record.title} to its previous status` }
       });
       reopen.addEventListener("click", async () => {
         try {
-          await this.taskPlugin.changeStatus(task.record.task_id, "do-first");
+          await this.taskPlugin.changeStatus(task.record.task_id, "restore");
           this.render();
         } catch (error) {
           new Notice(error instanceof Error ? error.message : String(error));
@@ -942,8 +940,8 @@ export class TaskDashboardView extends ItemView {
       const convert = menu.createEl("button", { text: "Convert to action" });
       convert.addEventListener("click", () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open());
       const archive = menu.createEl("button", {
-        text: "Archive",
-        attr: { type: "button", "aria-label": `Archive ${task.record.title}` }
+        text: "Complete",
+        attr: { type: "button", "aria-label": `Complete ${task.record.title}` }
       });
       archive.addEventListener("click", () => {
         more.open = false;

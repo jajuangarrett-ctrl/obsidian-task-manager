@@ -1,3 +1,9 @@
+# 0.28.4
+
+- Complete and reopen objectives in place, preserving folders, attachments, custom metadata, and previous status. Serialize competing status writes and roll back interrupted history writes.
+- Preserve the refresh fix that waits for superseding scans before returning created objectives.
+- Filter Completed by saved status: exclude saved Archived records while retaining saved Completed records with archive history. The archive-origin marker is derived on each scan and is not written to notes.
+
 # 0.28.3
 
 - Fix objective creation rolling back with No task matched ID when a background refresh supersedes the creation scan. Refresh callers now wait for the newest scan to commit, retaining stale-scan and duplicate-copy protections.

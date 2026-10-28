@@ -6,13 +6,13 @@ function task(title: string, status = "do-first", path = "08 Tasks/Inbox/Tasks/T
   return { record: { ...createTaskRecord({ title }), status }, archived: status === "archived", relocatedBundle: false, taskFile: { path, stat: { mtime: 1 } } } as IndexedTask;
 }
 describe("Home and Move scope", () => {
-  it("keeps open, completed and archived scopes exhaustive and distinct", () => {
+  it("keeps open separate while treating legacy Archived as Completed", () => {
     const tasks=[task("Open"),task("Complete","completed"),task("Archived","archived")];
     expect(tasks.filter(t=>matchesHomeScope(t.record,"open"))).toHaveLength(1);
-    expect(tasks.filter(t=>matchesHomeScope(t.record,"completed"))).toHaveLength(1);
-    expect(tasks.filter(t=>matchesHomeScope(t.record,"archived"))).toHaveLength(1);
+    expect(tasks.filter(t=>matchesHomeScope(t.record,"completed"))).toHaveLength(2);
+    expect(tasks.filter(t=>matchesHomeScope(t.record,"archived"))).toHaveLength(2);
     expect(tasks.filter(t=>matchesHomeScope(t.record,"all"))).toHaveLength(3);
-    expect(homeRowStatuses("all")).toContain("archived");
+    expect(homeRowStatuses("all")).not.toContain("archived");
   });
   it("searches every card and action, including off-screen objectives", () => {
     const tasks=Array.from({length:40},(_,i)=>task(`Objective ${i}`));
@@ -36,4 +36,12 @@ describe("Home and Move scope", () => {
     const a=task("Actions");a.record.subtasks=[{title:"Done",completed:true,status:"completed"},{title:"Next",completed:false,status:"do-soon"}] as never;
     expect(nextObjectiveAction(a.record)).toBe("Next");expect(nextObjectiveAction({subtasks:[]})).toBe("Choose your next action");
   });
+});
+
+it("redirects saved Archive scope and legacy records to Completed without hiding them",()=>{
+ const completed=createTaskRecord({title:"Completed",status:"completed"});
+ const archived=createTaskRecord({title:"Legacy",status:"archived"});
+ expect(matchesHomeScope(completed,"archived")).toBe(true);
+ expect(matchesHomeScope(archived,"completed")).toBe(true);
+ expect(matchesHomeScope(archived,"open")).toBe(false);
 });

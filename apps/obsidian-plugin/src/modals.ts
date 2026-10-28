@@ -42,10 +42,10 @@ export class ArchiveTaskModal extends Modal {
     this.modalEl.addClass("fjg-archive-task-modal");
     this.setTitle("Are you sure?");
     this.contentEl.createEl("p", {
-      text: `Archive ${this.taskTitle}?`
+      text: `Complete ${this.taskTitle}?`
     });
     this.contentEl.createEl("p", {
-      text: "The objective will move to Archived. You can reopen it later.",
+      text: "The objective will be marked Completed. Its folders and files stay in place. You can reopen it later.",
       cls: "setting-item-description"
     });
     new Setting(this.contentEl)
@@ -444,16 +444,16 @@ export class ArchiveProjectModal extends Modal {
     });
     const list = this.contentEl.createEl("ul");
     list.createEl("li", {
-      text: `Move the project folder to Project Archive.`
+      text: `Close the project without moving its folder.`
     });
     list.createEl("li", {
-      text: `Move ${this.completedTaskCount} completed ${this.completedTaskCount === 1 ? "objective" : "objectives"} to the objective Archive.`
+      text: `Move ${this.completedTaskCount} completed ${this.completedTaskCount === 1 ? "objective" : "objectives"} to Completed, without moving their files.`
     });
     list.createEl("li", {
       text: "Keep every objective update, related file, attachment, and project note."
     });
     this.contentEl.createEl("p", {
-      text: "You can reopen the project later from Archived Projects. Its objectives stay archived until you reopen them individually.",
+      text: "You can reopen the project later from Archived Projects. Its objectives stay Completed until you reopen them individually.",
       cls: "setting-item-description"
     });
     new Setting(this.contentEl)

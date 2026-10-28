@@ -5,7 +5,10 @@ import type { IndexedTask } from "./workspace-service";
 export type HomeScope = "open" | "completed" | "archived" | "all";
 export type HomeSort = "updated" | "due";
 export function matchesHomeScope(record: TaskRecord, scope: HomeScope): boolean {
-  return scope === "all" || (scope === "open" ? !["completed", "archived"].includes(record.status) : record.status === scope);
+  if (scope === "completed" && record.__fjgSourceArchived) return false;
+  const status = record.status === "archived" ? "completed" : record.status;
+  const effectiveScope = scope === "archived" ? "completed" : scope;
+  return effectiveScope === "all" || (effectiveScope === "open" ? status !== "completed" : status === effectiveScope);
 }
 export function filterHomeTasks(tasks: readonly IndexedTask[], scope: HomeScope, query: string, project: string, status: string, sort: HomeSort, person = ""): IndexedTask[] {
   const search = query.trim().toLocaleLowerCase();
@@ -27,6 +30,6 @@ export function nextObjectiveAction(record: Pick<TaskRecord,"subtasks">): string
   return record.subtasks.find(sub => !sub.completed && sub.status !== "archived")?.title || "Choose your next action";
 }
 export function homeRowStatuses(scope: HomeScope): TaskStatus[] {
-  return scope === "completed" ? ["completed"] : scope === "archived" ? ["archived"]
-    : ["do-first", "do-soon", "ongoing", "waiting", "delegate", "inbox", "on-hold", ...(scope === "all" ? ["completed", "archived"] as TaskStatus[] : [])];
+  return scope === "completed" ? ["completed"] : scope === "archived" ? ["completed"]
+    : ["do-first", "do-soon", "ongoing", "waiting", "delegate", "inbox", "on-hold", ...(scope === "all" ? ["completed"] as TaskStatus[] : [])];
 }

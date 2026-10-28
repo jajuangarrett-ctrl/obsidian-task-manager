@@ -115,12 +115,15 @@ export function validateTaskRecord(record: TaskRecord): ValidationIssue[] {
 export function transitionTaskRecord(record: TaskRecord, target: string, at = new Date()): TaskRecord {
   const status = normalizeStatus(target);
   assertTransition(record.status, status);
+  if (record.status === status) return record;
   const timestamp = at.toISOString();
   return {
     ...record,
     status,
     updated_at: timestamp,
-    completed_at: status === "completed" ? timestamp : status === record.status ? record.completed_at : "",
+    completed_at: status === "archived" ? record.completed_at : status === "completed" ? record.completed_at || timestamp : "",
+    ...(status === "archived" ? { archived_from_status: record.status } : {}),
+    ...(status === "completed" && record.status !== "archived" ? { completed_from_status: record.status } : {}),
     archived_at: status === "archived" ? timestamp : status === record.status ? record.archived_at : "",
     tags: normalizeTags(record.tags)
   };
@@ -210,6 +213,12 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     updated_at: cleanInline(record.updated_at),
     completed_at: cleanInline(record.completed_at),
     archived_at: cleanInline(record.archived_at),
+    ...(record.archived_from_status && TASK_STATUSES.includes(record.archived_from_status) && record.archived_from_status !== "archived"
+      ? { archived_from_status: record.archived_from_status } : {}),
+    ...(record.completed_from_status && TASK_STATUSES.includes(record.completed_from_status) && !["archived", "completed"].includes(record.completed_from_status)
+      ? { completed_from_status: record.completed_from_status } : {}),
+    ...(record.legacy_archive_status ? { legacy_archive_status: cleanInline(record.legacy_archive_status) } : {}),
+    ...(record.legacy_archived_at ? { legacy_archived_at: cleanInline(record.legacy_archived_at) } : {}),
     project,
     people: uniqueStrings(record.people),
     agenda_selected: record.agenda_selected === true,

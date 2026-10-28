@@ -41,6 +41,12 @@ export interface TaskRecord {
   updated_at: string;
   completed_at: string;
   archived_at: string;
+  archived_from_status?: TaskStatus;
+  completed_from_status?: TaskStatus;
+  /** Derived index marker only; never serialized into task frontmatter. */
+  __fjgSourceArchived?: boolean;
+  legacy_archive_status?: string;
+  legacy_archived_at?: string;
   project: string;
   people?: string[];
   agenda_selected?: boolean;
