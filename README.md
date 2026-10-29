@@ -164,11 +164,20 @@ destination after relocating a parent; paths already pasted into an external
 Clipper template cannot update themselves. Renaming a subtask changes its display
 title while keeping its existing capture destination stable.
 
-Use **More → Convert to subtask** for one existing task or **Convert tasks** in
+Use **More → Convert to action** for one existing objective or **Convert objectives** in
 the header for a reviewed batch. Choose one parent and the source tasks, review
 the list, then convert. Notes, status, due date, and history carry over; owned
-Files move into the child folder. Original task records are archived. External
-shared references remain in those archived records. A task that already has
+Files move into the child folder. Original records and history remain in place,
+with their status preserved and `converted_to` parent/action IDs recorded in Markdown.
+The **Converted** view identifies retained originals and links to the current parent,
+action status, notes, history and files. They are excluded from normal Completed and
+active status views; Recent, Inbox folder and Home All retain access. Ordinary
+completed objectives are unchanged. External shared references remain in the original.
+Older conversions are recognized read-only through actions' explicit `source_task_id`
+backlinks; no title matching, bulk record rewriting or invented conversion dates.
+Multiple ID links are shown for review; a missing recorded action blocks reconversion
+instead of creating a duplicate. Update each device through BRAT for this display behavior.
+ A task that already has
 subtasks cannot be converted again. Batches commit one task at a time and stop
 on failure, reporting exactly how many succeeded.
 

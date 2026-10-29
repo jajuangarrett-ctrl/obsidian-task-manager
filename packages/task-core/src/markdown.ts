@@ -219,6 +219,10 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
       ? { completed_from_status: record.completed_from_status } : {}),
     ...(record.legacy_archive_status ? { legacy_archive_status: cleanInline(record.legacy_archive_status) } : {}),
     ...(record.legacy_archived_at ? { legacy_archived_at: cleanInline(record.legacy_archived_at) } : {}),
+    ...(record.converted_to?.parent_task_id && record.converted_to?.action_id ? { converted_to: {
+      parent_task_id: cleanInline(record.converted_to.parent_task_id), action_id: cleanInline(record.converted_to.action_id),
+      converted_at: cleanInline(record.converted_to.converted_at)
+    }} : {}),
     project,
     people: uniqueStrings(record.people),
     agenda_selected: record.agenda_selected === true,

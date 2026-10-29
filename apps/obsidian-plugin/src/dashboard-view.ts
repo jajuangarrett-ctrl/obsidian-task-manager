@@ -1,3 +1,5 @@
+import { isConvertedOriginal } from "@fjg/task-core";
+import { renderConversion } from "./conversion-ui";
 import { renderObjectiveMoreMenu } from "./objective-more-menu";
 import { ObjectiveWorkspaceContent } from "./objective-workspace-modal";
 import { renderOverviewGroups } from "./overview-view";
@@ -806,10 +808,12 @@ export class TaskDashboardView extends ItemView {
       if ((event.target as HTMLElement).closest("button,input,select,details,summary,a")) return;
       this.taskPlugin.openObjectiveWorkspace(task.record.task_id, event.shiftKey);
     });
+    const converted = isConvertedOriginal(task.record);
+    renderConversion(main, task, this.taskPlugin);
     const meta = main.createDiv({ cls: "fjg-task-meta" });
-    if (task.record.status === "completed" || task.record.status === "archived") {
+    if (converted || task.record.status === "completed" || task.record.status === "archived") {
       meta.createSpan({
-        text: statusLabel(task.record.status),
+        text: converted ? "Converted" : statusLabel(task.record.status),
         cls: `fjg-status-badge is-${task.record.status}`
       });
       if (task.record.people?.length) meta.createSpan({ text: task.record.people.join(", "), cls: "fjg-task-static-meta" });
@@ -886,7 +890,9 @@ export class TaskDashboardView extends ItemView {
     setIcon(copyPathIcon, "copy");
     copyPath.createSpan({ text: "Copy" });
     copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
-    if (task.record.status === "completed" || task.record.status === "archived") {
+    if (converted) {
+      controls.createSpan({text:"Work continues in the linked action"});
+    } else if (task.record.status === "completed" || task.record.status === "archived") {
       const reopen = controls.createEl("button", {
         text: "Reopen",
         cls: "mod-cta",
@@ -913,7 +919,7 @@ export class TaskDashboardView extends ItemView {
       move: () => this.taskPlugin.openTaskRelocationModal(task.record.task_id),
       addFile: () => this.taskPlugin.openTaskFileModal(task.record.task_id),
       convert: () => new ConvertSubtasksModal(this.app, this.taskPlugin.workspaceService, () => this.render(), task.record.task_id).open(),
-      complete: task.record.status === "completed" || task.record.status === "archived" ? undefined : () => this.taskPlugin.openArchiveTaskModal(task.record.task_id),
+      complete: converted || task.record.status === "completed" || task.record.status === "archived" ? undefined : () => this.taskPlugin.openArchiveTaskModal(task.record.task_id),
       remove: () => void this.taskPlugin.openDeleteObjectiveModal(task.record.task_id)
     });
     if (compact) {

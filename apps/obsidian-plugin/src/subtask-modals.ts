@@ -82,6 +82,7 @@ export class ConvertSubtasksModal extends Modal {
   constructor(app: App, private service: TaskWorkspaceService, private refreshed: () => void, private initialId = "") { super(app); }
   onOpen(): void {
     this.setTitle("Convert objectives to actions");
+    this.contentEl.createEl("p",{text:"Original records and history are retained as Converted, linked to the resulting action, and excluded from Completed. The action keeps its status, notes, history and files."});
     const tasks = this.service.list().filter((task) => !task.archived).sort((a, b) => a.record.title.localeCompare(b.record.title));
     let parentId = "";
     const selected = new Set(this.initialId ? [this.initialId] : []);
@@ -139,8 +140,8 @@ export class ConvertSubtasksModal extends Modal {
           try {
             const existing = this.service.convertedAction(id);
             if (existing) preview.createEl("p", { text: existing.parent.record.task_id === parentId
-              ? `This action is already under the selected parent. Its remaining standalone objective will be marked Completed.`
-              : `Move the existing action from “${existing.parent.record.title}”, keeping its notes, history and attachments. Its remaining standalone objective will be marked Completed.` });
+              ? `This action is already under the selected parent. Its original objective will be retained as Converted; action status is unchanged.`
+              : `Move the existing action from “${existing.parent.record.title}”, keeping its notes, history and attachments. Its original objective will be retained as Converted; action status is unchanged.` });
           } catch (error) { preview.createEl("p", { text: String(error) }); }
         }
       }

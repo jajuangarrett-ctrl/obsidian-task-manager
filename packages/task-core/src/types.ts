@@ -45,6 +45,10 @@ export interface TaskRecord {
   completed_from_status?: TaskStatus;
   /** Derived index marker only; never serialized into task frontmatter. */
   __fjgSourceArchived?: boolean;
+  /** Durable conversion provenance; IDs survive folder moves and renames. */
+  converted_to?: { parent_task_id: string; action_id: string; converted_at: string };
+  /** Derived from action source_task_id backlinks, never written to Markdown. */
+  __fjgConversionLinks?: Array<{ parent_task_id: string; action_id: string }>;
   legacy_archive_status?: string;
   legacy_archived_at?: string;
   project: string;

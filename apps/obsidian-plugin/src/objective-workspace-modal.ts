@@ -1,3 +1,5 @@
+import { isConvertedOriginal } from "@fjg/task-core";
+import { renderConversion } from "./conversion-ui";
 import { App, Component, MarkdownRenderer, Modal, Notice, TFile, TFolder } from "obsidian";
 import { statusLabel } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
@@ -43,7 +45,8 @@ export class ObjectiveWorkspaceContent {
         if(!folder.children.length)list.createEl("p",{text:"This folder is empty."});
         return;
       }
-      body.createEl("p",{text:`${statusLabel(task.record.status)} · ${task.record.due?`Due ${task.record.due}`:"No due date"} · Updated ${task.record.updated_at.slice(0,10)}`,cls:"fjg-workspace-status"});
+      renderConversion(body,task,this.plugin);
+      body.createEl("p",{text:`${isConvertedOriginal(task.record)?"Converted original":statusLabel(task.record.status)} · ${task.record.due?`Due ${task.record.due}`:"No due date"} · Updated ${task.record.updated_at.slice(0,10)}`,cls:"fjg-workspace-status"});
       body.createEl("code",{text:task.taskFile.path,cls:"fjg-workspace-path"});
       const controls=body.createDiv({cls:"fjg-workspace-controls"});
       this.button(controls,"Open objective note",()=>void this.plugin.openTask(this.taskId));

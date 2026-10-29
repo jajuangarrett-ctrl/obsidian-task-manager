@@ -2000,3 +2000,6 @@
   .fjg-task-more > summary, .fjg-task-more-menu button { min-height: 44px; }
 }
 .is-mobile .fjg-task-more > summary, .is-mobile .fjg-task-more-menu button { min-height: 44px; }
+
+.fjg-conversion-info { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.fjg-converted-history { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,8 +1,8 @@
-import { isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
+import { isConvertedOriginal, isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "home" | "overview" | "area" | "move" | "tasks" | "kanban" | "projects" | "people";
-export type TaskViewKey = "recent" | "all-open" | "due" | "no-project" | TaskStatus;
+export type TaskViewKey = "converted" | "recent" | "all-open" | "due" | "no-project" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;
 
@@ -49,13 +49,14 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
   { key: "no-project", label: "Inbox folder", icon: "folder-input" },
-  { key: "completed", label: "Completed", icon: "check-circle" }
+  { key: "completed", label: "Completed", icon: "check-circle" },
+  { key: "converted", label: "Converted", icon: "git-merge" }
 ] as const;
 
 export function groupTasksForKanban<TTask extends KanbanTask>(tasks: readonly TTask[]): KanbanColumn<TTask>[] {
   return TASK_STATUSES.filter((status) => status !== "archived").map((status) => ({
     status,
-    tasks: tasks.filter((task) => task.record.status === status)
+    tasks: tasks.filter((task) => !isConvertedOriginal(task.record as TaskRecord) && task.record.status === status)
   }));
 }
 
@@ -64,7 +65,7 @@ export function kanbanMoveTarget(current: TaskStatus, target: unknown): TaskStat
 }
 
 export function isOpenTask(record: TaskRecord): boolean {
-  return record.status !== "completed" && record.status !== "archived";
+  return !isConvertedOriginal(record) && record.status !== "completed" && record.status !== "archived";
 }
 
 export function isDueOrOverdue(record: TaskRecord, today = todayKey()): boolean {
@@ -92,6 +93,8 @@ export function taskMatchesView(
   taskFilePath = ""
 ): boolean {
   if (view === "no-project") return isInInboxFolder(taskFilePath);
+  if (view === "converted") return isConvertedOriginal(record);
+  if (isConvertedOriginal(record)) return view === "recent";
   if (view === "completed" && record.__fjgSourceArchived) return false;
   if (view === "archived") return record.status === "completed" || record.status === "archived";
   // Compatibility fallback for unindexed records; scanned saved-Archived records are excluded above.

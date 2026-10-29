@@ -407,7 +407,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(sub.notes).toContain("Keep the context");
     expect(sub.history).toContain("Approval requested");
     expect(sub.status).toBe("waiting");
-    expect(service.getById(source.record.task_id).record.status).toBe("completed");
+    expect(service.getById(source.record.task_id).record.status).toBe(source.record.status);
     expect(service.subtaskFiles(parent.record.task_id, sub.id)).toHaveLength(1);
     const promoted = await service.promoteSubtask(parent.record.task_id, sub.id);
     expect(promoted.record).toMatchObject({ status: "waiting", due: "2026-09-19" });
@@ -440,12 +440,12 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(stored[1]).toMatchObject({ ...action, source_task_id: source.record.task_id, history: "Original update history", attachment_folder: `Subtasks/${action.title} (2)` });
     expect(service.getById(previous.record.task_id).record.subtasks).toEqual([]);
     expect(service.subtaskFiles(parent.record.task_id, action.id).map((file) => file.name)).toEqual(["Email.md"]);
-    expect(service.getById(source.record.task_id).record.status).toBe("completed");
+    expect(service.getById(source.record.task_id).record.status).toBe(source.record.status);
     expect(service.getById(source.record.task_id).record.related_files).toContain(`${service.subtaskFolder(parent.record.task_id, action.id)}/Email.md`);
     expect(service.subtaskFiles(parent.record.task_id, sibling.id).map((file) => file.name)).toEqual(["Other.md"]);
   });
 
-  it("archives a remaining standalone copy when its action is already in the selected parent", async () => {
+  it("marks a remaining standalone copy converted when its action is already in the selected parent", async () => {
     const { service, vault } = createService(); await service.initialize();
     const parent = await service.createTask({ title: "Existing parent" });
     const source = await service.createTask({ title: "Remaining standalone copy" });
@@ -457,7 +457,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     await service.refresh();
     await service.convertTaskToSubtask(source.record.task_id, parent.record.task_id);
     expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(1);
-    expect(service.getById(source.record.task_id).record.status).toBe("completed");
+    expect(service.getById(source.record.task_id).record.status).toBe(source.record.status);
   });
 
   it("restores both parents, attachments and references when archiving after an action move fails", async () => {
@@ -498,7 +498,7 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(service.getById(source.record.task_id).archived).toBe(false);
   });
 
-  it("rolls conversion back if archiving the original fails", async () => {
+  it("rolls conversion back if writing the original fails", async () => {
     const { service, vault } = createService();
     await service.initialize();
     const parent = await service.createTask({ title: "Rollback parent" });
@@ -1937,4 +1937,55 @@ it("keeps Completed state and attachments when moving an Inbox folder objective 
  expect(taskMatchesView(moved.record,"no-project",undefined,true,moved.taskFile.path)).toBe(false);
  expect(taskMatchesView(moved.record,"completed",undefined,true,moved.taskFile.path)).toBe(true);
  expect(await vault.read(vault.getAbstractFileByPath(moved.record.related_files[0]) as never)).toBe(originalBytes);
+});
+
+
+describe("converted original identity",()=>{
+ it("retains open source state and durable IDs, excludes Completed, and is repeat-safe",async()=>{
+  const {service,vault}=createService();await service.initialize();
+  const source=await service.createTask({title:"Converted fixture",status:"waiting",details:"Source notes"});
+  const parent=await service.createTask({title:"Parent fixture"});
+  await service.appendUpdate(source.record.task_id,{actor:"Test",text:"Preserved update"});
+  const history=await vault.read(source.updatesFile as never);
+  await service.createRelatedNote(source.record.task_id,"Proof","exact evidence");
+  for(const task of [source,parent]){const content=await vault.read(task.taskFile as never);await vault.modify(task.taskFile as never,content.replace("---\n","---\ncustom_conversion_evidence: preserve-me # user comment\n"));}
+  await service.refresh();
+  const first=service.convertTaskToSubtask(source.record.task_id,parent.record.task_id);
+  await expect(service.convertTaskToSubtask(source.record.task_id,parent.record.task_id)).rejects.toThrow("progress");await first;
+  const original=service.getById(source.record.task_id),action=service.getById(parent.record.task_id).record.subtasks[0];
+  expect(original.record.status).toBe("waiting");expect(original.record.completed_at).toBe("");
+  expect(original.record.converted_to).toMatchObject({parent_task_id:parent.record.task_id,action_id:action.id});
+  expect(await vault.read(source.updatesFile as never)).toBe(history);
+  expect(action).toMatchObject({status:"waiting",completed:false,source_task_id:source.record.task_id});
+  expect(action.history).toBe(history);expect(action.notes).toContain("Source notes");
+  expect(await vault.read(service.subtaskFiles(parent.record.task_id,action.id)[0] as never)).toContain("exact evidence");
+  expect(taskMatchesView(original.record,"completed")).toBe(false);expect(matchesHomeScope(original.record,"completed")).toBe(false);
+  expect(taskMatchesView(original.record,"converted")).toBe(true);expect(matchesHomeScope(original.record,"all")).toBe(true);
+  await service.convertTaskToSubtask(source.record.task_id,parent.record.task_id);
+  expect(service.getById(parent.record.task_id).record.subtasks).toEqual([action]);
+  const saved=await vault.read(source.taskFile as never);expect(saved).toContain("converted_to:");expect(saved).not.toContain("__fjgConversionLinks");
+  expect(saved).toContain("custom_conversion_evidence: preserve-me # user comment");
+  expect(await vault.read(parent.taskFile as never)).toContain("custom_conversion_evidence: preserve-me # user comment");
+ });
+ it("recognizes historical ID backlinks without writing originals or matching titles",async()=>{
+  const {service,vault}=createService();await service.initialize();
+  const source=await service.createTask({title:"Same title",status:"completed"});
+  const ordinary=await service.createTask({title:"Same title",status:"completed"});
+  const parent=await service.createTask({title:"Historical parent"});const a=await service.addSubtask(parent.record.task_id,"Different action title");
+  const doc=parseTaskMarkdown(await vault.read(parent.taskFile as never));
+  await vault.modify(parent.taskFile as never,renderTaskMarkdown(updateTaskFields(doc.record,{subtasks:[{...a,source_task_id:source.record.task_id,status:"do-soon",completed:false}]}),doc.body));
+  const before=await vault.read(source.taskFile as never);await service.refresh();
+  expect(await vault.read(source.taskFile as never)).toBe(before);
+  expect(taskMatchesView(service.getById(source.record.task_id).record,"completed")).toBe(false);
+  expect(taskMatchesView(service.getById(source.record.task_id).record,"converted")).toBe(true);
+  expect(taskMatchesView(service.getById(ordinary.record.task_id).record,"completed")).toBe(true);
+  expect(matchesHomeScope(service.getById(ordinary.record.task_id).record,"completed")).toBe(true);
+ });
+ it("retains a missing-parent marker and blocks recreation rather than duplicating an action",async()=>{
+  const {service,vault}=createService();await service.initialize();const source=await service.createTask({title:"Orphan provenance"});const parent=await service.createTask({title:"New parent"});
+  const doc=parseTaskMarkdown(await vault.read(source.taskFile as never));await vault.modify(source.taskFile as never,renderTaskMarkdown({...doc.record,converted_to:{parent_task_id:"missing",action_id:"missing",converted_at:"2026-10-29T00:00:00Z"}},doc.body));await service.refresh();
+  expect(taskMatchesView(service.getById(source.record.task_id).record,"converted")).toBe(true);
+  await expect(service.convertTaskToSubtask(source.record.task_id,parent.record.task_id)).rejects.toThrow("unavailable");
+  expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(0);
+ });
 });

@@ -1,3 +1,9 @@
+## 0.30.0
+
+- Identify retained converted originals using explicit parent/action IDs and historical action source-ID backlinks, never title matching. Show a Converted view with parent links and action status, notes, history and files.
+- Exclude converted originals from normal Completed and active status views while retaining access in Converted, Recent, Inbox folder and Home All. Ordinary Completed controls remain unchanged.
+- New conversions preserve original status/history instead of manufacturing completion. Persist Sync-safe conversion provenance, prevent repeat/concurrent duplication, and block missing-link reconversion pending review.
+
 ## 0.29.0
 
 - Add separate Delete objective preview and explicit confirmation, using recoverable vault Trash only. Preserve complete contents and a recovery manifest; block ambiguous/shared/nested ownership and detect stale previews.

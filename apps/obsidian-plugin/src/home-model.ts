@@ -1,3 +1,4 @@
+import { isConvertedOriginal } from "@fjg/task-core";
 import { matchesPerson } from "./people-model";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 import type { IndexedTask } from "./workspace-service";
@@ -5,6 +6,7 @@ import type { IndexedTask } from "./workspace-service";
 export type HomeScope = "open" | "completed" | "archived" | "all";
 export type HomeSort = "updated" | "due";
 export function matchesHomeScope(record: TaskRecord, scope: HomeScope): boolean {
+  if (isConvertedOriginal(record)) return scope === "all";
   if (scope === "completed" && record.__fjgSourceArchived) return false;
   const status = record.status === "archived" ? "completed" : record.status;
   const effectiveScope = scope === "archived" ? "completed" : scope;

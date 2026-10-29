@@ -333,6 +333,11 @@ export class TaskWorkspaceService {
     // Mutation callers need a committed index, not merely a discarded scan.
     // Newer scans never wait on older scans, so following the newest promise is acyclic.
     if (generation !== this.refreshGeneration) return this.latestRefresh;
+    // Resolve historical conversion by explicit action source IDs, never by titles.
+    for (const parent of next.values()) for (const action of parent.record.subtasks) {
+      const source = next.get(action.source_task_id);
+      if (source) (source.record.__fjgConversionLinks ||= []).push({parent_task_id:parent.record.task_id,action_id:action.id});
+    }
     this.duplicatePaths = duplicates;
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);
@@ -1039,7 +1044,7 @@ export class TaskWorkspaceService {
     const task = this.getById(taskId);
     const document = parseTaskMarkdown(await this.app.vault.read(task.taskFile));
     const next = updateTaskFields(document.record, { subtasks: change(document.record.subtasks) });
-    await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
+    await this.app.vault.modify(task.taskFile, patchConversionMetadata(await this.app.vault.read(task.taskFile), {subtasks:next.subtasks,updated_at:next.updated_at}));
     await this.refresh();
   }
 
@@ -1114,10 +1119,18 @@ export class TaskWorkspaceService {
     return matches[0] || null;
   }
 
+  private async markConverted(sourceId: string, parentId: string, actionId: string): Promise<void> {
+    const task=this.getById(sourceId), document=parseTaskMarkdown(await this.app.vault.read(task.taskFile));
+    const converted_to={parent_task_id:parentId,action_id:actionId,converted_at:document.record.converted_to?.converted_at || new Date().toISOString()};
+    // Preserve source status/history: conversion is not completion.
+    await this.app.vault.modify(task.taskFile,patchConversionMetadata(await this.app.vault.read(task.taskFile),{converted_to}));
+    await this.refresh();
+  }
+
   private async moveConvertedAction(source: IndexedTask, parent: IndexedTask, previous: IndexedTask, action: TaskSubtask): Promise<void> {
     if (previous.archived) throw new Error(`Reopen “${previous.record.title}” before moving its action.`);
     if (previous.record.task_id === parent.record.task_id) {
-      await this.changeStatus(source.record.task_id, "archived");
+      await this.markConverted(source.record.task_id, parent.record.task_id, action.id);
       return;
     }
     const from = this.subtaskFolder(previous.record.task_id, action.id);
@@ -1141,13 +1154,13 @@ export class TaskWorkspaceService {
       await this.app.fileManager.renameFile(folder, to);
       moved = true;
       for (const snapshot of references) {
-        await this.app.vault.modify(snapshot.task.taskFile, renderTaskMarkdown(updateTaskFields(snapshot.document.record, {
+        await this.app.vault.modify(snapshot.task.taskFile, patchConversionMetadata(await this.app.vault.read(snapshot.task.taskFile), {
           related_files: snapshot.document.record.related_files.map((path) => rewriteVaultPath(path, rewrites))
-        }), snapshot.document.body));
+        }));
       }
       await this.writeSubtasks(parent.record.task_id, (items) => [...items, { ...action, attachment_folder: relative }]);
       await this.writeSubtasks(previous.record.task_id, (items) => items.filter((item) => item.id !== action.id));
-      await this.changeStatus(source.record.task_id, "archived");
+      await this.markConverted(source.record.task_id, parent.record.task_id, action.id);
     } catch (error) {
       if (moved) await this.app.fileManager.renameFile(folder, from);
       for (const [file, content] of snapshots) await this.app.vault.modify(file, content);
@@ -1156,7 +1169,14 @@ export class TaskWorkspaceService {
     }
   }
 
+  private readonly convertingSources = new Set<string>();
   async convertTaskToSubtask(sourceId: string, parentId: string): Promise<void> {
+    if(this.convertingSources.has(sourceId))throw new Error("Conversion already in progress for this objective.");
+    this.convertingSources.add(sourceId);
+    try {await this.performConversion(sourceId,parentId);} finally {this.convertingSources.delete(sourceId);}
+  }
+
+  private async performConversion(sourceId: string, parentId: string): Promise<void> {
     if (sourceId === parentId) throw new Error("A task cannot be its own parent.");
     const source = this.getById(sourceId);
     const parent = this.getById(parentId);
@@ -1164,6 +1184,7 @@ export class TaskWorkspaceService {
     if (source.record.subtasks.length) throw new Error("Promote or move this task's subtasks before converting it.");
     const existing = this.convertedAction(sourceId);
     if (existing) return this.moveConvertedAction(source, parent, existing.parent, existing.action);
+    if (source.record.converted_to) throw new Error("The recorded converted action is unavailable. Restore or resolve its ID link before converting again.");
     const sourceContent = await this.app.vault.read(source.taskFile);
     const parentContent = await this.app.vault.read(parent.taskFile);
     const sourceFiles = this.relatedFilesPath(source);
@@ -1188,16 +1209,16 @@ export class TaskWorkspaceService {
       }
       for (const snapshot of referenceSnapshots) {
         const document = parseTaskMarkdown(await this.app.vault.read(snapshot.task.taskFile));
-        await this.app.vault.modify(snapshot.task.taskFile, renderTaskMarkdown(updateTaskFields(document.record, {
+        await this.app.vault.modify(snapshot.task.taskFile, patchConversionMetadata(await this.app.vault.read(snapshot.task.taskFile), {
           related_files: document.record.related_files.map((path) => rewriteVaultPath(path, [{ from: sourceFiles, to: destination }]))
-        }), document.body));
+        }));
       }
       // Retain external/shared references in the original archived task.
       const document = parseTaskMarkdown(await this.app.vault.read(source.taskFile));
       const references = document.record.related_files.map((path) => path.startsWith(`${sourceFiles}/`) ? destination + path.slice(sourceFiles.length) : path);
-      await this.app.vault.modify(source.taskFile, renderTaskMarkdown(updateTaskFields(document.record, { related_files: references }), document.body));
+      await this.app.vault.modify(source.taskFile, patchConversionMetadata(await this.app.vault.read(source.taskFile), { related_files: references }));
       await this.refresh();
-      await this.changeStatus(sourceId, "archived");
+      await this.markConverted(sourceId, parentId, sub.id);
     } catch (error) {
       if (moved && sourceFolder) await this.app.fileManager.renameFile(sourceFolder, sourceFiles);
       for (const snapshot of referenceSnapshots) await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
@@ -2586,4 +2607,14 @@ function artifactFolderFromTaskPath(path: string): string {
   const start = normalized.lastIndexOf(marker);
   if (start < 0) throw new Error(`Task note is outside a task artifact folder: ${path}`);
   return normalized.slice(start + marker.length, normalized.lastIndexOf("/"));
+}
+
+/** Patch only the conversion-owned keys, preserving custom YAML and original body. */
+function patchConversionMetadata(markdown:string,patch:Record<string,unknown>):string {
+  const frontmatter=markdown.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if(!frontmatter)throw new Error("Objective frontmatter is missing.");
+  const metadata=YAML.parseDocument(frontmatter[1]);
+  if(metadata.errors.length)throw new Error("Invalid objective metadata.");
+  for(const [key,value] of Object.entries(patch))metadata.set(key,value);
+  return `---\n${metadata.toString()}---${markdown.slice(frontmatter[0].length)}`;
 }
