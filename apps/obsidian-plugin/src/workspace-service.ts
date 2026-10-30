@@ -1,3 +1,4 @@
+import { movedPath, rewriteMovedLinks } from "./move-links";
 import { DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
 import YAML from "yaml";
 import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, agendaChoice, normalizePeople } from "./people-model";
@@ -162,7 +163,7 @@ export class TaskWorkspaceService {
   private readonly index = new Map<string, IndexedTask>();
   private duplicatePaths = new Map<string, string[]>();
   private refreshGeneration = 0;
-  private latestRefresh: Promise<void> = Promise.resolve();
+  private refreshRunning: Promise<void> | null = null;
   private readonly creatingIds = new Set<string>();
   private readonly projectIndex = new Map<string, IndexedProject>();
 
@@ -185,9 +186,16 @@ export class TaskWorkspaceService {
   }
 
   refresh(): Promise<void> {
-    const generation = ++this.refreshGeneration;
-    const pending = Promise.resolve().then(() => this.scanWorkspace(generation));
-    this.latestRefresh = pending;
+    ++this.refreshGeneration;
+    if (this.refreshRunning) return this.refreshRunning;
+    const pending = Promise.resolve().then(async () => {
+      let generation: number;
+      do {
+        generation = this.refreshGeneration;
+        await this.scanWorkspace(generation);
+      } while (generation !== this.refreshGeneration);
+    }).finally(() => { this.refreshRunning = null; });
+    this.refreshRunning = pending;
     return pending;
   }
 
@@ -207,6 +215,7 @@ export class TaskWorkspaceService {
       Number(a.path.startsWith(archivePrefix)) - Number(b.path.startsWith(archivePrefix))
       || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     for (const file of files) {
+      if (generation !== this.refreshGeneration) return;
       // Captured emails and preserved source notes inside subtask folders are attachments.
       if (file.path.includes("/Subtasks/")) continue;
       const legacyWorkspace = file.name === "task.md"
@@ -293,6 +302,7 @@ export class TaskWorkspaceService {
     }
     const vaultFiles = this.app.vault.getFiles();
     for (const task of next.values()) {
+      if (generation !== this.refreshGeneration) return;
       const referencedPaths = new Set(task.record.related_files.map((path) => normalizePath(path)));
       const relatedRoot = `${normalizePath(this.relatedFilesPath(task))}/`;
       const related = vaultFiles
@@ -331,8 +341,8 @@ export class TaskWorkspaceService {
       catch (error) { console.warn("[FJG Objective Manager] Could not read agenda roster", error); }
     }
     // Mutation callers need a committed index, not merely a discarded scan.
-    // Newer scans never wait on older scans, so following the newest promise is acyclic.
-    if (generation !== this.refreshGeneration) return this.latestRefresh;
+    // Coalesced callers wait for a final scan incorporating every queued change.
+    if (generation !== this.refreshGeneration) return;
     // Resolve historical conversion by explicit action source IDs, never by titles.
     for (const parent of next.values()) for (const action of parent.record.subtasks) {
       const source = next.get(action.source_task_id);
@@ -1637,6 +1647,21 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
+  private async prepareMoveLinks(rewrites: Array<{from:string;to:string}>): Promise<Array<{file:TFile;oldPath:string;resolve:(link:string)=>string|undefined}>> {
+    const links=this.app.metadataCache?.resolvedLinks || {};
+    const affected=(path:string)=>movedPath(path,rewrites)!==path;
+    const candidates=this.app.vault.getMarkdownFiles().filter(file=>!this.isBriefingPath(file.path) && (affected(file.path)||Object.keys(links[file.path]||{}).some(affected)));
+    return Promise.all(candidates.map(async file=>{
+      const oldPath=file.path, text=await this.app.vault.read(file), resolved=new Map<string,string>();
+      for(const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)){
+        const link=match[1].split("|")[0].split("#")[0];
+        const dest=this.app.metadataCache?.getFirstLinkpathDest?.(link,oldPath);
+        if(dest)resolved.set(link,dest.path);
+      }
+      return {file,oldPath,resolve:(link:string)=>resolved.get(link)};
+    }));
+  }
+
   private async relocateManagedTaskWorkspace(input: {
     task: IndexedTask;
     destination: string;
@@ -1760,26 +1785,38 @@ export class TaskWorkspaceService {
       createdAt: at.toISOString()
     });
     const referenceSnapshots = await this.projectChangeReferenceSnapshots(task.record.task_id, pathRewrites);
+    const linkSources=await this.prepareMoveLinks(pathRewrites);
+    const appliedLinks:Array<{file:TFile;before:string;after:string}>=[];
     const completed: TaskProjectMove[] = [];
     const createdFolders: TFolder[] = [];
 
+    const metadataWrites:Array<{file:TFile;before:string;after:string}>=[];
+    const checkedWrite=async(file:TFile,expected:string,after:string)=>{
+      await this.app.vault.process(file,current=>{
+        if(current!==expected)throw new Error(`Concurrent edit in ${file.path}; move cancelled.`);
+        metadataWrites.push({file,before:current,after});return after;
+      });
+    };
     try {
-      await this.app.vault.modify(updatesFile, nextUpdates);
-      await this.app.vault.modify(task.taskFile, renderTaskMarkdown(nextRecord, taskDocument.body));
+      await checkedWrite(updatesFile, oldUpdates, nextUpdates);
+      await checkedWrite(task.taskFile, oldTaskContent, patchConversionMetadata(oldTaskContent, {location:nextRecord.location,related_files:nextRecord.related_files,updated_at:nextRecord.updated_at}));
       for (const snapshot of referenceSnapshots) {
         const relatedFiles = snapshot.document.record.related_files.map(rewritePath);
-        await this.app.vault.modify(
-          snapshot.task.taskFile,
-          renderTaskMarkdown(
-            updateTaskFields(snapshot.document.record, { related_files: relatedFiles }, at),
-            snapshot.document.body
-          )
+        await checkedWrite(
+          snapshot.task.taskFile, snapshot.content,
+          patchConversionMetadata(snapshot.content, {related_files:relatedFiles,updated_at:at.toISOString()})
         );
       }
       for (const move of moves) {
-        if (move.entry instanceof TFolder) await this.app.vault.rename(move.entry, move.to);
-        else await this.app.fileManager.renameFile(move.entry, move.to);
+        await this.app.vault.rename(move.entry, move.to);
         completed.push(move);
+      }
+      for(const source of linkSources){
+        await this.app.vault.process(source.file,current=>{
+          const next=rewriteMovedLinks(current,source.oldPath,source.file.path,pathRewrites,source.resolve);
+          if(next!==current)appliedLinks.push({file:source.file,before:current,after:next});
+          return next;
+        });
       }
       if (!this.app.vault.getAbstractFileByPath(targetFiles)) {
         await this.ensureFolder(targetFiles);
@@ -1788,6 +1825,9 @@ export class TaskWorkspaceService {
       }
     } catch (error) {
       const rollbackErrors: string[] = [];
+      for(const link of appliedLinks.reverse()){
+        try{await this.app.vault.process(link.file,current=>{if(current!==link.after)throw new Error(`Concurrent edit in ${link.file.path}; recovery needs review.`);return link.before;});}catch(error){rollbackErrors.push(String(error));}
+      }
       for (const folder of createdFolders.reverse()) {
         try {
           if (this.folderIsEmpty(folder.path)) await this.app.vault.delete(folder, true);
@@ -1798,28 +1838,16 @@ export class TaskWorkspaceService {
       for (const move of completed.reverse()) {
         try {
           const rollbackTarget = move.rollbackTo || move.from;
-          if (move.entry instanceof TFolder) await this.app.vault.rename(move.entry, rollbackTarget);
-          else await this.app.fileManager.renameFile(move.entry, rollbackTarget);
+          await this.app.vault.rename(move.entry, rollbackTarget);
         } catch (rollbackError) {
           rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
         }
       }
-      for (const snapshot of referenceSnapshots) {
-        try {
-          await this.app.vault.modify(snapshot.task.taskFile, snapshot.content);
-        } catch (rollbackError) {
-          rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
-        }
-      }
-      try {
-        await this.app.vault.modify(task.taskFile, oldTaskContent);
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
-      }
-      try {
-        await this.app.vault.modify(updatesFile, oldUpdates);
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
+      for(const change of metadataWrites.reverse()){
+        try{await this.app.vault.process(change.file,current=>{
+          if(current!==change.after)throw new Error(`Concurrent edit in ${change.file.path}; recovery needs review.`);
+          return change.before;
+        });}catch(rollbackError){rollbackErrors.push(String(rollbackError));}
       }
       await this.refresh();
       if (rollbackErrors.length) {

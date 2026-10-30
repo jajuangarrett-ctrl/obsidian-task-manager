@@ -1,3 +1,9 @@
+## 0.30.1
+
+- Coalesce overlapping index refresh requests into a single scan with a fresh catch-up pass when changes arrive. Mutation callers still wait for a current committed index; failed scans can be retried.
+- Update managed-folder references from current text instead of cached character offsets, preserving surrounding content and custom metadata. Detect concurrent edits and retain rollback safeguards.
+- Keep Delete ownership checks, fresh dependency validation, verified recovery copies, recoverable Trash and rollback behavior unchanged.
+
 ## 0.30.0
 
 - Identify retained converted originals using explicit parent/action IDs and historical action source-ID backlinks, never title matching. Show a Converted view with parent links and action status, notes, history and files.

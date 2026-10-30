@@ -153,6 +153,8 @@ class MockVault {
     return file.content;
   }
 
+  async process(file: InstanceType<typeof obsidianMock.MockTFile>, update:(text:string)=>string) { const next=update(await this.read(file)); await this.modify(file,next); return next; }
+
   async modify(file: InstanceType<typeof obsidianMock.MockTFile>, content: string) {
     if (file.path === this.failNextWriteTarget) {
       this.failNextWriteTarget = "";
@@ -217,7 +219,7 @@ function createService() {
     projectArchiveRoot: "08 Tasks/Project Archive"
   };
   return {
-    vault,
+    vault, app,
     service: new TaskWorkspaceService(app as never, () => settings as never)
   };
 }
@@ -1988,4 +1990,47 @@ describe("converted original identity",()=>{
   await expect(service.convertTaskToSubtask(source.record.task_id,parent.record.task_id)).rejects.toThrow("unavailable");
   expect(service.getById(parent.record.task_id).record.subtasks).toHaveLength(0);
  });
+});
+
+
+it("coalesces concurrent refresh requests without overlapping scans or stale completion",async()=>{
+ const {service,vault}=createService();await service.initialize();await service.createTask({title:"Refresh fixture"});
+ const original=vault.cachedRead.bind(vault);let active=0,max=0,release!:()=>void,block=true;
+ const gate=new Promise<void>(r=>release=r);
+ vault.cachedRead=async file=>{active++;max=Math.max(max,active);try{if(block){block=false;await gate;}return await original(file);}finally{active--;}};
+ const first=service.refresh();await new Promise(r=>setTimeout(r,0));
+ const requests=Array.from({length:15},()=>service.refresh());
+ expect(requests.every(p=>p===first)).toBe(true);release();await Promise.all([first,...requests]);
+ expect(max).toBe(1);expect(service.list().some(t=>t.record.title==="Refresh fixture")).toBe(true);
+ await service.refresh();expect(max).toBe(1);
+});
+it("allows refresh retry after a failed scan",async()=>{
+ const {service}=createService();await service.initialize();
+ const scan=vi.spyOn(service as any,"scanWorkspace").mockRejectedValueOnce(new Error("fixture scan failure"));
+ await expect(service.refresh()).rejects.toThrow("fixture scan failure");await service.refresh();expect(scan).toHaveBeenCalledTimes(2);
+});
+
+it("managed Move preserves custom metadata and uses current-text reference updates",async()=>{
+ const {service,vault,app}=createService();await service.initialize();await vault.createFolder("02 Programs/QA Fixture");
+ const task=await service.createTask({title:"Move custom metadata",status:"completed"});
+ const raw=await vault.read(task.taskFile as never);await vault.modify(task.taskFile as never,raw.replace("---\n","---\ncustom_move_field: preserve # user comment\n"));
+ const rename=vi.spyOn(vault,"rename");await service.refresh();
+ const moved=await service.relocateTask(task.record.task_id,"02 Programs/QA Fixture");
+ expect(await vault.read(moved.taskFile as never)).toContain("custom_move_field: preserve # user comment");
+ expect(moved.record.status).toBe("completed");expect(rename).toHaveBeenCalled();
+});
+it("rolls back Move metadata and folders after a reference processing failure",async()=>{
+ const {service,vault}=createService();await service.initialize();await vault.createFolder("02 Programs/QA Fixture");
+ const task=await service.createTask({title:"Rollback reference fixture"});const path=task.taskFile.path,raw=await vault.read(task.taskFile as never);
+ const process=vault.process.bind(vault);let n=0;
+ vi.spyOn(vault,"process").mockImplementation(async(file,fn)=>{if(++n===3)throw Error("Reference processing unavailable");return process(file,fn);});
+ await expect(service.relocateTask(task.record.task_id,"02 Programs/QA Fixture")).rejects.toThrow("Reference processing unavailable");
+ expect(service.getById(task.record.task_id).taskFile.path).toBe(path);expect(await vault.read(task.taskFile as never)).toBe(raw);
+});
+it("does not overwrite a concurrent edit when Move rollback needs attention",async()=>{
+ const {service,vault}=createService();await service.initialize();await vault.createFolder("02 Programs/QA Fixture");
+ const task=await service.createTask({title:"Concurrent rollback fixture"});const process=vault.process.bind(vault);let n=0;
+ vi.spyOn(vault,"process").mockImplementation(async(file,fn)=>{if(++n===3){await vault.modify(task.taskFile as never,(await vault.read(task.taskFile as never))+"\nConcurrent user content\n");throw Error("Injected failure");}return process(file,fn);});
+ await expect(service.relocateTask(task.record.task_id,"02 Programs/QA Fixture")).rejects.toThrow("rollback needs attention");
+ expect(await vault.read(task.taskFile as never)).toContain("Concurrent user content");
 });
