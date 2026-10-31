@@ -149,3 +149,15 @@ it("existing Claudian helper retrieves the live checked selection through authen
   const response=await fetch(url+'/selection',{headers});expect(response.headers.get('cache-control')).toBe('no-store');expect(await response.json()).toMatchObject({count:0});
  }finally{await server.stop();await rm(dir,{recursive:true,force:true});}
 });
+
+it('serves authenticated deletion receipts but refuses mutation methods',async()=>{
+ const server=new TaskCatalogServer(),batch='00000000-0000-0000-0000-000000000000';
+ await server.start({port:0,token:'fixture',getTasks:()=>[],getDeleteReceipt:id=>id===batch?{mode:'deletion-receipt',state:'completed'}:undefined});
+ try {
+  const url=`http://127.0.0.1:${server.getPort()}/query?q=${encodeURIComponent('deletion receipt '+batch)}`;
+  expect((await fetch(url)).status).toBe(401);
+  const options={headers:{Authorization:'Bearer fixture'}};
+  expect(await (await fetch(url,options)).json()).toMatchObject({mode:'deletion-receipt',state:'completed'});
+  expect((await fetch(url,{...options,method:'POST'})).status).toBe(405);
+ }finally{await server.stop();}
+});

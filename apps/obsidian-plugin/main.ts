@@ -1,3 +1,4 @@
+import { DeleteCapabilities } from "./src/delete-capability";
 import { DeleteObjectiveModal } from "./src/delete-objective-modal";
 import { PeopleModal } from "./src/people-modal";
 import { OBJECTIVE_AGENDA_PATH } from "./src/people-model";
@@ -57,6 +58,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
   readonly objectiveSelection = new ObjectiveSelection();
+  private readonly deleteCapabilities = new DeleteCapabilities();
   private readonly catalogServer = new TaskCatalogServer();
   private refreshTimer: number | null = null;
   private gmailIntakeTimer: number | null = null;
@@ -79,6 +81,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.addRibbonIcon("clipboard-paste", "Capture objective, agenda, or update", () => this.openUnifiedCaptureModal());
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
+    this.registerObsidianProtocolHandler("fjg-objective-delete", async params => {
+      if(params.vault!==this.app.vault.getName() || Object.keys(params).some(key=>!["vault","capability","action"].includes(key))) {new Notice("Deletion request rejected.");return;}
+      const accepted=await this.deleteCapabilities.execute(String(params.capability||""),
+        ()=>this.workspaceService.refresh(), id=>this.workspaceService.previewDelete(id),
+        preview=>this.workspaceService.deleteObjective(preview,{title:preview.title,acknowledgeLinks:true}));
+      new Notice(accepted?"Deletion batch finished. Read its receipt for each result.":"Deletion request expired, already used, or belongs to another session.");
+      this.refreshDashboard();
+    });
     this.registerObsidianProtocolHandler("fjg-task-manager", (params) => {
       this.openQuickCaptureModal(String(params.text || ""));
     });
@@ -356,6 +366,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         getTasks: () => this.workspaceService.catalog(),
         getProjects: () => this.workspaceService.projectNames(),
         getPeople: () => this.workspaceService.peopleNames(),
+        getDeleteReceipt: id => this.deleteCapabilities.receipt(id),
         getSelection: () => this.workspaceService.checkedObjectiveContext(this.objectiveSelection),
         queryTasks: (question, limit) => this.workspaceService.queryForClaudian(question, new Date(), limit)
       });
@@ -455,6 +466,15 @@ export default class FjgTaskManagerPlugin extends Plugin {
       new Notice(`Objective renamed to ${renamed.record.title}.`);
       this.refreshDashboard();
     }).open();
+  }
+
+  createDeletePrompt(): string {
+    const entries=this.objectiveSelection.entries();
+    const labels=entries.map(entry=>{
+      const task=this.workspaceService.getById(entry.task_id);
+      return {task_id:entry.task_id,title:task.record.title,observed_path:task.taskFile.path};
+    });
+    return this.deleteCapabilities.issue(entries.map(entry=>entry.task_id),this.app.vault.getName(),labels).prompt;
   }
 
   async openDeleteObjectiveModal(taskId: string): Promise<void> {

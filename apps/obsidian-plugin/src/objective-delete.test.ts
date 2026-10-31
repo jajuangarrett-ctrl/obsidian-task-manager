@@ -1,3 +1,4 @@
+import {DeleteCapabilities} from "./delete-capability";
 import {describe,it,expect,vi} from "vitest";
 import {ObjectiveDeleteTransaction,previewObjectiveDelete} from "./objective-delete";
 import type {App} from "obsidian";
@@ -78,4 +79,16 @@ describe('existing inventory dependency checks',()=>{
   expect(p.blockers.join(' ')).toMatch(/Link index is unavailable/);
   await expect(f.tx.execute(p,confirm)).rejects.toThrow();expect(f.api.trash).not.toHaveBeenCalled();
  });
+});
+
+it('runs an authorized batch through actual recovery transaction including hidden files and owned actions',async()=>{
+ const f=fixture();f.task.record.subtasks=[{id:'owned',title:'Owned action',attachment_folder:f.roots[0]+'/.hidden'}] as never;
+ let n=0;const manager=new DeleteCapabilities(()=>1000,()=>`fixture-${++n}`),issued=manager.issue(['id-test'],'Fixture',[]);
+ await manager.execute('fixture-1',async()=>{},()=>f.preview(),p=>f.tx.execute(p,{title:p.title,acknowledgeLinks:true}));
+ expect(manager.receipt(issued.batchId)?.items[0]).toMatchObject({status:'deleted',actions:['Owned action']});
+ expect(f.entries.has(f.task.taskFile.path)).toBe(false);expect([...f.entries.values()]).toContain('hidden evidence');expect(f.entries.get('Shared/reference.md')).toBe('External note stays');
+});
+it('blocks action attachments outside objective ownership rather than silently omitting them',async()=>{
+ const f=fixture();f.task.record.subtasks=[{id:'external',title:'External action',attachment_folder:'Shared'}] as never;
+ expect((await f.preview()).blockers).toContain('Action files are outside owned folders: external');
 });

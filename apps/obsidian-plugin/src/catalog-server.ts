@@ -18,6 +18,7 @@ export class TaskCatalogServer {
     getProjects?: () => string[];
     getPeople?: () => string[];
     getSelection?: () => unknown | Promise<unknown>;
+    getDeleteReceipt?: (id:string) => unknown;
     queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
   }): Promise<void> {
     await this.stop();
@@ -69,6 +70,7 @@ export class TaskCatalogServer {
       getProjects?: () => string[];
       getPeople?: () => string[];
       getSelection?: () => unknown | Promise<unknown>;
+    getDeleteReceipt?: (id:string) => unknown;
     queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
     }
   ): Promise<void> {
@@ -101,6 +103,11 @@ export class TaskCatalogServer {
         .filter(Boolean)
         .sort((left, right) => left.localeCompare(right));
       return sendJson(response, 200, { projects });
+    }
+    const receiptQuery=url.pathname==="/query" ? /^deletion receipt ([a-f0-9-]{36})$/i.exec(url.searchParams.get("q")||"") : null;
+    if(receiptQuery) {
+      const receipt=options.getDeleteReceipt?.(receiptQuery[1]);
+      return receipt?sendJson(response,200,receipt):sendJson(response,404,{error:"Deletion receipt unavailable in this plugin session. Do not infer success or retry execution."});
     }
     if (url.pathname === "/selection" || (url.pathname === "/query" && isSelectionQuestion(url.searchParams.get("q")||""))) {
       if(!options.getSelection)return sendJson(response,404,{error:"Checked objectives are unavailable. Update Objective Manager and keep it open on this device."});

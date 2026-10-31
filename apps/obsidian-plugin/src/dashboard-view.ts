@@ -786,7 +786,7 @@ export class TaskDashboardView extends ItemView {
       })))
       : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned, task.taskFile.path));
     const tasks = viewTasks.filter((task) => taskMatchesSearch(task, query));
-    if(isSelectionView(this.view)) renderSelectionSummary(rows,tasks,this.taskPlugin.workspaceService.list({includeArchived:true}),this.view,this.taskPlugin.objectiveSelection,()=>this.taskPlugin.refreshDashboard());
+    if(isSelectionView(this.view)) renderSelectionSummary(rows,tasks,this.taskPlugin.workspaceService.list({includeArchived:true}),this.view,this.taskPlugin.objectiveSelection,()=>this.taskPlugin.refreshDashboard(),undefined,()=>this.taskPlugin.createDeletePrompt());
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No objectives match this view." });
       return;

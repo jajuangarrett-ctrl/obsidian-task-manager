@@ -2047,6 +2047,7 @@ export class TaskWorkspaceService {
   async previewDelete(taskId: string): Promise<DeletePreview> {
     const indexed = this.getById(taskId);
     const task = {...indexed, record:parseTaskMarkdown(await this.app.vault.read(indexed.taskFile)).record};
+    if(task.record.task_id!==taskId)throw Error("Objective identity changed; refresh before deleting.");
     const others = await Promise.all(this.list({includeArchived:true}).map(async other => ({...other, record:parseTaskMarkdown(await this.app.vault.read(other.taskFile)).record})));
     return previewObjectiveDelete(this.app, task, this.taskOwnedFolderRoots(task), others, [this.briefingPath()]);
   }
@@ -2054,7 +2055,8 @@ export class TaskWorkspaceService {
   async deleteObjective(preview: DeletePreview, confirmation: {title:string;acknowledgeLinks:boolean}): Promise<string> {
     this.deletion ||= new ObjectiveDeleteTransaction(this.app, id => this.previewDelete(id));
     const recovery = await this.deletion.execute(preview, confirmation);
-    await this.refresh();
+    try {await this.refresh();}
+    catch {return `${recovery}; deletion completed, but derived index refresh failed. Rebuild the Objective Index.`;}
     return recovery;
   }
 

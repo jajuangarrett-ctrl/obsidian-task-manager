@@ -44,6 +44,10 @@ export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:st
     if(other.record.subtasks.some(a=>a.source_task_id===task.record.task_id)) result.blockers.push(`An action in ${other.record.title} depends on this source objective.`);
   }
   result.externalFiles=task.record.related_files.filter(path=>!owned(path,result.roots));
+  for(const action of task.record.subtasks) {
+    if(action.attachment_folder && !owned(action.attachment_folder,result.roots) && await adapter.exists(action.attachment_folder))
+      result.blockers.push(`Action files are outside owned folders: ${action.id}`);
+  }
   const links=app.metadataCache.resolvedLinks;
   if(!links) result.blockers.push("Link index is unavailable. Wait for Obsidian indexing and preview again.");
   for(const [source,targets] of Object.entries(links||{})) {

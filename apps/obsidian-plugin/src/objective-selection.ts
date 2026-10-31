@@ -65,7 +65,7 @@ export function renderSelectionCheckbox(parent:HTMLElement,task:IndexedTask,view
   check.addEventListener("change",()=>{selection.set(task.record.task_id,view,check.checked);changed();});
 }
 
-export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],all:IndexedTask[],view:SelectionView,selection:ObjectiveSelection,changed:()=>void,copyText:(text:string)=>Promise<void>=text=>navigator.clipboard.writeText(text)):void {
+export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],all:IndexedTask[],view:SelectionView,selection:ObjectiveSelection,changed:()=>void,copyText:(text:string)=>Promise<void>=text=>navigator.clipboard.writeText(text),createDeletePrompt?:()=>string):void {
   const box=parent.createDiv({cls:"fjg-objective-selection"});
   const entries=selection.entries(),visibleIds=new Set(visible.map(task=>task.record.task_id));
   const hidden=entries.filter(entry=>!visibleIds.has(entry.task_id)).length;
@@ -82,12 +82,27 @@ export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],
   const feedback=box.createEl("p",{attr:{role:"status","aria-live":"polite"}});
   copy.addEventListener("click",async()=>{
     if(selection.revision!==revision){changed();return;}
+    prompt.value=checkedObjectivesPrompt(selection,all);
     if(!prompt.value)return;
     copy.disabled=true;
     try {await copyText(prompt.value);feedback.setText("Prompt copied. Paste it into Claudian and send it.");}
     catch {feedback.setText("Could not copy automatically. Select the prompt above and copy it manually.");prompt.focus();prompt.select();}
     finally {copy.disabled=!selection.entries().length;}
   });
+  if(createDeletePrompt) {
+    const deleteCopy=box.createEl("button",{text:"Copy delete prompt"});deleteCopy.disabled=!entries.length;
+    box.createEl("p",{text:"Copy delete prompt authorizes these checked IDs for one recoverable deletion within 10 minutes, including owned files and actions. Paste and send it in Claudian to execute. Shared content and unselected parent dependencies remain blocked. Nothing is deleted by copying. A copied authorization stays valid if you change your selection; reload the plugin to revoke it."});
+    deleteCopy.addEventListener("click",async()=>{
+      if(selection.revision!==revision){changed();return;}
+      deleteCopy.disabled=true;
+      try {
+        prompt.value=createDeletePrompt();
+        try {await copyText(prompt.value);feedback.setText("Delete prompt copied. Paste and send in Claudian within 10 minutes to execute.");}
+        catch {feedback.setText("Could not copy automatically. Select the delete prompt above and copy it manually.");prompt.focus();prompt.select();}
+      }catch(error){feedback.setText(error instanceof Error?error.message:String(error));}
+      finally{deleteCopy.disabled=!selection.entries().length;}
+    });
+  }
   if(entries.length){const details=box.createEl("details");details.createEl("summary",{text:"Review all checked objectives"});
     for(const entry of entries){const task=all.find(task=>task.record.task_id===entry.task_id),line=details.createDiv();
       line.createSpan({text:`${task?.record.title||"Unavailable objective"} · ${task?.taskFile.path||entry.task_id} · checked in ${SELECTION_VIEWS[entry.selected_from]}`});

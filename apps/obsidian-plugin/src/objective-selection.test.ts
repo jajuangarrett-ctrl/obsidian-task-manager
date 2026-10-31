@@ -87,3 +87,13 @@ describe('copyable Claudian handoff',()=>{
   await root.all().find(el=>el.options.text==='Copy prompt')!.events.click();expect(copy).not.toHaveBeenCalled();expect(changed).toHaveBeenCalledOnce();
  });
 });
+
+it('issues deletion authorization only on explicit copy, leaves manual fallback, and preserves general copy',async()=>{
+ const s=new ObjectiveSelection();s.set('a','completed',true);const root=new Element(),issue=vi.fn(()=>"Disposable delete prompt"),copy=vi.fn(async()=>{throw Error('clipboard');});
+ renderSelectionSummary(root as never,[task('a')],[task('a')],'completed',s,vi.fn(),copy,issue);
+ expect(issue).not.toHaveBeenCalled();await root.all().find(el=>el.options.text==='Copy delete prompt')!.events.click();
+ expect(issue).toHaveBeenCalledOnce();const prompt=root.all().find(el=>el.tag==='textarea')!;
+ expect(prompt.value).toBe('Disposable delete prompt');expect(prompt.selected).toBe(true);
+ await root.all().find(el=>el.options.text==='Copy prompt')!.events.click();expect(prompt.value).toContain('Then wait for my instructions');
+ s.set('b','converted',true);await root.all().find(el=>el.options.text==='Copy delete prompt')!.events.click();expect(issue).toHaveBeenCalledOnce();
+});
