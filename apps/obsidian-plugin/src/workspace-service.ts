@@ -814,7 +814,7 @@ export class TaskWorkspaceService {
       } catch(error){errors.set(indexed.record.task_id,String(error));return null;}
     }));
     const context=selection.context(fresh.filter((task):task is IndexedTask=>task!==null),errors,task=>this.taskOwnedFolderRoots(task));
-    return {...context,dependency_scan_complete:errors.size===0,dependency_scan_errors:[...errors].map(([task_id,error])=>({task_id,error}))};
+    return {...context,dependency_scan_scope:"Currently indexed objective records; revalidate ownership and dependencies before acting.",dependency_scan_complete:errors.size===0,dependency_scan_errors:[...errors].map(([task_id,error])=>({task_id,error}))};
   }
 
   queryForClaudian(question: string, now = new Date(), limit = 30): TaskQueryResult {

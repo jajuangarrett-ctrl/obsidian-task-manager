@@ -26,7 +26,7 @@ export class ObjectiveSelection {
       if(error)return {...entry,available:false,error};
       const task=matches[0],record=task.record;
       const relationships=tasks.flatMap(parent=>parent.record.subtasks.filter(action=>action.source_task_id===record.task_id).map(action=>({parent_task_id:parent.record.task_id,parent_path:parent.taskFile.path,action_id:action.id,action_title:action.title,action_status:action.status})));
-      return {...entry,available:true,title:record.title,status:record.status,path:task.taskFile.path,folder_path:task.folderPath,updates_path:task.updatesFile?.path||"",
+      return {...entry,available:true,title:record.title,status:record.status,path:task.taskFile.path,folder_path:task.taskFile.path.slice(0,task.taskFile.path.lastIndexOf("/")),updates_path:task.updatesFile?.path||"",
         current_views:Object.keys(SELECTION_VIEWS).filter(view=>taskMatchesView({...record,__fjgConversionLinks:relationships},view as TaskViewKey,undefined,task.statusAssigned,task.taskFile.path)),
         workspace_roots_to_review:roots(task),related_files:record.related_files,
         converted_to:record.converted_to||null,parent_actions:relationships,

@@ -222,6 +222,16 @@ obsidian://fjg-task-update?text=<URL-encoded update text>
 
 The native modal searches the live task catalog and requires the user to select one exact task before **Add Update** is enabled. Opening the link, searching, or selecting a task does not write an update; only the final button appends to the selected stable task ID.
 
+## Checked objectives for Claudian
+
+In **Objectives → Inbox folder**, **Completed**, or **Converted**, check the objectives you want Claudian to see. **Select visible** checks only the current filtered results. The selection count includes checked items outside the current view/filter; expand **Review all checked objectives** to inspect or uncheck them. **Clear selection** clears the whole selection.
+
+In your existing Claudian chat on the same device, run `/task-manager checked objectives` (or ask it to run `node ".claude/task-manager/query.cjs" "checked objectives"` from the vault). Then give Claudian your instructions. The existing helper works unchanged; no Claudian configuration update is required. Obsidian and Objective Manager must be running with Desktop task search enabled.
+
+This is a read-only selection context, not an automatic bulk Move/Delete feature or authorization. It returns stable IDs, current record paths, source views, related-file references, and converted parent/action relationships. Missing or ambiguous IDs are explicitly unavailable. Parent objectives, actions and external files are never implicitly selected. Paths are not verified deletion ownership; re-query and validate dependencies before any separately requested operation.
+
+Selection is shared across these three views in the current plugin session, survives filtering/tab changes, and clears on plugin reload or app restart. It is not synchronized to other devices. The authenticated GET `/selection` endpoint and exact `/query?q=checked%20objectives` query expose the same live selection without the normal search result limit; no mutation routes were added.
+
 ## Ask Claudian about tasks
 
 Task Manager generates `Task Manager Briefing.md` inside the configured active workspace root. The note is rebuilt from the authoritative Task Manager index whenever the dashboard refreshes. It contains every active and archived dashboard task grouped by project tag, plus task details and notes, status, due date, delegation, recent update history, and links back to the task and full update notes.
