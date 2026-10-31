@@ -2014,3 +2014,6 @@
 .fjg-selection-prompt { display: block; box-sizing: border-box; width: 100%; min-height: 10rem; margin: 8px 0; resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; -webkit-user-select: text; }
 .fjg-objective-selection { min-width: 0; }
 .fjg-objective-selection-controls { flex-wrap: wrap; }
+.fjg-task-rows { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.fjg-objective-selection { max-width: 100%; box-sizing: border-box; }
+.fjg-objective-selection p { white-space: normal; overflow-wrap: anywhere; }
