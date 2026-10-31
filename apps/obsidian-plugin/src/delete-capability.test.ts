@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from "vitest";
-import {DeleteCapabilities} from "./delete-capability";
+import {DeleteCapabilities,validDeleteProtocol} from "./delete-capability";
 import type {DeletePreview} from "./objective-delete";
 const preview=(id:string)=>({id,title:"Duplicate title",taskPath:`Moved/${id}/task.md`,actions:["Owned action"],blockers:[],roots:[],files:[],folders:[],externalFiles:[],incoming:[],fingerprint:"fixture"} as DeletePreview);
 function setup(){let time=1000,n=0;const manager=new DeleteCapabilities(()=>time,()=>`test-${++n}`);return {manager,expire:()=>{time+=600001;},issue:(ids=["a","b"])=>manager.issue(ids,"Vault",[{title:"Label only"}])};}
@@ -44,4 +44,12 @@ describe("single-use objective deletion",()=>{
   const f=setup();expect(()=>f.issue([])).toThrow();expect(()=>f.issue(["a","a"])).toThrow();const issued=f.issue();
   f.manager.receipt(issued.batchId)!.items[0].task_id="other";expect(f.manager.receipt(issued.batchId)!.items[0].task_id).toBe("a");
  });
+});
+
+it('accepts consumed vault routing but rejects alternate vault, extra IDs/paths and malformed protocol data',()=>{
+ const params={action:'fjg-objective-delete',capability:'00000000-0000-0000-0000-000000000000'};
+ expect(validDeleteProtocol(params,'Vault')).toBe(true);expect(validDeleteProtocol({...params,vault:'Vault'},'Vault')).toBe(true);
+ expect(validDeleteProtocol({...params,vault:'Other'},'Vault')).toBe(false);
+ for(const key of ['path','ids','task_id'])expect(validDeleteProtocol({...params,[key]:'other'},'Vault')).toBe(false);
+ expect(validDeleteProtocol({...params,action:'other'},'Vault')).toBe(false);expect(validDeleteProtocol({...params,capability:'bad'},'Vault')).toBe(false);
 });

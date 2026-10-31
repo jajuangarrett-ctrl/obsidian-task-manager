@@ -1,4 +1,4 @@
-import { DeleteCapabilities } from "./src/delete-capability";
+import { DeleteCapabilities, validDeleteProtocol } from "./src/delete-capability";
 import { DeleteObjectiveModal } from "./src/delete-objective-modal";
 import { PeopleModal } from "./src/people-modal";
 import { OBJECTIVE_AGENDA_PATH } from "./src/people-model";
@@ -82,7 +82,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.addSettingTab(new TaskManagerSettingTab(this.app, this));
     this.registerObsidianProtocolHandler("fjg-task-clipper", (params) => this.handleClipperPayload(String(params.payload || "")));
     this.registerObsidianProtocolHandler("fjg-objective-delete", async params => {
-      if(params.vault!==this.app.vault.getName() || Object.keys(params).some(key=>!["vault","capability","action"].includes(key))) {new Notice("Deletion request rejected.");return;}
+      if(!validDeleteProtocol(params,this.app.vault.getName())) {new Notice("Deletion request rejected.");return;}
       const accepted=await this.deleteCapabilities.execute(String(params.capability||""),
         ()=>this.workspaceService.refresh(), id=>this.workspaceService.previewDelete(id),
         preview=>this.workspaceService.deleteObjective(preview,{title:preview.title,acknowledgeLinks:true}));

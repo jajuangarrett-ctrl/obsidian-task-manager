@@ -65,3 +65,8 @@ export class DeleteCapabilities {
     return true;
   }
 }
+
+/** Obsidian consumes the vault routing parameter before dispatching to the plugin. */
+export function validDeleteProtocol(params:Record<string,string>,vault:string):boolean {
+  return (!params.vault||params.vault===vault) && params.action==="fjg-objective-delete" && /^[a-f0-9-]{36}$/i.test(params.capability||"") && Object.keys(params).every(key=>["vault","capability","action"].includes(key));
+}
