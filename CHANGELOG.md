@@ -1,3 +1,8 @@
+## 0.30.3
+
+- Check objectives in Inbox folder, Completed and Converted, select visible items, review hidden selections and clear selection. Selection uses IDs and lasts only for the current plugin session.
+- Expose checked IDs, current paths and converted parent/action references through authenticated read-only `/selection` and the existing Claudian `/task-manager checked objectives` query. Checking never moves or deletes files and requires no Claudian configuration update.
+
 ## 0.30.2
 
 - Allow objective deletion when another objective or cached note link references a missing attachment. Check dependencies against the complete owned file and folder inventory, including hidden entries.

@@ -1,3 +1,4 @@
+import { isSelectionView, renderSelectionCheckbox, renderSelectionSummary } from "./objective-selection";
 import { isConvertedOriginal } from "@fjg/task-core";
 import { renderConversion } from "./conversion-ui";
 import { renderObjectiveMoreMenu } from "./objective-more-menu";
@@ -785,6 +786,7 @@ export class TaskDashboardView extends ItemView {
       })))
       : scopedTasks.filter((task) => taskMatchesView(task.record, this.view, undefined, task.statusAssigned, task.taskFile.path));
     const tasks = viewTasks.filter((task) => taskMatchesSearch(task, query));
+    if(isSelectionView(this.view)) renderSelectionSummary(rows,tasks,this.taskPlugin.workspaceService.list({includeArchived:true}),this.view,this.taskPlugin.objectiveSelection,()=>this.taskPlugin.refreshDashboard());
     if (!tasks.length) {
       rows.createDiv({ cls: "fjg-empty", text: "No objectives match this view." });
       return;
@@ -798,6 +800,7 @@ export class TaskDashboardView extends ItemView {
       attr: { "data-status": task.record.status, "data-task-id": task.record.task_id }
     });
     const overview = row.createDiv({ cls: "fjg-task-overview" });
+    if(this.mode==="tasks" && isSelectionView(this.view))renderSelectionCheckbox(overview,task,this.view,this.taskPlugin.objectiveSelection,()=>this.taskPlugin.refreshDashboard());
     const main = overview.createDiv({ cls: "fjg-task-main" });
     const title = main.createEl("button", { text: task.record.title, cls: "fjg-task-title" });
     title.addEventListener("click", event => {

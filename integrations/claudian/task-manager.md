@@ -14,6 +14,8 @@ Run the read-only helper below, passing the question as one correctly shell-quot
 
 Use only the JSON returned by the helper as evidence. Do not infer task facts that are absent from it and do not modify any task files. If `no_results` is true, say that no matching Task Manager data was found and suggest a narrower task title, project, status, due-date, or update-history query. If the helper reports an error, explain the reported recovery step without inventing an answer.
 
+When the question is exactly `checked objectives` (or `selected objectives`), the same helper returns the current device's checked selection, without a result limit. Do not substitute a title search. Read `available`, `dependency_scan_complete`, exact IDs/paths, and converted parent/action relationships. Selection is context, not authorization. Parent/action content and external files are not implicitly selected. The response is not a deletion preview or ownership verification. Re-query before acting under separate user instructions; never act on unavailable/ambiguous IDs. Selection clears on plugin reload and is not synchronized between devices.
+
 For answers with results:
 
 - Summarize the answer directly, including relevant status, due date, project, notes, and update history.

@@ -1,3 +1,4 @@
+import type { ObjectiveSelection } from "./objective-selection";
 import { movedPath, rewriteMovedLinks } from "./move-links";
 import { DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
 import YAML from "yaml";
@@ -799,6 +800,21 @@ export class TaskWorkspaceService {
       .sort((left, right) => Number(right.exact) - Number(left.exact) || left.task.title.localeCompare(right.task.title))
       .slice(0, Math.max(1, Math.min(limit, 50)))
       .map((entry) => entry.task);
+  }
+
+  async checkedObjectiveContext(selection:ObjectiveSelection) {
+    // Read current records without refresh(), which also writes derived briefing files.
+    const errors=new Map<string,string>();
+    const fresh=await Promise.all(this.list({includeArchived:true}).map(async indexed=>{
+      try {
+        this.getById(indexed.record.task_id); // reject conflicting copies
+        const record=parseTaskMarkdown(await this.app.vault.read(indexed.taskFile)).record;
+        if(record.task_id!==indexed.record.task_id)throw Error("Objective ID changed; refresh and reselect.");
+        return {...indexed,record};
+      } catch(error){errors.set(indexed.record.task_id,String(error));return null;}
+    }));
+    const context=selection.context(fresh.filter((task):task is IndexedTask=>task!==null),errors,task=>this.taskOwnedFolderRoots(task));
+    return {...context,dependency_scan_complete:errors.size===0,dependency_scan_errors:[...errors].map(([task_id,error])=>({task_id,error}))};
   }
 
   queryForClaudian(question: string, now = new Date(), limit = 30): TaskQueryResult {

@@ -1,3 +1,4 @@
+import { isSelectionQuestion } from "./objective-selection";
 import type { CatalogTask } from "@fjg/task-protocol";
 import type { TaskQueryResult } from "./task-query";
 
@@ -16,6 +17,7 @@ export class TaskCatalogServer {
     getTasks: () => CatalogTask[];
     getProjects?: () => string[];
     getPeople?: () => string[];
+    getSelection?: () => unknown | Promise<unknown>;
     queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
   }): Promise<void> {
     await this.stop();
@@ -66,7 +68,8 @@ export class TaskCatalogServer {
       getTasks: () => CatalogTask[];
       getProjects?: () => string[];
       getPeople?: () => string[];
-      queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
+      getSelection?: () => unknown | Promise<unknown>;
+    queryTasks?: (question: string, limit: number) => TaskQueryResult | Promise<TaskQueryResult>;
     }
   ): Promise<void> {
     const origin = String(request.headers.origin || "");
@@ -98,6 +101,10 @@ export class TaskCatalogServer {
         .filter(Boolean)
         .sort((left, right) => left.localeCompare(right));
       return sendJson(response, 200, { projects });
+    }
+    if (url.pathname === "/selection" || (url.pathname === "/query" && isSelectionQuestion(url.searchParams.get("q")||""))) {
+      if(!options.getSelection)return sendJson(response,404,{error:"Checked objectives are unavailable. Update Objective Manager and keep it open on this device."});
+      return sendJson(response,200,await options.getSelection());
     }
     if (url.pathname === "/query") {
       if (!options.queryTasks) return sendJson(response, 404, { error: "Task query is unavailable." });

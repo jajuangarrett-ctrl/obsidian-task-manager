@@ -42,6 +42,7 @@ import {
   TaskManagerSettings,
   TaskManagerSettingTab
 } from "./src/settings";
+import { ObjectiveSelection } from "./src/objective-selection";
 import { legacyOpenAiApiKey } from "./src/settings-migration";
 import { decodeSystemCaptureClipboard } from "./src/system-capture-clipboard";
 import { taskFolderClipboardPath } from "./src/task-folder-path";
@@ -55,6 +56,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private liveVoiceModal: LiveVoiceModal | null = null;
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
+  readonly objectiveSelection = new ObjectiveSelection();
   private readonly catalogServer = new TaskCatalogServer();
   private refreshTimer: number | null = null;
   private gmailIntakeTimer: number | null = null;
@@ -354,6 +356,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
         getTasks: () => this.workspaceService.catalog(),
         getProjects: () => this.workspaceService.projectNames(),
         getPeople: () => this.workspaceService.peopleNames(),
+        getSelection: () => this.workspaceService.checkedObjectiveContext(this.objectiveSelection),
         queryTasks: (question, limit) => this.workspaceService.queryForClaudian(question, new Date(), limit)
       });
     } catch (error) {
