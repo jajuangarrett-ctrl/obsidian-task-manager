@@ -34,10 +34,13 @@ export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:st
     for(const folder of entries.folders.sort()) {if(!within(folder,path)||folder===path)throw Error("Unsafe folder inventory.");await visit(folder);}
   };
   for(const root of result.roots) await visit(root);
+  // Use the adapter inventory, including hidden files and folders, rather than
+  // treating stale references as evidence that a target still exists.
+  const existingOwnedPaths=new Set([...result.files.map(file=>file.path),...result.folders]);
   for(const other of others) {
     if(other.record.task_id===task.record.task_id) {if(other.taskFile.path!==task.taskFile.path)result.blockers.push("Duplicate objective ID.");continue;}
     if(owned(other.taskFile.path,result.roots)) result.blockers.push(`Contains another objective: ${other.record.title}`);
-    for(const ref of other.record.related_files) if(owned(ref,result.roots)) result.blockers.push(`Shared file used by ${other.record.title}: ${ref}`);
+    for(const ref of other.record.related_files) if(existingOwnedPaths.has(ref)) result.blockers.push(`Shared file used by ${other.record.title}: ${ref}`);
     if(other.record.subtasks.some(a=>a.source_task_id===task.record.task_id)) result.blockers.push(`An action in ${other.record.title} depends on this source objective.`);
   }
   result.externalFiles=task.record.related_files.filter(path=>!owned(path,result.roots));
@@ -46,9 +49,9 @@ export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:st
   for(const [source,targets] of Object.entries(links||{})) {
     if(owned(source,result.roots)) {
       for(const target of Object.keys(targets))if(!owned(target,result.roots))result.externalFiles.push(target);
-    } else if(Object.keys(targets).some(target=>owned(target,result.roots))) {
+    } else if(Object.keys(targets).some(target=>existingOwnedPaths.has(target))) {
       result.incoming.push(source);
-      for(const target of Object.keys(targets)) if(!derivedIndexes.includes(source) && owned(target,result.roots) && target!==task.taskFile.path && target!==task.updatesFile?.path)
+      for(const target of Object.keys(targets)) if(!derivedIndexes.includes(source) && existingOwnedPaths.has(target) && target!==task.taskFile.path && target!==task.updatesFile?.path)
         result.blockers.push(`File is linked from another note: ${source} → ${target}`);
     }
   }

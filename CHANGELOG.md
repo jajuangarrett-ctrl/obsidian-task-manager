@@ -1,3 +1,8 @@
+## 0.30.2
+
+- Allow objective deletion when another objective or cached note link references a missing attachment. Check dependencies against the complete owned file and folder inventory, including hidden entries.
+- Keep real shared files and folders protected, and revalidate contents and dependencies at confirmation and immediately before recoverable Trash. Other objectives and their references are not edited.
+
 ## 0.30.1
 
 - Coalesce overlapping index refresh requests into a single scan with a fresh catch-up pass when changes arrive. Mutation callers still wait for a current committed index; failed scans can be retried.

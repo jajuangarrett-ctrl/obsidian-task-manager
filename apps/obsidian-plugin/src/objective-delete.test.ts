@@ -42,3 +42,40 @@ it("does not mistake the regenerated briefing index for shared attachment owners
 });
 
 it('detects changes during recovery copying before sending anything to Trash',async()=>{const f=fixture(),p=await f.preview();const original=f.api.createBinary;f.api.createBinary=async(path,bytes)=>{await original(path,bytes);f.put(f.roots[0]+'/arrived.md','Concurrent content');};await expect(f.tx.execute(p,confirm)).rejects.toThrow('changed');expect(f.api.trash).not.toHaveBeenCalled();expect(f.entries.get(f.roots[0]+'/arrived.md')).toBe('Concurrent content');});
+
+
+describe('existing inventory dependency checks',()=>{
+ const addReference=(f:ReturnType<typeof fixture>,path:string)=>f.others.push({record:{task_id:'other',title:'Other',related_files:[path],subtasks:[]},taskFile:{path:'Other/task.md'}} as unknown as IndexedTask);
+ it('ignores missing references and stale cached targets without editing other records',async()=>{
+  const f=fixture(),missing=f.roots[0]+'/missing.pdf';addReference(f,missing);
+  f.app.metadataCache.resolvedLinks={'Other.md':{[missing]:1}};
+  const before=JSON.stringify(f.others),p=await f.preview();
+  expect(p.blockers).toEqual([]);expect(p.incoming).toEqual([]);
+  await f.tx.execute(p,confirm);expect(JSON.stringify(f.others)).toBe(before);
+  expect(f.api.delete).not.toHaveBeenCalled();
+ });
+ it.each(['/.hidden/nested.txt','/.hidden',''])('protects present shared files and folders: %s',async suffix=>{
+  const f=fixture(),target=f.roots[0]+suffix;addReference(f,target);
+  f.app.metadataCache.resolvedLinks={'Other.md':{[target]:1}};
+  const p=await f.preview();expect(p.blockers).toContain(`Shared file used by Other: ${target}`);
+  expect(p.blockers).toContain(`File is linked from another note: Other.md → ${target}`);
+  await expect(f.tx.execute(p,confirm)).rejects.toThrow();expect(f.api.trash).not.toHaveBeenCalled();
+ });
+ it.each(['before confirmation','during recovery'])('rejects a referenced file arriving %s',async phase=>{
+  const f=fixture(),missing=f.roots[0]+'/missing.pdf';addReference(f,missing);
+  f.app.metadataCache.resolvedLinks={'Other.md':{[missing]:1}};
+  const p=await f.preview();expect(p.blockers).toEqual([]);
+  if(phase==='before confirmation')f.put(missing,'Arrived');
+  else {const original=f.api.createBinary;f.api.createBinary=async(path,bytes)=>{await original(path,bytes);f.put(missing,'Arrived');};}
+  await expect(f.tx.execute(p,confirm)).rejects.toThrow('changed');
+  expect(f.api.trash).not.toHaveBeenCalled();expect(f.entries.get(missing)).toBe('Arrived');
+  expect((await f.preview()).blockers.join(' ')).toMatch(/Shared file/);
+ });
+ it('keeps duplicate ID and unavailable link index safeguards',async()=>{
+  const f=fixture();f.others.push({...f.task,taskFile:{path:'Other/task.md'}} as IndexedTask);
+  f.app.metadataCache.resolvedLinks=undefined as never;
+  const p=await f.preview();expect(p.blockers).toContain('Duplicate objective ID.');
+  expect(p.blockers.join(' ')).toMatch(/Link index is unavailable/);
+  await expect(f.tx.execute(p,confirm)).rejects.toThrow();expect(f.api.trash).not.toHaveBeenCalled();
+ });
+});
