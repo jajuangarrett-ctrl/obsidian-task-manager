@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from "vitest";
 import {DeleteCapabilities} from "./delete-capability";
 import type {DeletePreview} from "./objective-delete";
-const preview=(id:string)=>({id,title:"Duplicate title",taskPath:`Moved/${id}/task.md`,actions:["Owned action"],blockers:[]} as DeletePreview);
+const preview=(id:string)=>({id,title:"Duplicate title",taskPath:`Moved/${id}/task.md`,actions:["Owned action"],blockers:[],roots:[],files:[],folders:[],externalFiles:[],incoming:[],fingerprint:"fixture"} as DeletePreview);
 function setup(){let time=1000,n=0;const manager=new DeleteCapabilities(()=>time,()=>`test-${++n}`);return {manager,expire:()=>{time+=600001;},issue:(ids=["a","b"])=>manager.issue(ids,"Vault",[{title:"Label only"}])};}
 describe("single-use objective deletion",()=>{
  it("fixes exact IDs, resolves fresh paths and records all owned actions without a confirmation gate",async()=>{

@@ -348,3 +348,13 @@ In **Talk to dashboard**, say “Add an action under my Work Study objective to 
 ### People agenda defaults
 
 New objectives and the first future People assignment on an unconfigured objective default **Show on agendas** on. Turn it off and save to exclude that objective. Explicit choices survive removing and re-adding People. Existing objectives already associated with People keep their saved setting; untouched objectives are not migrated. Saving an unchanged, unassigned legacy objective does not enable agendas. Completed and archived objectives remain excluded.
+
+### Copy a deletion prompt
+
+In Inbox folder, Completed or Converted, manually review and check objectives, then click **Copy delete prompt**. Paste and send the prompt in Claudian on the same Mac with Obsidian open. This explicitly authorizes the exact checked IDs once for 10 minutes. Copying does not delete anything; sending the prompt invokes the plugin's recoverable deletion and reads a per-item receipt, without another plugin confirmation. Claudian may still require its own tool approval. The existing general **Copy prompt** remains available.
+
+Deletion includes exclusively owned folders, contained hidden files and owned actions. Shared files, ambiguous IDs, nested objectives and converted-source dependencies remain blocked; independent items can succeed. A converted action living in an unselected parent is not owned by the selected original. No parent metadata is silently rewritten. Current paths are resolved by ID, never title. Capabilities accept no paths or replacement IDs, cannot be replayed, and disappear on plugin reload. Changing checkboxes does not revoke an already copied prompt; reload the plugin to revoke it. Treat a copied deletion prompt as a temporary secret.
+
+The narrow `fjg-objective-delete` Obsidian protocol consumes an in-memory capability and uses the existing recovery transaction. The catalog remains authenticated and read-only; `deletion receipt <batch-id>` returns each result for up to an hour in the same plugin session. Expired/unavailable receipts never imply success. The generated launcher requires a desktop Node environment and the installed read-only Claudian helper; mobile can display/copy text but cannot execute that desktop helper. No Claudian permissions or configuration are changed.
+
+Upcoming shows eligible open objectives due after the current local date. Due or Overdue includes today and earlier dates. Both exclude missing/invalid dates and retain existing completed/converted exclusions. They filter objective due dates, not child-action due dates. An open dashboard updates at local midnight, checks for clock/timezone changes, and catches up on focus or resume; these views never change saved statuses.

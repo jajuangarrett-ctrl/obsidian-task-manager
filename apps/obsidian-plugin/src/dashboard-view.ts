@@ -1,3 +1,4 @@
+import {watchLocalDate} from "./dashboard-date";
 import { isSelectionView, renderSelectionCheckbox, renderSelectionSummary } from "./objective-selection";
 import { isConvertedOriginal } from "@fjg/task-core";
 import { renderConversion } from "./conversion-ui";
@@ -46,7 +47,7 @@ export class TaskDashboardView extends ItemView {
   private overviewWorkspaceId = "";
   private overviewPanelTitle?: HTMLElement;
 
-  async onClose(): Promise<void> { this.overviewWorkspace?.dispose(); }
+  async onClose(): Promise<void> { this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
 
   private toggleOverviewObjective(id: string): void {
     this.overviewSelected = this.overviewSelected === id ? "" : id;
@@ -90,7 +91,12 @@ export class TaskDashboardView extends ItemView {
     return "list-checks";
   }
 
+  private stopDateWatch?:()=>void;
+
   async onOpen(): Promise<void> {
+    this.stopDateWatch?.();
+    const doc=this.containerEl.ownerDocument;
+    this.stopDateWatch=watchLocalDate(()=>this.render(),doc.defaultView||window,doc);
     this.view = this.taskPlugin.settings.dashboardDefault;
     this.render();
   }

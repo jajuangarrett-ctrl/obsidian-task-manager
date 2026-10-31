@@ -1,8 +1,9 @@
+import {localDateKey,validDateKey} from "./dashboard-date";
 import { isConvertedOriginal, isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
 export type DashboardMode = "home" | "overview" | "area" | "move" | "tasks" | "kanban" | "projects" | "people";
-export type TaskViewKey = "converted" | "recent" | "all-open" | "due" | "no-project" | TaskStatus;
+export type TaskViewKey = "converted" | "recent" | "all-open" | "upcoming" | "due" | "no-project" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;
 
@@ -47,6 +48,7 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "inbox", label: "Inbox", icon: "inbox" },
   { key: "on-hold", label: "On Hold", icon: "pause-circle" },
   { key: "due", label: "Due or Overdue", icon: "calendar-clock" },
+  { key: "upcoming", label: "Upcoming", icon: "calendar-days" },
   { key: "all-open", label: "All Open", icon: "list-checks" },
   { key: "no-project", label: "Inbox folder", icon: "folder-input" },
   { key: "completed", label: "Completed", icon: "check-circle" },
@@ -69,7 +71,11 @@ export function isOpenTask(record: TaskRecord): boolean {
 }
 
 export function isDueOrOverdue(record: TaskRecord, today = todayKey()): boolean {
-  return Boolean(record.due) && isOpenTask(record) && record.due <= today;
+  return validDateKey(record.due) && isOpenTask(record) && record.due <= today;
+}
+
+export function isUpcoming(record: TaskRecord, today=todayKey()):boolean {
+  return validDateKey(record.due) && isOpenTask(record) && record.due>today;
 }
 
 /** Uses the actual workspace path, never tag/status metadata. */
@@ -102,6 +108,7 @@ export function taskMatchesView(
   if (view === "recent") return true;
   if (view === "all-open") return isOpenTask(record);
   if (view === "due") return isDueOrOverdue(record, today);
+  if (view === "upcoming") return isUpcoming(record,today);
   if (view === "inbox") return statusAssigned && record.status === "inbox";
   return record.status === view;
 }
@@ -194,7 +201,7 @@ export function canArchiveProject(summary: ProjectSummary): boolean {
 }
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey();
 }
 
 function normalizeProjectKey(value: string): string {

@@ -1,5 +1,14 @@
 ## 0.30.4
 
+## 0.30.5
+
+- Add Upcoming for open objectives due after today; Due or Overdue includes today using the local calendar date. Invalid dates are excluded. Views refresh at local midnight and after resume without changing statuses.
+
+- Add Copy delete prompt: explicit, session-local, 10-minute, single-use authorization for exact checked IDs. Claudian invokes the plugin transaction without another plugin confirmation.
+- Return read-only per-item receipts with deleted/blocked outcomes and recovery locations; keep the catalog read-only.
+- Preserve recovery copies, vault Trash, hidden-file inventory and ownership checks. Converted sources depending on unselected parent actions stay blocked.
+
+
 - Show a selectable, ready-to-paste Claudian prompt and Copy prompt button directly in the checked-objectives panel. Copy is disabled until an objective is checked; clipboard failures offer manual selection.
 - Bind the copied prompt to exact selected IDs, including hidden selections, and require fresh helper lookup and ID matching before Claudian summarizes the selection and waits for instructions. No automatic move/delete or Claudian configuration changes.
 
