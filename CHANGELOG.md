@@ -1,3 +1,8 @@
+## 0.30.4
+
+- Show a selectable, ready-to-paste Claudian prompt and Copy prompt button directly in the checked-objectives panel. Copy is disabled until an objective is checked; clipboard failures offer manual selection.
+- Bind the copied prompt to exact selected IDs, including hidden selections, and require fresh helper lookup and ID matching before Claudian summarizes the selection and waits for instructions. No automatic move/delete or Claudian configuration changes.
+
 ## 0.30.3
 
 - Check objectives in Inbox folder, Completed and Converted, select visible items, review hidden selections and clear selection. Selection uses IDs and lasts only for the current plugin session.

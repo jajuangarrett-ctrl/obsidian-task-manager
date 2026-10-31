@@ -2010,3 +2010,7 @@
 .fjg-objective-selection details div { display: flex; align-items: center; gap: 8px; margin: 8px 0; overflow-wrap: anywhere; }
 .fjg-objective-selection details span { flex: 1; }
 .fjg-objective-select { flex-shrink: 0; margin: 8px; }
+
+.fjg-selection-prompt { display: block; box-sizing: border-box; width: 100%; min-height: 10rem; margin: 8px 0; resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; user-select: text; -webkit-user-select: text; }
+.fjg-objective-selection { min-width: 0; }
+.fjg-objective-selection-controls { flex-wrap: wrap; }
