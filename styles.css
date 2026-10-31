@@ -2003,3 +2003,10 @@
 
 .fjg-conversion-info { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .fjg-converted-history { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.fjg-objective-selection { padding: 12px; margin-bottom: 12px; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.fjg-objective-selection-controls { display: flex; gap: 8px; margin-top: 8px; }
+.fjg-objective-selection p { color: var(--text-muted); font-size: var(--font-smallest); }
+.fjg-objective-selection details div { display: flex; align-items: center; gap: 8px; margin: 8px 0; overflow-wrap: anywhere; }
+.fjg-objective-selection details span { flex: 1; }
+.fjg-objective-select { flex-shrink: 0; margin: 8px; }

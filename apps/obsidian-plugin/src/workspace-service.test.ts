@@ -1,3 +1,4 @@
+import { ObjectiveSelection } from "./objective-selection";
 import { matchesHomeScope, filterHomeTasks } from "./home-model";
 import { taskMatchesView, countTasksForView } from "./dashboard-model";
 import { describe, expect, it, vi } from "vitest";
@@ -2033,4 +2034,20 @@ it("does not overwrite a concurrent edit when Move rollback needs attention",asy
  vi.spyOn(vault,"process").mockImplementation(async(file,fn)=>{if(++n===3){await vault.modify(task.taskFile as never,(await vault.read(task.taskFile as never))+"\nConcurrent user content\n");throw Error("Injected failure");}return process(file,fn);});
  await expect(service.relocateTask(task.record.task_id,"02 Programs/QA Fixture")).rejects.toThrow("rollback needs attention");
  expect(await vault.read(task.taskFile as never)).toContain("Concurrent user content");
+});
+
+it("checked context reads current records and relocated paths without writing vault data",async()=>{
+ const {service,vault}=createService();await service.initialize();
+ const task=await service.createTask({title:'Checked source'}),selection=new ObjectiveSelection();
+ selection.set(task.record.task_id,'no-project',true);
+ await vault.createFolder('02 Programs/Selection Test');await service.relocateTask(task.record.task_id,'02 Programs/Selection Test');
+ const moved=service.getById(task.record.task_id);
+ const current=parseTaskMarkdown(await vault.read(moved.taskFile as never));
+ await vault.modify(moved.taskFile as never,renderTaskMarkdown(updateTaskFields(current.record,{title:'Fresh title'}),current.body));
+ const write=vi.spyOn(vault,'modify'),create=vi.spyOn(vault,'create'),remove=vi.spyOn(vault,'delete');
+ const result=await service.checkedObjectiveContext(selection);
+ expect(result.tasks[0]).toMatchObject({task_id:task.record.task_id,title:'Fresh title',path:moved.taskFile.path});
+ expect(write).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();expect(remove).not.toHaveBeenCalled();
+ await vault.delete(moved.taskFile as never);await service.refresh();
+ const missing=await service.checkedObjectiveContext(selection);expect(missing).toMatchObject({count:1,available_count:0});
 });

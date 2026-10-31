@@ -1,3 +1,9 @@
+import {execFile} from "node:child_process";
+import {promisify} from "node:util";
+import {mkdtemp,mkdir,writeFile,rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {join,resolve} from "node:path";
+import {ObjectiveSelection} from "./objective-selection";
 import * as http from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CatalogTask } from "@fjg/task-protocol";
@@ -121,4 +127,25 @@ describe("TaskCatalogServer", () => {
     expect(await loadHttp()).toBe(http);
     expect(runtimeRequire).toHaveBeenCalledWith("node:http");
   });
+});
+
+it("existing Claudian helper retrieves the live checked selection through authenticated GET without mutation",async()=>{
+ const server=new TaskCatalogServer(),selection=new ObjectiveSelection();
+ const dir=await mkdtemp(join(tmpdir(),'fjg-selection-'));
+ try{
+  await server.start({port:0,token:'selection-test',getTasks:()=>[],getSelection:()=>selection.context([])});
+  const url=`http://127.0.0.1:${server.getPort()}`;
+  await mkdir(join(dir,'.obsidian/plugins/fjg-task-manager'),{recursive:true});
+  await writeFile(join(dir,'.obsidian/plugins/fjg-task-manager/data.json'),JSON.stringify({catalogPort:server.getPort(),catalogToken:'selection-test'}));
+  const query=async()=>JSON.parse((await promisify(execFile)(process.execPath,[resolve('integrations/claudian/query.cjs'),'checked objectives'],{cwd:dir})).stdout);
+  expect(await query()).toMatchObject({mode:'checked-objectives',count:0});
+  for(let i=0;i<55;i++)selection.set(`id-${i}`,'completed',true);
+  expect(await query()).toMatchObject({count:55,available_count:0});
+  selection.clear();expect(await query()).toMatchObject({count:0,no_results:true});
+  expect((await fetch(url+'/selection')).status).toBe(401);
+  const headers={Authorization:'Bearer selection-test'};
+  expect((await fetch(url+'/selection',{headers:{...headers,Origin:'https://example.com'}})).status).toBe(403);
+  expect((await fetch(url+'/selection',{headers,method:'POST'})).status).toBe(405);
+  const response=await fetch(url+'/selection',{headers});expect(response.headers.get('cache-control')).toBe('no-store');expect(await response.json()).toMatchObject({count:0});
+ }finally{await server.stop();await rm(dir,{recursive:true,force:true});}
 });
