@@ -2,6 +2,12 @@
 
 Objective workspaces with nested Actions for Obsidian, with a native dashboard, live update cards, voice/text quick capture, AI drafting, Gmail intake, Chrome clipping, safe agent updates, archive moves, and migration tooling.
 
+## Mobile clipboard privacy (0.30.7)
+
+The desktop system-capture watcher no longer starts on iOS or Android. Mobile does not read the clipboard on load, focus, or a timer. **Paste Clipboard** and an explicit `fjg-unified-capture?clipboard=1` request still work normally and may show the operating system’s expected paste notice.
+
+The macOS Shortcut handoff remains desktop-only and uses Electron clipboard access, with no browser clipboard fallback. Mobile **Show in file** retains the 0.30.6 integration with FJG File Focus Duo.
+
 ## Area: organize by task folders (0.26.0)
 
 Open **Area** and choose a folder such as **Admin leadership Tasks** or **Basic Needs Tasks**. The selector discovers folders ending in **Task** or **Tasks** under `02 Programs` and `03 Areas`, including empty folders. New, renamed, and removed folders update automatically through the existing vault refresh. Moving an objective updates its area from its current path; no tags or metadata edits are required.

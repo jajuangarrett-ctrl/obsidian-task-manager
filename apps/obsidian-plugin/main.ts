@@ -1,3 +1,4 @@
+import { revealInFileFocus } from "./src/file-focus-integration";
 import { DeleteCapabilities, validDeleteProtocol } from "./src/delete-capability";
 import { DeleteObjectiveModal } from "./src/delete-objective-modal";
 import { PeopleModal } from "./src/people-modal";
@@ -104,8 +105,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       }
       this.openUnifiedCaptureModal(text);
     });
-    this.registerDomEvent(window, "focus", () => void this.consumeSystemCaptureClipboard());
-    this.registerInterval(window.setInterval(() => void this.consumeSystemCaptureClipboard(), 400));
+    this.registerSystemCaptureClipboardWatcher();
 
     this.addCommand({ id: "open-dashboard", name: "Open Objective Dashboard", callback: () => this.activateDashboard() });
     this.addCommand({ id: "open-task-briefing", name: "Open Objective Briefing", callback: () => void this.openTaskBriefing() });
@@ -537,12 +537,23 @@ export default class FjgTaskManagerPlugin extends Plugin {
     ).open();
   }
 
+  private registerSystemCaptureClipboardWatcher(): void {
+    // This handoff belongs to the macOS Shortcut. Mobile clipboard access must
+    // remain user-initiated: registering it on iOS causes repeated paste banners.
+    if (!Platform.isDesktopApp || Platform.isMobile) return;
+    this.registerDomEvent(window, "focus", () => void this.consumeSystemCaptureClipboard());
+    this.registerInterval(window.setInterval(() => void this.consumeSystemCaptureClipboard(), 400));
+  }
+
   private async consumeSystemCaptureClipboard(): Promise<void> {
-    if (this.systemCaptureCheckRunning || !document.hasFocus()) return;
+    // Also guard the consumer so a stale callback cannot read on mobile.
+    if (!Platform.isDesktopApp || Platform.isMobile || this.systemCaptureCheckRunning || !document.hasFocus()) return;
+    const clipboard = getElectronClipboard();
+    if (!clipboard) return; // Never fall back to browser clipboard reads in a background watcher.
 
     this.systemCaptureCheckRunning = true;
     try {
-      const marker = await readSystemClipboardText();
+      const marker = clipboard.readText();
       const text = decodeSystemCaptureClipboard(marker);
       if (text === null || marker === this.lastSystemCaptureMarker) return;
 
@@ -552,7 +563,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       }, 2000);
 
       try {
-        await writeSystemClipboardText(text);
+        clipboard.writeText(text);
       } catch (error) {
         console.warn("[FJG Objective Manager] Could not restore captured clipboard text", error);
       }
@@ -800,20 +811,22 @@ export default class FjgTaskManagerPlugin extends Plugin {
   async showTaskFileLocationInFileFocus(taskId: string): Promise<void> {
     try {
       const task = this.workspaceService.getById(taskId);
-      const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
-      const fileFocus = (this.app as typeof this.app & {
-        plugins?: {
-          getPlugin?: (id: string) => unknown;
-        };
-      }).plugins?.getPlugin?.("fjg-file-focus") as FileFocusPlugin | undefined;
+      const navigatorName = await revealInFileFocus(
+        (this.app as typeof this.app & {
+          plugins?: { getPlugin?: (id: string) => unknown };
+        }).plugins,
+        async () => (await this.workspaceService.ensureFilesFolderForTask(taskId)).folderPath,
+        Platform.isMobile
+      );
 
-      if (!fileFocus?.revealFolderPath) {
-        new Notice("Enable or update FJG File Focus to reveal objective file locations in Obsidian.");
+      if (!navigatorName) {
+        new Notice(Platform.isMobile
+          ? "Enable or update FJG File Focus Duo or FJG File Focus to reveal objective file locations in Obsidian."
+          : "Enable or update FJG File Focus to reveal objective file locations in Obsidian.");
         return;
       }
 
-      await fileFocus.revealFolderPath(destination.folderPath);
-      new Notice(`Shown in FJG File Focus: ${task.record.title}.`);
+      new Notice(`Shown in ${navigatorName}: ${task.record.title}.`);
     } catch (error) {
       console.error("[FJG Objective Manager] Could not reveal objective file location in FJG File Focus", error);
       new Notice(`Could not show file location in FJG File Focus: ${error instanceof Error ? error.message : String(error)}`);
@@ -1026,10 +1039,6 @@ interface ElectronShell {
   openPath: (fullPath: string) => Promise<string>;
 }
 
-interface FileFocusPlugin {
-  revealFolderPath: (folderPath: string) => Promise<void> | void;
-}
-
 interface ElectronClipboard {
   readText(): string;
   writeText(text: string): void;
@@ -1051,18 +1060,4 @@ function getElectronClipboard(): ElectronClipboard | null {
   } catch {
     return null;
   }
-}
-
-async function readSystemClipboardText(): Promise<string> {
-  const clipboard = getElectronClipboard();
-  return clipboard ? clipboard.readText() : navigator.clipboard.readText();
-}
-
-async function writeSystemClipboardText(text: string): Promise<void> {
-  const clipboard = getElectronClipboard();
-  if (clipboard) {
-    clipboard.writeText(text);
-    return;
-  }
-  await navigator.clipboard.writeText(text);
 }

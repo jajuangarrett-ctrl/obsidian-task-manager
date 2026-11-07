@@ -1,3 +1,10 @@
+## 0.30.7
+
+- Fix repeated iOS "Obsidian pasted from …" banners by registering the system-capture clipboard watcher only in desktop Obsidian. The consumer also rejects mobile callbacks and never falls back to the browser clipboard.
+- Preserve the macOS Shortcut handoff, explicit Paste Clipboard button, and explicit `fjg-unified-capture?clipboard=1` requests.
+- Include the already installed 0.30.6 mobile Show in File Focus Duo compatibility change so updating does not revert that feature.
+- Add regression coverage for mobile idle/focus safety, stale callbacks, unavailable Electron clipboard, desktop marker handling and intentional mobile paste.
+
 ## 0.30.4
 
 ## 0.30.5
