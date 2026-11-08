@@ -365,6 +365,8 @@ The narrow `fjg-objective-delete` Obsidian protocol consumes an in-memory capabi
 
 Upcoming shows eligible open objectives due after the current local date. Due or Overdue includes today and earlier dates. Both exclude missing/invalid dates and retain existing completed/converted exclusions. They filter objective due dates, not child-action due dates. An open dashboard updates at local midnight, checks for clock/timezone changes, and catches up on focus or resume; these views never change saved statuses.
 
-### Local text search in Talk to Dashboard
+### Type instead of speaking in Talk to Dashboard
 
-Open **Talk to Dashboard**, choose **Text search**, enter keywords and press Enter or **Search objectives**. Click a result to open its objective note; **Show more results** pages through further matches. This read-only keyword search runs locally without a microphone or API key. It searches all indexed objectives (including archived ones), notes, updates and nested actions, but not attachment contents or invalid/unindexed workspaces. The existing **Start conversation** button still starts voice separately.
+Open **Talk to Dashboard**, choose **Type a message**, then send your question or request with Enter or **Send message**. The same AI conversation and configured backend used by voice searches/reads objectives and handles explicit changes with the existing safeguards. Replies play aloud and appear in the transcript, with buttons to open referenced objective notes.
+
+Starting by typing does not request microphone access. Choose **Turn on microphone** if you later want to speak, or type during an existing voice conversation. **End conversation** ends either mode. Typed messages, requested task context and replies use your OpenAI API key and incur API charges. This replaces the temporary local-only search introduced in 0.30.8.

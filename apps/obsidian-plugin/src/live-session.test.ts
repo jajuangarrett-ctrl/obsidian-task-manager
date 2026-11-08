@@ -116,7 +116,7 @@ describe("Live connection lifecycle", () => {
     expect(unsupported.state.mock.calls.at(-1)?.[1]).toContain("not supported");
   });
   it("starts typed conversation with generated silence, shares tools and spoken transport, and enables mic only explicitly", async () => {
-    const { session, state, track } = setup();
+    const { session, state, track, execute } = setup();
     const silentTrack = { kind: "audio", stop: vi.fn(), enabled: true };
     const stop = vi.fn(); const close = vi.fn(async () => {});
     vi.stubGlobal("AudioContext", class {
@@ -136,6 +136,18 @@ describe("Live connection lifecycle", () => {
     expect(channel.sent[1].type).toBe("response.create"); expect(session.sendText("duplicate")).toBe(false);
     channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.created", response: { id: "r1" } } });
     channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.completed", response: { id: "r1" } } });
+    await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(true);
+    expect(session.sendText("Read the budget task")).toBe(true);
+    let finishTool!: (value: unknown) => void;
+    execute.mockImplementationOnce(() => new Promise(resolve => { finishTool = resolve; }));
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.created", response: { id: "r2" } } });
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.output_item.done", item: { type: "function_call", name: "read_task", arguments: "{}", call_id: "read1" } } });
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.completed", response: { id: "r2" } } });
+    await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(false);
+    finishTool({ title: "Budget" }); await vi.advanceTimersByTimeAsync(0);
+    expect(session.acceptingText).toBe(false); // continuation is still pending, even after function results.
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.created", response: { id: "r3" } } });
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.completed", response: { id: "r3" } } });
     await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(true);
     await session.enableMicrophone(); expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
     expect(Peer.last.sender.replaceTrack).toHaveBeenCalledWith(track); expect(silentTrack.stop).toHaveBeenCalled();

@@ -1,3 +1,10 @@
+## 0.30.9
+
+- Replace the local-only search with **Type a message** in Talk to Dashboard. Typed turns use the same live AI conversation, configured backend, tools, objective context, change safeguards and spoken replies as voice.
+- Start by typing without microphone access using a generated silent audio track. Turn on the microphone explicitly later without restarting the conversation, or type into an already active voice conversation.
+- Keep submissions blocked through tool execution and backend continuation, preserve unsent text on failure, release silent/audio resources on close, and show referenced-objective buttons.
+- Add API/context disclosure and regression coverage for exact typed events, shared sessions, silent startup, explicit microphone opt-in/denial, pending tool work and close races. No paid/private live API call was used for validation.
+
 ## 0.30.8
 
 - Add a Text search button to Talk to Dashboard with a local keyword input, Enter-to-search, and clickable objective results. No microphone, OpenAI connection, or API key is needed for typed searches.

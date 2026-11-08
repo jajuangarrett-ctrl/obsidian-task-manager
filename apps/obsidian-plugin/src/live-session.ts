@@ -67,7 +67,11 @@ export class DashboardLiveSession {
         const source = this.silentSource = context.createOscillator();
         const gain = context.createGain(); gain.gain.value = 0;
         source.connect(gain); gain.connect(destination); source.start();
-        await context.resume();
+        let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          context.resume(),
+          new Promise<never>((_, reject) => { resumeTimer = setTimeout(() => reject(new Error("Audio playback could not start. Close this panel and try Type a message again.")), 10000); })
+        ]).finally(() => clearTimeout(resumeTimer));
         microphone = destination.stream;
       } else {
         microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
