@@ -28,8 +28,8 @@ export class DashboardTextSession {
         const response = await Promise.race([
           requestUrl({ url: "https://api.openai.com/v1/responses", method: "POST", throw: false,
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model, store: false, instructions: `${backendInstructions(context)}\nThis is a typed, read-only search conversation. Search/read before answering task-data questions. Do not change tasks. Give a useful answer to the question using returned evidence, mention coverage limitations, and ask clarifying questions when needed.`,
-              tools: TEXT_SEARCH_TOOLS, tool_choice: round === 0 ? "required" : "auto", parallel_tool_calls: false, max_output_tokens: 1800, input }) }),
+            body: JSON.stringify({ model, store: false, include: ["reasoning.encrypted_content"], instructions: `${backendInstructions(context)}\nThis is a typed, read-only search conversation. Search/read before answering task-data questions. Do not change tasks. Give a useful answer to the question using returned evidence, mention coverage limitations, and ask clarifying questions when needed.`,
+              tools: TEXT_SEARCH_TOOLS, tool_choice: round === 0 ? "required" : "auto", parallel_tool_calls: false, max_output_tokens: 1800, input }) }).catch(() => { throw new Error("Could not reach OpenAI. Check your connection and try again."); }),
           new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Search timed out. No automatic retry was sent; a submitted request may still incur API charges.")), 60000); })
         ]).finally(() => clearTimeout(timer));
         if (!current()) throw cancelled();
@@ -64,7 +64,7 @@ export class DashboardTextSession {
       throw new Error("Search reached its step limit. Try a more specific question.");
     } catch (error) {
       if (!current()) throw cancelled();
-      if (error instanceof Error && !/fetch|network|request/i.test(error.message)) throw error;
+      if (error instanceof Error) throw error;
       throw new Error("Could not reach OpenAI. Check your connection and try again.");
     } finally { if (current()) this.busy = false; }
   }

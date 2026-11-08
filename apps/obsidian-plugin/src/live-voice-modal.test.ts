@@ -18,7 +18,8 @@ class Element {
   querySelector(tag: string) { return this.all().find(el => el.tag === tag); }
   all(): Element[] { return this.children.flatMap(child => [child, ...child.all()]); }
 }
-vi.mock("obsidian", () => ({ Modal: class {
+const api = vi.hoisted(() => ({ request: vi.fn() }));
+vi.mock("obsidian", () => ({ requestUrl: api.request, Modal: class {
   contentEl = new Element(); modalEl = new Element(); titleEl = new Element(); close = vi.fn();
 } }));
 vi.mock("./live-session", () => ({ DashboardLiveSession: vi.fn() }));
@@ -30,7 +31,7 @@ const task = (id: string, title: string, extra = {}) => ({
   notes: "", updates: [], taskFile: { stat: { mtime: 1 } }, archived: false, ...extra
 });
 function setup(tasks = [task("a", "Budget review")]) {
-  const plugin = { workspaceService: { refresh: vi.fn(async () => {}), list: vi.fn(() => tasks) }, openTask: vi.fn(async () => {}), resolveOpenAiApiKey: vi.fn() };
+  const plugin = { workspaceService: { refresh: vi.fn(async () => {}), list: vi.fn(() => tasks) }, openTask: vi.fn(async () => {}), resolveOpenAiApiKey: vi.fn(async () => "test-key"), settings: { liveBackendModel: "backend-test" } };
   const released = vi.fn();
   const modal = new LiveVoiceModal({} as never, plugin as never, () => "", released);
   modal.onOpen();
@@ -39,49 +40,42 @@ function setup(tasks = [task("a", "Budget review")]) {
   const submit = () => (modal as any).searchObjectives() as Promise<void>;
   return { modal, root, input, submit, plugin, released };
 }
-describe("local objective text search", () => {
-  it("opens an accessible keyboard form and searches without voice or API credentials", async () => {
+const complete = (output: unknown[]) => ({ status: 200, json: { status: "completed", output } });
+const find = { type: "function_call", name: "find_tasks", call_id: "find", arguments: JSON.stringify({ query: "budget", status: "", offset: 0 }) };
+const answer = { type: "message", role: "assistant", content: [{ type: "output_text", text: "Your budget review is open." }] };
+describe("API objective text search panel", () => {
+  it("opens without API requests and submits advanced search with clickable sources, without voice", async () => {
+    api.request.mockReset(); api.request.mockResolvedValueOnce(complete([find])).mockResolvedValueOnce(complete([answer]));
     const { root, input, submit, plugin } = setup();
-    const toggle = root.all().find(el => el.text === "Text search")!;
-    toggle.handlers.get("click")!();
-    expect(toggle.attributes["aria-expanded"]).toBe("true"); expect(input.focus).toHaveBeenCalled();
-    expect(root.all().find(el => el.tag === "form")?.handlers.has("submit")).toBe(true);
-    input.value = "budget"; await submit();
-    expect(plugin.workspaceService.list).toHaveBeenCalledWith({ includeArchived: true });
-    const open = root.all().find(el => el.text === "Budget review")!;
-    open.handlers.get("click")!(); await Promise.resolve();
-    expect(plugin.openTask).toHaveBeenCalledWith("a");
-    expect(plugin.resolveOpenAiApiKey).not.toHaveBeenCalled(); expect(DashboardLiveSession).not.toHaveBeenCalled();
+    const toggle = root.all().find(el => el.text === "Text search")!; toggle.handlers.get("click")!();
+    expect(toggle.attributes["aria-expanded"]).toBe("true"); expect(input.focus).toHaveBeenCalled(); expect(api.request).not.toHaveBeenCalled();
+    expect(root.all().some(el => el.text.includes("API charges apply"))).toBe(true);
+    input.value = "What budget work remains?"; await submit();
+    expect(api.request).toHaveBeenCalledTimes(2); expect(plugin.resolveOpenAiApiKey).toHaveBeenCalledOnce();
+    expect(root.all().some(el => el.text === "Your budget review is open.")).toBe(true);
+    root.all().find(el => el.text === "Budget review")!.handlers.get("click")!(); await Promise.resolve();
+    expect(plugin.openTask).toHaveBeenCalledWith("a"); expect(DashboardLiveSession).not.toHaveBeenCalled();
   });
-  it("handles blank, no-match, error and repeated busy submissions", async () => {
-    const { root, input, submit, plugin } = setup();
-    await submit(); expect(plugin.workspaceService.refresh).not.toHaveBeenCalled();
-    input.value = "unknown"; await submit();
-    expect(root.all().some(el => el.text.includes("No objectives matched"))).toBe(true);
-    plugin.workspaceService.refresh.mockRejectedValueOnce(new Error("unavailable"));
-    await submit(); expect(root.all().some(el => el.text.startsWith("Could not search"))).toBe(true);
-    let done!: () => void;
-    plugin.workspaceService.refresh.mockImplementationOnce(() => new Promise<void>(resolve => { done = resolve; }));
-    const pending = submit(); await submit(); expect(plugin.workspaceService.refresh).toHaveBeenCalledTimes(3);
-    expect(root.all().find(el => el.text === "Searching…")?.disabled).toBe(true);
-    done(); await pending; expect(root.all().find(el => el.text === "Search objectives" && el.tag === "button")?.disabled).toBe(false);
-  });
-  it("ignores pending results after close and releases the panel", async () => {
+  it("handles blank, busy, cancellation and stale results without requesting a microphone", async () => {
+    api.request.mockReset();
     const { modal, root, input, submit, plugin, released } = setup();
-    let done!: () => void;
-    plugin.workspaceService.refresh.mockImplementationOnce(() => new Promise<void>(resolve => { done = resolve; }));
-    input.value = "budget"; const pending = submit(); modal.onClose(); done(); await pending;
-    expect(root.all().some(el => el.text === "Budget review")).toBe(false); expect(released).toHaveBeenCalledOnce();
+    await submit(); expect(plugin.resolveOpenAiApiKey).not.toHaveBeenCalled();
+    let done!: (value: unknown) => void;
+    api.request.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+    input.value = "Budget?"; const pending = submit(); await Promise.resolve(); await Promise.resolve();
+    await submit(); expect(api.request).toHaveBeenCalledTimes(1);
+    root.all().find(el => el.text === "Cancel search")!.handlers.get("click")!();
+    done(complete([find])); await pending;
+    expect(plugin.workspaceService.refresh).not.toHaveBeenCalled();
+    expect(root.all().find(el => el.text === "Ask AI")?.disabled).toBe(false);
+    modal.onClose(); expect(released).toHaveBeenCalledOnce();
   });
-  it("paginates all results and recovers when opening an objective fails", async () => {
-    const { root, input, submit, plugin } = setup(Array.from({ length: 35 }, (_, i) => task(`${i}`, `Budget ${i}`)));
-    input.value = "budget"; await submit();
-    expect(root.all().filter(el => el.attributes["aria-label"]?.startsWith("Open objective:")).length).toBe(30);
-    const more = root.all().find(el => el.text === "Show more results")!; more.handlers.get("click")!();
-    expect(root.all().filter(el => el.attributes["aria-label"]?.startsWith("Open objective:")).length).toBe(35); expect(more.hidden).toBe(true);
-    plugin.openTask.mockRejectedValueOnce(new Error("missing"));
-    const open = root.all().find(el => el.text === "Budget 0")!; open.handlers.get("click")!(); await Promise.resolve(); await Promise.resolve();
-    expect(open.disabled).toBe(false); expect(root.all().some(el => el.text.startsWith("Could not open"))).toBe(true);
+  it("shows API errors and clears history only on explicit new conversation", async () => {
+    api.request.mockReset(); api.request.mockResolvedValueOnce({ status: 401 });
+    const { root, input, submit } = setup(); input.value = "Budget?"; await submit();
+    expect(root.all().some(el => el.text.includes("Check your saved OpenAI API key"))).toBe(true);
+    root.all().find(el => el.text === "New search conversation")!.handlers.get("click")!();
+    expect(root.all().some(el => el.text.startsWith("New conversation"))).toBe(true);
   });
   it("shares ranked retrieval across notes, updates, actions and archived objectives", () => {
     const tasks = [task("n", "Other", { notes: "budget" }), task("t", "Budget"), task("u", "Update", { updates: [{ text: "budget" }] }), task("r", "Archive", { archived: true, notes: "budget" }), task("s", "Action", { record: { ...task("s", "Action").record, subtasks: [{ title: "budget", notes: "", history: "" }] } })];
