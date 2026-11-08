@@ -55,7 +55,7 @@ export class DashboardLiveSession {
         this.audio.srcObject = new MediaStream([event.track]);
         void this.audio.play().catch(() => {
           this.playbackBlocked = true;
-          if (this.active) this.callbacks.state("connected", "Ready — start speaking. Press play below to hear replies.");
+          if (this.active) this.callbacks.state("connected", this.textOnly ? "Ready to type. Microphone off. Press play below to hear replies." : "Ready — start speaking. Press play below to hear replies.");
         });
       });
       // Start from the user's click; never automatically reopen a microphone after disconnecting.
@@ -107,6 +107,30 @@ export class DashboardLiveSession {
       if (!this.disposed) this.fail(error instanceof Error && error.name === "NotAllowedError"
         ? "Microphone access was denied. Allow Obsidian microphone access in system settings and try again."
         : error instanceof Error ? error.message : "Could not connect voice.");
+    }
+  }
+
+  async enableMicrophone(): Promise<void> {
+    if (!this.active || !this.textOnly) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      if (!this.active) { stream.getTracks().forEach(track => track.stop()); return; }
+      const sender = this.peer?.getSenders().find(sender => sender.track?.kind === "audio");
+      if (!sender) { stream.getTracks().forEach(track => track.stop()); throw new Error("No audio sender"); }
+      try { await sender.replaceTrack(stream.getAudioTracks()[0]); }
+      catch (error) { stream.getTracks().forEach(track => track.stop()); throw error; }
+      if (!this.active) { stream.getTracks().forEach(track => track.stop()); return; }
+      this.microphone?.getTracks().forEach(track => track.stop());
+      this.microphone = stream;
+      this.silentSource?.stop(); this.silentSource = undefined;
+      void this.silentContext?.close().catch(() => {}); this.silentContext = undefined;
+      this.inputMode = "voice";
+      this.ready = false; this.audioStableSince = 0; this.lastAudioBytes = 0;
+      this.callbacks.state("connecting", "Warming up microphone… Please wait before speaking.");
+      this.timer = setTimeout(() => this.fail("Microphone did not become ready. Ended the connection."), 30000);
+      void this.checkAudioReady();
+    } catch {
+      if (this.active) this.callbacks.state("connected", "Could not turn on microphone. You can continue typing.");
     }
   }
 
@@ -169,7 +193,7 @@ export class DashboardLiveSession {
       if (this.inputMode === "text") {
         this.ready = true;
         clearTimeout(this.timer);
-        this.callbacks.state("connected", "Ready to type. Microphone off; replies play aloud.");
+        this.callbacks.state("connected", this.playbackBlocked ? "Ready to type. Microphone off. Press play below to hear replies." : "Ready to type. Microphone off; replies play aloud.");
       } else {
         this.callbacks.state("connecting", "Warming up microphone… Please wait before speaking.");
         void this.checkAudioReady();

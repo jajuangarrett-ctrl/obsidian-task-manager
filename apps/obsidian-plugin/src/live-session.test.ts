@@ -15,6 +15,8 @@ class Peer extends EventTarget {
   localDescription = { sdp: "test-offer" }; closed = false;
   constructor() { super(); Peer.last = this; }
   async getStats() { if (this.flowing) this.bytes += 100; return new Map([["audio", { type: "outbound-rtp", kind: "audio", bytesSent: this.bytes }]]); }
+  sender = { track: { kind: "audio" }, replaceTrack: vi.fn(async () => {}) };
+  getSenders() { return [this.sender]; }
   addTrack() {} createDataChannel() { return this.channel; }
   async createOffer() { return { sdp: "test-offer" }; }
   async setLocalDescription() {} async setRemoteDescription() {}
@@ -113,4 +115,45 @@ describe("Live connection lifecycle", () => {
     await unsupported.session.start("test-key", "backend", "context");
     expect(unsupported.state.mock.calls.at(-1)?.[1]).toContain("not supported");
   });
+  it("starts typed conversation with generated silence, shares tools and spoken transport, and enables mic only explicitly", async () => {
+    const { session, state, track } = setup();
+    const silentTrack = { kind: "audio", stop: vi.fn(), enabled: true };
+    const stop = vi.fn(); const close = vi.fn(async () => {});
+    vi.stubGlobal("AudioContext", class {
+      createMediaStreamDestination() { return { stream: { getTracks: () => [silentTrack], getAudioTracks: () => [silentTrack] } }; }
+      createOscillator() { return { connect: vi.fn(), start: vi.fn(), stop }; }
+      createGain() { return { gain: { value: 1 }, connect: vi.fn() }; }
+      async resume() {} close = close;
+    });
+    mocks.request.mockResolvedValue({ status: 201, json: { transport: { sdp: "answer" } } });
+    await session.start("test-key", "backend", "context", "text");
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    expect(session.sendText("too early")).toBe(false);
+    const channel = Peer.last.channel; channel.event({ type: "session.started" });
+    expect(session.active).toBe(true); expect(session.textOnly).toBe(true);
+    expect(session.sendText("Find my budget task")).toBe(true);
+    expect(channel.sent[0]).toMatchObject({ type: "response.item.create", item: { role: "user", content: [{ type: "input_text", text: "Find my budget task" }] } });
+    expect(channel.sent[1].type).toBe("response.create"); expect(session.sendText("duplicate")).toBe(false);
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.created", response: { id: "r1" } } });
+    channel.event({ type: "response.event", delegation_id: "d1", event: { type: "response.completed", response: { id: "r1" } } });
+    await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(true);
+    await session.enableMicrophone(); expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
+    expect(Peer.last.sender.replaceTrack).toHaveBeenCalledWith(track); expect(silentTrack.stop).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(400); expect(session.active).toBe(true); expect(session.textOnly).toBe(false);
+    session.end(); expect(session.sendText("late")).toBe(false); session.dispose(); expect(close).toHaveBeenCalled();
+  });
+  it("keeps text enabled when an explicit microphone grant is denied", async () => {
+    const { session } = setup();
+    vi.stubGlobal("AudioContext", class {
+      createMediaStreamDestination() { return { stream: { getTracks: () => [], getAudioTracks: () => [] } }; }
+      createOscillator() { return { connect() {}, start() {}, stop() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {} }; }
+      async resume() {} async close() {}
+    });
+    mocks.request.mockResolvedValue({ status: 201, json: { transport: { sdp: "answer" } } });
+    await session.start("key", "backend", "", "text"); Peer.last.channel.event({ type: "session.started" });
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(new Error("denied"));
+    await session.enableMicrophone(); expect(session.active).toBe(true); expect(session.textOnly).toBe(true); session.dispose();
+  });
+
 });

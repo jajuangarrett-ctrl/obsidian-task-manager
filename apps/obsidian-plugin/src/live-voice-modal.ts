@@ -10,6 +10,7 @@ export class LiveVoiceModal extends Modal {
   private status!: HTMLElement;
   private coverage!: HTMLElement;
   private transcript!: HTMLElement;
+  private sources!: HTMLElement;
   private updates!: HTMLElement;
   private audio!: HTMLAudioElement;
   private startButton!: HTMLButtonElement;
@@ -37,6 +38,11 @@ export class LiveVoiceModal extends Modal {
     this.muteButton = controls.createEl("button", { text: "Mute microphone", attr: { "aria-pressed": "false" } });
     this.muteButton.disabled = true;
     this.muteButton.addEventListener("click", () => {
+      if (this.session?.textOnly) {
+        this.muteButton.disabled = true;
+        void this.session.enableMicrophone().finally(() => { if (!this.closed) this.muteButton.disabled = !this.session?.active; });
+        return;
+      }
       this.muted = !this.muted;
       this.session?.mute(this.muted);
       this.muteButton.setText(this.muted ? "Unmute microphone" : "Mute microphone");
@@ -50,6 +56,7 @@ export class LiveVoiceModal extends Modal {
     this.transcript = root.createDiv({ cls: "fjg-live-transcript", attr: { role: "log", "aria-label": "Conversation transcript", "aria-live": "polite" } });
     this.transcript.createEl("p", { text: "Try: “What is due this week?” or “Mark my budget review task completed.”", cls: "fjg-live-caption" });
     this.renderTextComposer(root);
+    this.sources = root.createDiv({ cls: "fjg-live-search-results", attr: { "aria-label": "Referenced objectives" } });
     this.updates = root.createDiv({ cls: "fjg-live-updates", attr: { role: "log", "aria-label": "Saved task changes", "aria-live": "polite" } });
   }
 
@@ -100,7 +107,26 @@ export class LiveVoiceModal extends Modal {
       state: (state, message) => this.setState(state, message),
       busy: busy => { if (!this.closed) this.textButton.disabled = busy; },
       transcript: (speaker, delta) => this.addTranscript(speaker, delta),
-      execute: (name, args, id) => tools.execute(name, args, id)
+      execute: async (name, args, id) => {
+        const result = await tools.execute(name, args, id);
+        if (!this.closed && (name === "find_tasks" || name === "read_task")) {
+          const data = result as { tasks?: { task_id: string; title: string }[]; task_id?: string; title?: string };
+          const tasks = data.tasks ?? (data.task_id && data.title ? [{ task_id: data.task_id, title: data.title }] : []);
+          this.sources.empty();
+          if (tasks.length) this.sources.createEl("p", { text: "Referenced objectives" });
+          const list = this.sources.createEl("ul");
+          for (const task of tasks) {
+            const button = list.createEl("li").createEl("button", { text: task.title });
+            button.addEventListener("click", () => {
+              button.disabled = true;
+              void this.plugin.openTask(task.task_id).then(() => this.close()).catch(() => {
+                if (!this.closed) { button.disabled = false; this.status.setText("Could not open the objective. Ask to search again."); }
+              });
+            });
+          }
+        }
+        return result;
+      }
     });
     this.session = session;
     this.setState("connecting", "Connecting… Please wait before speaking.");
@@ -132,8 +158,9 @@ export class LiveVoiceModal extends Modal {
     this.status.setAttribute("aria-busy", String(state === "connecting"));
     this.startButton.disabled = ["connecting", "connected", "ending"].includes(state);
     this.endButton.disabled = !["connecting", "connected"].includes(state);
-    this.muteButton.disabled = state !== "connected" || Boolean(this.session?.textOnly);
-    this.textButton.disabled = ["connecting", "ending"].includes(state);
+    this.muteButton.disabled = state !== "connected";
+    this.muteButton.setText(this.session?.textOnly ? "Turn on microphone" : this.muted ? "Unmute microphone" : "Mute microphone");
+    this.textButton.disabled = ["connecting", "ending"].includes(state) || (state === "connected" && !this.session?.acceptingText);
     if (["error", "ended"].includes(state)) this.pendingText = "";
     if (state === "connected" && this.pendingText && this.session?.acceptingText) {
       const text = this.pendingText; this.pendingText = "";
