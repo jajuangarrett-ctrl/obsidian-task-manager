@@ -3,8 +3,6 @@ import type FjgTaskManagerPlugin from "../main";
 import { DashboardLiveSession, type LiveState } from "./live-session";
 import { LiveTaskTools } from "./live-tools";
 
-import { DashboardTextSession } from "./dashboard-text-session";
-
 export class LiveVoiceModal extends Modal {
   private session?: DashboardLiveSession;
   private closed = false;
@@ -17,14 +15,9 @@ export class LiveVoiceModal extends Modal {
   private startButton!: HTMLButtonElement;
   private muteButton!: HTMLButtonElement;
   private endButton!: HTMLButtonElement;
-  private searchInput!: HTMLInputElement;
-  private searchButton!: HTMLButtonElement;
-  private searchStatus!: HTMLElement;
-  private searchResults!: HTMLElement;
-  private searchBusy = false;
-  private searchGeneration = 0;
-  private textSession?: DashboardTextSession;
-  private cancelSearchButton!: HTMLButtonElement;
+  private textInput!: HTMLInputElement;
+  private textButton!: HTMLButtonElement;
+  private pendingText = "";
   private lastSpeaker = "";
   private lastText?: HTMLElement;
 
@@ -32,7 +25,6 @@ export class LiveVoiceModal extends Modal {
 
   onOpen(): void {
     this.titleEl.setText("Talk to your dashboard");
-    this.renderTextSearch(this.contentEl);
     this.modalEl.addClass("fjg-live-modal");
     const root = this.contentEl;
     root.createEl("p", { text: "Ask about your tasks or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
@@ -57,111 +49,40 @@ export class LiveVoiceModal extends Modal {
     this.audio = root.createEl("audio", { attr: { controls: "", autoplay: "", "aria-label": "Assistant voice playback" } });
     this.transcript = root.createDiv({ cls: "fjg-live-transcript", attr: { role: "log", "aria-label": "Conversation transcript", "aria-live": "polite" } });
     this.transcript.createEl("p", { text: "Try: “What is due this week?” or “Mark my budget review task completed.”", cls: "fjg-live-caption" });
+    this.renderTextComposer(root);
     this.updates = root.createDiv({ cls: "fjg-live-updates", attr: { role: "log", "aria-label": "Saved task changes", "aria-live": "polite" } });
   }
 
-  private renderTextSearch(root: HTMLElement): void {
-    const toggle = root.createEl("button", { text: "Text search", attr: { "aria-expanded": "false" } });
-    const panel = root.createDiv({ cls: "fjg-live-text-search" });
-    panel.hidden = true;
+  private renderTextComposer(root: HTMLElement): void {
+    const toggle = root.createEl("button", { text: "Type a message", attr: { "aria-expanded": "false" } });
+    const panel = root.createDiv({ cls: "fjg-live-text-search" }); panel.hidden = true;
     toggle.addEventListener("click", () => {
-      panel.hidden = !panel.hidden;
-      toggle.setAttribute("aria-expanded", String(!panel.hidden));
-      if (!panel.hidden) this.searchInput.focus();
+      panel.hidden = !panel.hidden; toggle.setAttribute("aria-expanded", String(!panel.hidden));
+      if (!panel.hidden) this.textInput.focus();
     });
-    panel.createEl("p", { text: "Ask advanced questions about your objectives. Submit sends your question, conversation history, dashboard context and requested objective content to OpenAI using your saved API key and voice backend model. API charges apply. Microphone stays off; typed search cannot change objectives.", cls: "fjg-live-caption" });
-    const form = panel.createEl("form", { cls: "fjg-live-search-form", attr: { role: "search", "aria-label": "Search objectives" } });
-    const label = form.createEl("label", { text: "Search objectives" });
-    this.searchInput = label.createEl("input", { type: "text", placeholder: "Ask about your objectives…", attr: { maxlength: "4000", "aria-label": "Search objectives", enterkeyhint: "search" } });
-    this.searchButton = form.createEl("button", { text: "Ask AI", type: "submit" });
-    form.addEventListener("submit", event => { event.preventDefault(); void this.searchObjectives(); });
-    this.cancelSearchButton = panel.createEl("button", { text: "Cancel search" });
-    this.cancelSearchButton.disabled = true;
-    this.cancelSearchButton.addEventListener("click", () => this.cancelTextSearch());
-    const reset = panel.createEl("button", { text: "New search conversation" });
-    reset.addEventListener("click", () => {
-      this.cancelTextSearch(); this.textSession?.reset(); this.searchResults.empty();
-      this.searchStatus.setText("New conversation. Ask a question to search with AI."); this.searchInput.focus();
-    });
-    this.searchStatus = panel.createEl("p", { text: "Ask a question, then press Enter or Ask AI. Follow-up questions use this text conversation.", attr: { role: "status", "aria-live": "polite" } });
-    this.searchResults = panel.createDiv({ cls: "fjg-live-search-results", attr: { "aria-label": "Objective search results" } });
+    panel.createEl("p", { text: "Type instead of speaking, with the same AI tools and spoken replies. Sending starts a paid OpenAI session with your saved key and shares your message and requested objective context. Clear change requests save immediately. Starting by text does not access your microphone.", cls: "fjg-live-caption" });
+    const form = panel.createEl("form", { cls: "fjg-live-search-form" });
+    const label = form.createEl("label", { text: "Message your dashboard" });
+    this.textInput = label.createEl("input", { type: "text", placeholder: "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": "Message your dashboard", enterkeyhint: "send" } });
+    this.textButton = form.createEl("button", { text: "Send message", type: "submit" });
+    form.addEventListener("submit", event => { event.preventDefault(); void this.submitText(); });
   }
 
-  private cancelTextSearch(): void {
-    this.searchGeneration++;
-    this.textSession?.cancel();
-    this.searchBusy = false;
-    this.searchButton.disabled = false;
-    this.searchButton.setText("Ask AI");
-    this.cancelSearchButton.disabled = true;
-    this.searchResults.setAttribute("aria-busy", "false");
-    this.searchStatus.setText("Search cancelled. Requests already sent may still incur API charges.");
-  }
-
-  private async searchObjectives(): Promise<void> {
-    if (this.closed || this.searchBusy) return;
-    const query = this.searchInput.value.trim();
-    if (!query) { this.searchStatus.setText("Enter a question to search your objectives."); this.searchInput.focus(); return; }
-    this.searchBusy = true;
-    const generation = ++this.searchGeneration;
-    const active = () => !this.closed && generation === this.searchGeneration;
-    this.searchButton.disabled = true;
-    this.cancelSearchButton.disabled = false;
-    this.searchButton.setText("Searching…");
-    this.searchResults.setAttribute("aria-busy", "true");
-    this.searchStatus.setText("Asking AI to search your objectives…");
-    const turn = this.searchResults.createDiv({ cls: "fjg-live-search-turn" });
-    turn.createEl("strong", { text: `You: ${query}` });
-    const answer = turn.createEl("p", { cls: "fjg-live-search-answer" });
-    const sources = turn.createEl("ul");
-    const seen = new Set<string>();
-    const tools = new LiveTaskTools(this.plugin.workspaceService, () => this.plugin.settings, () => {}, active,
-      message => { if (active()) this.searchStatus.setText(message); });
-    // Each turn gets a fresh guarded executor while retaining successful conversation history.
-    this.textSession ??= new DashboardTextSession((name, args, id) => this.textExecute!(name, args, id));
-    this.textExecute = async (name, args, id) => {
-      if (!active()) throw new Error("Search cancelled.");
-      const result = await tools.execute(name, args, id) as { tasks?: { task_id: string; title: string }[]; task_id?: string; title?: string };
-      if (!active()) throw new Error("Search cancelled.");
-      const candidates = result.tasks ?? (result.task_id && result.title ? [{ task_id: result.task_id, title: result.title }] : []);
-      for (const task of candidates) {
-        if (seen.has(task.task_id)) continue;
-        seen.add(task.task_id);
-        const open = sources.createEl("li").createEl("button", { text: task.title, attr: { "aria-label": `Open objective: ${task.title}` } });
-        open.addEventListener("click", () => {
-          open.disabled = true;
-          void this.plugin.openTask(task.task_id).then(() => { if (!this.closed) this.close(); }).catch(() => {
-            if (!this.closed) { open.disabled = false; this.searchStatus.setText("Could not open this objective. Search again to refresh the results."); }
-          });
-        });
-      }
-      return result;
-    };
-    try {
-      const key = await this.plugin.resolveOpenAiApiKey();
-      if (!active()) return;
-      const response = await this.textSession.ask(query, key, this.plugin.settings.liveBackendModel, this.context());
-      if (!active()) return;
-      answer.setText(response);
-      this.searchStatus.setText("Answer ready. Ask a follow-up or open a matching objective below.");
-      if (this.searchInput.value.trim() === query) this.searchInput.value = "";
-      this.searchInput.focus();
-    } catch (error) {
-      if (active()) {
-        answer.setText("This question did not complete. It was not added to the conversation history.");
-        this.searchStatus.setText(error instanceof Error ? error.message : "Could not complete the AI search. Check your API settings and try again.");
-      }
-    } finally {
-      if (active()) {
-        this.searchBusy = false; this.searchButton.disabled = false; this.searchButton.setText("Ask AI");
-        this.cancelSearchButton.disabled = true; this.searchResults.setAttribute("aria-busy", "false");
-      }
+  private async submitText(): Promise<void> {
+    if (this.closed || this.textButton.disabled) return;
+    const text = this.textInput.value.trim();
+    if (!text) { this.status.setText("Type a message before sending."); this.textInput.focus(); return; }
+    if (this.session?.active) {
+      this.lastText = undefined;
+      if (this.session.sendText(text)) this.textInput.value = "";
+      else this.status.setText("Wait for the current request to finish before sending another message.");
+      return;
     }
+    this.pendingText = text;
+    await this.start("text");
   }
 
-  private textExecute?: (name: string, args: string, id: string) => Promise<unknown>;
-
-  async start(): Promise<void> {
+  async start(inputMode: "voice" | "text" = "voice"): Promise<void> {
     if (this.closed || this.startButton.disabled) return;
     this.startButton.disabled = true;
     this.session?.dispose();
@@ -177,6 +98,7 @@ export class LiveVoiceModal extends Modal {
     }, () => !this.closed && session.active, message => { if (!this.closed) this.coverage.setText(message); });
     session = new DashboardLiveSession(this.audio, {
       state: (state, message) => this.setState(state, message),
+      busy: busy => { if (!this.closed) this.textButton.disabled = busy; },
       transcript: (speaker, delta) => this.addTranscript(speaker, delta),
       execute: (name, args, id) => tools.execute(name, args, id)
     });
@@ -185,7 +107,7 @@ export class LiveVoiceModal extends Modal {
     try {
       const key = await this.plugin.resolveOpenAiApiKey();
       if (this.closed || this.session !== session) return;
-      await session.start(key, this.plugin.settings.liveBackendModel, this.context());
+      await session.start(key, this.plugin.settings.liveBackendModel, this.context(), inputMode);
     } catch {
       session.dispose();
       this.setState("error", "Could not read the saved OpenAI key. Check FJG Task Manager settings.");
@@ -194,8 +116,7 @@ export class LiveVoiceModal extends Modal {
 
   onClose(): void {
     this.closed = true;
-    this.searchGeneration++;
-    this.textSession?.cancel();
+    this.pendingText = "";
     this.session?.end();
     // Immediately release the microphone when closing the panel; graceful close may finish in the background.
     this.released();
@@ -211,7 +132,14 @@ export class LiveVoiceModal extends Modal {
     this.status.setAttribute("aria-busy", String(state === "connecting"));
     this.startButton.disabled = ["connecting", "connected", "ending"].includes(state);
     this.endButton.disabled = !["connecting", "connected"].includes(state);
-    this.muteButton.disabled = state !== "connected";
+    this.muteButton.disabled = state !== "connected" || Boolean(this.session?.textOnly);
+    this.textButton.disabled = ["connecting", "ending"].includes(state);
+    if (["error", "ended"].includes(state)) this.pendingText = "";
+    if (state === "connected" && this.pendingText && this.session?.acceptingText) {
+      const text = this.pendingText; this.pendingText = "";
+      this.lastText = undefined;
+      if (this.session.sendText(text) && this.textInput.value.trim() === text) this.textInput.value = "";
+    }
   }
 
   private addTranscript(speaker: "You" | "Assistant", delta: string): void {

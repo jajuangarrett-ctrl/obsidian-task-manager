@@ -5,6 +5,7 @@ export type LiveState = "idle" | "connecting" | "connected" | "ending" | "ended"
 export interface LiveCallbacks {
   state: (state: LiveState, message: string) => void;
   transcript: (speaker: "You" | "Assistant", delta: string) => void;
+  busy?: (busy: boolean) => void;
   execute: (name: string, args: string, id: string) => Promise<unknown>;
 }
 
@@ -17,6 +18,11 @@ export function liveRequest(sdp: string, backendModel: string, context: string) 
 
 /** Runs in Obsidian's trusted plugin runtime, using its native HTTP API for the saved key. */
 export class DashboardLiveSession {
+  private backendBusy = false;
+  private backendHasTools = false;
+  private inputMode: "voice" | "text" = "voice";
+  private silentContext?: AudioContext;
+  private silentSource?: OscillatorNode;
   private peer?: RTCPeerConnection;
   private channel?: RTCDataChannel;
   private microphone?: MediaStream;
@@ -36,12 +42,13 @@ export class DashboardLiveSession {
   }
   get active(): boolean { return this.ready && !this.disposed && !this.ending; }
 
-  async start(apiKey: string, backendModel: string, context: string): Promise<void> {
+  async start(apiKey: string, backendModel: string, context: string, inputMode: "voice" | "text" = "voice"): Promise<void> {
     if (this.disposed) return;
-    this.callbacks.state("connecting", "Connecting… Please wait before speaking.");
+    this.inputMode = inputMode;
+    this.callbacks.state("connecting", inputMode === "text" ? "Connecting for typed messages and spoken replies… Microphone off." : "Connecting… Please wait before speaking.");
     try {
       if (!apiKey.trim()) throw new Error("Add your OpenAI API key in FJG Task Manager settings.");
-      if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") throw new Error("Live voice is not supported on this device.");
+      if ((inputMode === "voice" && !navigator.mediaDevices?.getUserMedia) || typeof RTCPeerConnection === "undefined") throw new Error("Live voice is not supported on this device.");
       const peer = this.peer = new RTCPeerConnection();
       peer.addEventListener("track", (event) => {
         if (this.disposed || this.ending) return;
@@ -52,7 +59,19 @@ export class DashboardLiveSession {
         });
       });
       // Start from the user's click; never automatically reopen a microphone after disconnecting.
-      const microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      let microphone: MediaStream;
+      if (inputMode === "text") {
+        // A generated silent track negotiates two-way audio without accessing any input device.
+        const context = this.silentContext = new AudioContext();
+        const destination = context.createMediaStreamDestination();
+        const source = this.silentSource = context.createOscillator();
+        const gain = context.createGain(); gain.gain.value = 0;
+        source.connect(gain); gain.connect(destination); source.start();
+        await context.resume();
+        microphone = destination.stream;
+      } else {
+        microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      }
       if (this.disposed) { microphone.getTracks().forEach((track) => track.stop()); return; }
       this.microphone = microphone;
       for (const track of microphone.getAudioTracks()) peer.addTrack(track, microphone);
@@ -91,6 +110,20 @@ export class DashboardLiveSession {
     }
   }
 
+  get textOnly(): boolean { return this.inputMode === "text"; }
+  get acceptingText(): boolean { return this.active && !this.backendBusy && this.channel?.readyState === "open"; }
+
+  sendText(text: string): boolean {
+    const value = text.trim();
+    if (!value || value.length > 4000 || !this.acceptingText) return false;
+    this.backendBusy = true;
+    this.callbacks.busy?.(true);
+    this.callbacks.transcript("You", value);
+    this.send({ type: "response.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: value }] } });
+    this.send({ type: "response.create" });
+    return true;
+  }
+
   mute(muted: boolean): void { this.microphone?.getAudioTracks().forEach((track) => { track.enabled = !muted; }); }
 
   end(): void {
@@ -119,6 +152,8 @@ export class DashboardLiveSession {
     clearTimeout(this.timer);
     clearTimeout(this.readinessTimer);
     this.microphone?.getTracks().forEach((track) => track.stop());
+    this.silentSource?.stop();
+    void this.silentContext?.close().catch(() => {});
     this.channel?.close();
     this.peer?.close();
     this.audio.pause();
@@ -131,8 +166,14 @@ export class DashboardLiveSession {
     if (event.type === "session.started") {
       if (this.sessionStarted || this.ending) return;
       this.sessionStarted = true;
-      this.callbacks.state("connecting", "Warming up microphone… Please wait before speaking.");
-      void this.checkAudioReady();
+      if (this.inputMode === "text") {
+        this.ready = true;
+        clearTimeout(this.timer);
+        this.callbacks.state("connected", "Ready to type. Microphone off; replies play aloud.");
+      } else {
+        this.callbacks.state("connecting", "Warming up microphone… Please wait before speaking.");
+        void this.checkAudioReady();
+      }
     } else if (event.type === "session.closed") {
       this.dispose();
       this.callbacks.state("ended", "Conversation ended.");
@@ -141,7 +182,16 @@ export class DashboardLiveSession {
     } else if (["session.input_transcript.delta", "session.output_transcript.delta"].includes(event.type) && typeof event.delta === "string") {
       this.callbacks.transcript(event.type === "session.input_transcript.delta" ? "You" : "Assistant", event.delta);
     } else if (event.type === "response.event" && this.active) {
-      void this.loop.handle(event).catch(() => this.fail("Could not finish a voice task request. Check the dashboard before trying the change again."));
+      const nested = event.event;
+      if (nested?.type === "response.created") { this.backendBusy = true; this.backendHasTools = false; this.callbacks.busy?.(true); }
+      if (nested?.type === "response.output_item.done" && nested.item?.type === "function_call") this.backendHasTools = true;
+      const final = nested?.type === "response.completed" && !this.backendHasTools;
+      void this.loop.handle(event).then(() => {
+        if (final && this.active) { this.backendBusy = false; this.callbacks.busy?.(false); }
+      }).catch(() => this.fail("Could not finish a voice task request. Check the dashboard before trying the change again."));
+      if (["response.failed", "response.cancelled", "response.incomplete"].includes(nested?.type)) {
+        this.fail("The backend request did not complete. Check your objectives before retrying any change.");
+      }
     }
   }
 
