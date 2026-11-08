@@ -1,7 +1,7 @@
 import { Modal, type App } from "obsidian";
 import type FjgTaskManagerPlugin from "../main";
 import { DashboardLiveSession, type LiveState } from "./live-session";
-import { LiveTaskTools } from "./live-tools";
+import { findIndexedTasks, LiveTaskTools } from "./live-tools";
 
 export class LiveVoiceModal extends Modal {
   private session?: DashboardLiveSession;
@@ -15,6 +15,11 @@ export class LiveVoiceModal extends Modal {
   private startButton!: HTMLButtonElement;
   private muteButton!: HTMLButtonElement;
   private endButton!: HTMLButtonElement;
+  private searchInput!: HTMLInputElement;
+  private searchButton!: HTMLButtonElement;
+  private searchStatus!: HTMLElement;
+  private searchResults!: HTMLElement;
+  private searchBusy = false;
   private lastSpeaker = "";
   private lastText?: HTMLElement;
 
@@ -22,6 +27,7 @@ export class LiveVoiceModal extends Modal {
 
   onOpen(): void {
     this.titleEl.setText("Talk to your dashboard");
+    this.renderTextSearch(this.contentEl);
     this.modalEl.addClass("fjg-live-modal");
     const root = this.contentEl;
     root.createEl("p", { text: "Ask about your tasks or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
@@ -47,6 +53,82 @@ export class LiveVoiceModal extends Modal {
     this.transcript = root.createDiv({ cls: "fjg-live-transcript", attr: { role: "log", "aria-label": "Conversation transcript", "aria-live": "polite" } });
     this.transcript.createEl("p", { text: "Try: “What is due this week?” or “Mark my budget review task completed.”", cls: "fjg-live-caption" });
     this.updates = root.createDiv({ cls: "fjg-live-updates", attr: { role: "log", "aria-label": "Saved task changes", "aria-live": "polite" } });
+  }
+
+  private renderTextSearch(root: HTMLElement): void {
+    const toggle = root.createEl("button", { text: "Text search", attr: { "aria-expanded": "false" } });
+    const panel = root.createDiv({ cls: "fjg-live-text-search" });
+    panel.hidden = true;
+    toggle.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute("aria-expanded", String(!panel.hidden));
+      if (!panel.hidden) this.searchInput.focus();
+    });
+    panel.createEl("p", { text: "Search objectives, notes, updates and nested actions locally. No microphone or API key needed. This does not change your objectives.", cls: "fjg-live-caption" });
+    const form = panel.createEl("form", { cls: "fjg-live-search-form", attr: { role: "search", "aria-label": "Search objectives" } });
+    const label = form.createEl("label", { text: "Search objectives" });
+    this.searchInput = label.createEl("input", { type: "search", placeholder: "Enter keywords…", attr: { maxlength: "300", "aria-label": "Search objectives", enterkeyhint: "search" } });
+    this.searchButton = form.createEl("button", { text: "Search objectives", type: "submit" });
+    form.addEventListener("submit", event => { event.preventDefault(); void this.searchObjectives(); });
+    this.searchStatus = panel.createEl("p", { text: "Enter keywords, then press Enter or Search objectives.", attr: { role: "status", "aria-live": "polite" } });
+    this.searchResults = panel.createDiv({ cls: "fjg-live-search-results", attr: { "aria-label": "Objective search results" } });
+  }
+
+  private async searchObjectives(): Promise<void> {
+    if (this.closed || this.searchBusy) return;
+    const query = this.searchInput.value.trim();
+    this.searchResults.empty();
+    if (!query) {
+      this.searchStatus.setText("Enter keywords to search your objectives.");
+      this.searchInput.focus();
+      return;
+    }
+    this.searchBusy = true;
+    this.searchButton.disabled = true;
+    this.searchButton.setText("Searching…");
+    this.searchResults.setAttribute("aria-busy", "true");
+    this.searchStatus.setText("Searching indexed objectives…");
+    try {
+      await this.plugin.workspaceService.refresh();
+      if (this.closed) return;
+      const tasks = this.plugin.workspaceService.list({ includeArchived: true });
+      const result = findIndexedTasks(tasks, query);
+      this.searchStatus.setText(`${result.total ? `${result.total} matching objectives for “${query}”.` : `No objectives matched “${query}”. Try different keywords.`} ${result.coverage}`);
+      // Keep a stable snapshot for paging; a fresh submit refreshes the index.
+      let offset = 0;
+      const list = this.searchResults.createEl("ul");
+      const more = this.searchResults.createEl("button", { text: "Show more results" });
+      const showPage = () => {
+        const page = findIndexedTasks(tasks, query, "", offset);
+        for (const task of page.tasks) {
+          const row = list.createEl("li");
+          const open = row.createEl("button", { text: task.title, attr: { "aria-label": `Open objective: ${task.title}` } });
+          row.createEl("p", { text: [task.project, task.status, task.due ? `Due ${task.due}` : ""].filter(Boolean).join(" · "), cls: "fjg-live-caption" });
+          open.addEventListener("click", () => {
+            open.disabled = true;
+            void this.plugin.openTask(task.task_id).then(() => { if (!this.closed) this.close(); }).catch(() => {
+              if (!this.closed) { open.disabled = false; this.searchStatus.setText("Could not open this objective. Search again to refresh the results."); }
+            });
+          });
+        }
+        offset = page.next_offset ?? offset;
+        more.hidden = page.next_offset === null;
+        if (more.hidden && list.children.length) (list.lastElementChild?.querySelector("button") as HTMLButtonElement | null)?.focus();
+      };
+      more.addEventListener("click", showPage);
+      showPage();
+      // Keep focus in the query after the first page so it is easy to refine.
+      this.searchInput.focus();
+    } catch {
+      if (!this.closed) this.searchStatus.setText("Could not search objectives. Try again after the workspace finishes loading.");
+    } finally {
+      this.searchBusy = false;
+      if (!this.closed) {
+        this.searchButton.disabled = false;
+        this.searchButton.setText("Search objectives");
+        this.searchResults.setAttribute("aria-busy", "false");
+      }
+    }
   }
 
   async start(): Promise<void> {

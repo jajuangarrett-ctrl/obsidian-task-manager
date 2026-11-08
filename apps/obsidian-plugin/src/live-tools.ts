@@ -74,6 +74,18 @@ function summary(task: IndexedTask) {
     project: task.record.project, due: task.record.due, revision: revision(task), archived: task.archived };
 }
 
+/** Shared read-only retrieval for voice tools and the local text-search panel. */
+export function findIndexedTasks(tasks: IndexedTask[], query: string, status = "", offset = 0) {
+  const candidates = tasks.filter(task => !status || task.record.status === status);
+  const matches = candidates.map(task => ({ task, score: searchScore(query,
+    `${task.record.title} ${task.record.project} ${task.record.task_id}`,
+    `${task.notes} ${task.updates.map(u=>u.text).join(' ')} ${task.record.subtasks.map(a=>`${a.title} ${a.notes} ${a.history}`).join(' ')}`) }))
+    .filter(hit => hit.score > 0).sort((a,b) => b.score-a.score || a.task.record.title.localeCompare(b.task.record.title));
+  const coverage = `Searched all ${candidates.length} indexed objectives${status ? ` with status ${status}` : ', including archived objectives'}, including notes, updates and nested actions. ${matches.length} matches. Unindexed or invalid workspaces and attachment contents are not searched.`;
+  return { total: matches.length, tasks: matches.slice(offset, offset + 30).map(hit=>({...summary(hit.task), relevance:hit.score})),
+    next_offset: offset + 30 < matches.length ? offset + 30 : null, search_complete:true, scanned_tasks:candidates.length, coverage };
+}
+
 /** All writes use the existing workspace service; model-supplied paths are never accepted. */
 export class LiveTaskTools {
   constructor(private service: TaskWorkspaceService, private settings: () => TaskManagerSettings,
@@ -93,15 +105,9 @@ export class LiveTaskTools {
       if (status && !TASK_STATUSES.includes(status as TaskStatus)) throw new Error("Invalid status filter.");
       const offset = args.offset;
       if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) throw new Error("Invalid page offset.");
-      const candidates = this.service.list({ includeArchived: true }).filter(task => !status || task.record.status === status);
-      const matches = candidates.map(task => ({ task, score: searchScore(query,
-        `${task.record.title} ${task.record.project} ${task.record.task_id}`,
-        `${task.notes} ${task.updates.map(u=>u.text).join(' ')} ${task.record.subtasks.map(a=>`${a.title} ${a.notes} ${a.history}`).join(' ')}`) }))
-        .filter(hit => hit.score > 0).sort((a,b) => b.score-a.score || a.task.record.title.localeCompare(b.task.record.title));
-      const coverage = `Searched all ${candidates.length} indexed objectives${status ? ` with status ${status}` : ', including archived objectives'}, including notes, updates and nested actions. ${matches.length} matches. Unindexed or invalid workspaces and attachment contents are not searched.`;
-      this.searched(coverage);
-      return { total: matches.length, tasks: matches.slice(offset, offset + 30).map(hit=>({...summary(hit.task), relevance:hit.score})),
-        next_offset: offset + 30 < matches.length ? offset + 30 : null, search_complete:true, scanned_tasks:candidates.length, coverage };
+      const result = findIndexedTasks(this.service.list({ includeArchived: true }), query, status, offset);
+      this.searched(result.coverage);
+      return result;
 
     }
     if (name === "create_task") {

@@ -2017,3 +2017,17 @@
 .fjg-task-rows { grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .fjg-objective-selection { max-width: 100%; box-sizing: border-box; }
 .fjg-objective-selection p { white-space: normal; overflow-wrap: anywhere; }
+
+/* Local typed search shares the voice panel without starting a voice session. */
+.fjg-live-text-search { margin: 12px 0; padding: 12px; border: 1px solid var(--background-modifier-border); border-radius: 10px; }
+.fjg-live-text-search[hidden] { display: none; }
+.fjg-live-search-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.fjg-live-search-form label { flex: 1 1 220px; min-width: 0; }
+.fjg-live-search-form input { display: block; width: 100%; margin-top: 6px; }
+.fjg-live-search-results { max-height: 35vh; overflow-y: auto; overflow-wrap: anywhere; }
+.fjg-live-search-results ul { list-style: none; padding: 0; margin: 8px 0; }
+.fjg-live-search-results li { padding: 8px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.fjg-live-search-results li button { height: auto; min-height: 36px; max-width: 100%; white-space: normal; text-align: left; }
+.fjg-live-search-results li p { margin: 4px 0; }
+.fjg-live-text-search button:focus-visible, .fjg-live-text-search input:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+@media (max-width: 600px) { .fjg-live-text-search button, .fjg-live-text-search input { min-height: 44px; } .fjg-live-search-form > button { width: 100%; } }
