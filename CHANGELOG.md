@@ -1,3 +1,9 @@
+## 0.30.8
+
+- Add a Text search button to Talk to Dashboard with a local keyword input, Enter-to-search, and clickable objective results. No microphone, OpenAI connection, or API key is needed for typed searches.
+- Reuse voice search ranking across all indexed objectives, including archived objectives, notes, updates and nested actions. Show coverage limitations and page through all matches.
+- Add mobile-friendly controls, visible keyboard focus, busy/empty/error states, safe close handling and regression tests. Preserve the existing voice conversation controls.
+
 ## 0.30.7
 
 - Fix repeated iOS "Obsidian pasted from …" banners by registering the system-capture clipboard watcher only in desktop Obsidian. The consumer also rejects mobile callbacks and never falls back to the browser clipboard.
