@@ -349,7 +349,7 @@ Live search ranks individual keywords and common word forms instead of requiring
 
 ## Create actions with dashboard voice
 
-In **Talk to dashboard**, say “Add an action under my Work Study objective to review invoices, due September 20.” The assistant finds and reads the parent objective, asks which one you mean when necessary, then creates the action under its exact ID. Requested notes, due date and status are retained; the default action status is Do Soon. A saved-action receipt names both the action and its parent. Archiving remains manual. The separate capture forms still require their Save buttons.
+In **Talk to dashboard**, say “Add an action under my Work Study objective to review invoices, due September 20.” The assistant finds and reads the parent objective, asks which one you mean when necessary, then creates the action under its exact ID. Requested notes, due date and status are retained; the default action status is Do Soon. A saved-action receipt names both the action and its parent. Objectives relocated under `02 Programs` and `03 Areas` are supported, alongside the configured Inbox, Workspaces and Projects roots. Archiving remains manual. The separate capture forms still require their Save buttons.
 
 ### People agenda defaults
 

@@ -1,3 +1,9 @@
+## 0.30.10
+
+- Fix Talk to Dashboard action creation and supported objective changes for relocated objectives under `02 Programs` and `03 Areas`, including bundle and split Tasks/Updates layouts.
+- Match the dashboard index's relocation rules and validate each relocated objective's own update log without allowing arbitrary folder writes. Preserve exact parent IDs, current revisions, duplicate-action checks, archive protection and session cancellation.
+- Add regression coverage for relocated and configured roots, supported changes, unsafe paths and mismatched update logs. No live vault actions are created during validation.
+
 ## 0.30.9
 
 - Replace the local-only search with **Type a message** in Talk to Dashboard. Typed turns use the same live AI conversation, configured backend, tools, objective context, change safeguards and spoken replies as voice.
