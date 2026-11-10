@@ -272,6 +272,57 @@ describe("Live voice writes to authoritative task Markdown", () => {
     await expect(tools.execute("create_action",JSON.stringify({...args,expected_revision:current.revision,title:"Another"}),"completed")).resolves.toMatchObject({saved:true});
   });
 
+  it.each(["03 Areas/Admin-leadership", "02 Programs/Example"])(
+    "persists a voice-created action after relocating its objective to %s", async (destination) => {
+      const { service, vault } = createService();
+      await service.initialize();
+      const parent = await service.createTask({ title: "Review evaluation" });
+      const sibling = await service.createTask({ title: "Review evaluation follow-up" });
+      await service.createRelatedNote(parent.record.task_id, "Supporting note", "Leave this content unchanged.");
+      await vault.createFolder(destination);
+      const moved = await service.relocateTask(parent.record.task_id, destination);
+      const pathBefore = moved.taskFile.path;
+      const tools = new LiveTaskTools(service, () => settings as never, vi.fn(), () => true);
+      const read = await tools.execute("read_task", JSON.stringify({ task_id: parent.record.task_id }), "read") as any;
+      const result = await tools.execute("create_action", JSON.stringify({ task_id: parent.record.task_id,
+        expected_revision: read.revision, title: "Prepare checklist", notes: "Use the current template",
+        due: "2026-12-01", status: "do-soon" }), "relocated-action") as any;
+      expect(result).toMatchObject({ saved: true, parent: { task_id: parent.record.task_id } });
+      const saved = service.getById(parent.record.task_id);
+      expect(saved.taskFile.path).toBe(pathBefore);
+      const document = parseTaskMarkdown(await vault.read(saved.taskFile as never));
+      expect(document.record.subtasks).toEqual([result.action]);
+      expect(result.action).toMatchObject({ title: "Prepare checklist", notes: "Use the current template", due: "2026-12-01", status: "do-soon" });
+      expect(await vault.adapter.stat(`${saved.folderPath}/Files/${result.action.attachment_folder}`)).toEqual({ type: "folder" });
+      const supporting = vault.getAbstractFileByPath(`${saved.folderPath}/Files/Supporting note.md`);
+      expect(await vault.read(supporting as never)).toContain("Leave this content unchanged.");
+      expect(service.getById(sibling.record.task_id).record.subtasks).toEqual([]);
+    }
+  );
+
+  it.each([["03 Areas/Example", "task.md"], ["02 Programs/Example", "task.md"], ["03 Areas/Example", "Task.md"]])(
+    "persists a voice-created action in the older split relocation layout at %s with %s", async (root, filename) => {
+      const { service, vault } = createService();
+      await service.initialize();
+      const record = createTaskRecord({ title: "Review evaluation", status: "do-first" });
+      const taskPath = `${root}/Tasks/Review evaluation/${filename}`;
+      const updatesPath = `${root}/Updates/Review evaluation/updates.md`;
+      await vault.create(taskPath, renderTaskMarkdown(record));
+      await vault.create(updatesPath, renderUpdatesMarkdown());
+      await service.refresh();
+      const tools = new LiveTaskTools(service, () => settings as never, vi.fn(), () => true);
+      const read = await tools.execute("read_task", JSON.stringify({ task_id: record.task_id }), "read") as any;
+      const result = await tools.execute("create_action", JSON.stringify({ task_id: record.task_id,
+        expected_revision: read.revision, title: "Prepare checklist", notes: "", due: "", status: "do-soon" }), "split-action") as any;
+      expect(result.saved).toBe(true);
+      const saved = service.getById(record.task_id);
+      expect(saved.taskFile.path).toBe(taskPath);
+      expect(saved.updatesFile?.path).toBe(updatesPath);
+      expect(parseTaskMarkdown(await vault.read(saved.taskFile as never)).record.subtasks).toEqual([result.action]);
+      expect(await vault.adapter.stat(`${root}/Files/Review evaluation/${result.action.attachment_folder}`)).toEqual({ type: "folder" });
+    }
+  );
+
   it("searches all indexed notes, updates and nested actions with ranked non-phrase matching", async () => {
     const {service}=createService();await service.initialize();
     const task=await service.createTask({title:"Late folder item",details:"Student enrollment budget planning"});

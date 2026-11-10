@@ -103,10 +103,10 @@ function taskWriteInScope(task: IndexedTask, config: TaskManagerSettings): boole
   // predicates and require the companion update log to belong to that objective.
   if (!isTaskRelocationPath(path) || path.includes("/Subtasks/")) return false;
   if (isTaskRelocationBundlePath(path)) {
-    return task.relocatedBundle && path === `${task.folderPath}/task.md`
+    return task.relocatedBundle && path.slice(0, path.lastIndexOf("/")) === task.folderPath
       && (!updates || updates === `${task.folderPath}/updates.md`);
   }
-  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/);
+  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/i);
   return !!artifact && !task.relocatedBundle && artifact[1] === task.folderPath
     && (!updates || updates === taskArtifactUpdatesPath(task.folderPath, artifact[2]));
 }

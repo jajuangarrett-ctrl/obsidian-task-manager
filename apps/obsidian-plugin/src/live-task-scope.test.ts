@@ -10,7 +10,7 @@ const settings = {
 } as TaskManagerSettings;
 
 function fixture(path = areaPath, config = settings) {
-  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/);
+  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/i);
   const folderPath = artifact ? artifact[1] : path.slice(0, path.lastIndexOf("/"));
   const relocated = /^(02 Programs|03 Areas)\//.test(path);
   const updatesPath = artifact ? taskArtifactUpdatesPath(folderPath, artifact[2]) : `${folderPath}/updates.md`;
@@ -49,6 +49,8 @@ async function expectBlocked(f: ReturnType<typeof fixture>, message = /supported
 describe("live objective mutation scope", () => {
   it.each([
     areaPath,
+    "03 Areas/Example/Review evaluation/Task.md",
+    "02 Programs/Example/Tasks/Review evaluation/Task.md",
     "02 Programs/Example/Example Tasks/Review evaluation/task.md",
     "03 Areas/Example/Tasks/Review evaluation/task.md",
     "02 Programs/Example/Tasks/Review evaluation/task.md"
