@@ -1,5 +1,6 @@
 import { searchScore } from "./search-ranking";
-import { TASK_STATUSES, type TaskStatus } from "@fjg/task-core";
+import { TASK_STATUSES, taskArtifactUpdatesPath, type TaskStatus } from "@fjg/task-core";
+import { isTaskRelocationBundlePath, isTaskRelocationPath } from "./task-relocation";
 import type { IndexedTask, TaskWorkspaceService } from "./workspace-service";
 import type { TaskManagerSettings } from "./settings";
 
@@ -86,6 +87,30 @@ export function findIndexedTasks(tasks: IndexedTask[], query: string, status = "
     next_offset: offset + 30 < matches.length ? offset + 30 : null, search_complete:true, scanned_tasks:candidates.length, coverage };
 }
 
+/** Match indexed relocation layouts without granting general writes to Programs or Areas. */
+function taskWriteInScope(task: IndexedTask, config: TaskManagerSettings): boolean {
+  const path = task.taskFile.path;
+  const updates = task.updatesFile?.path;
+  const safe = (value: string) => !/[\\\x00-\x1f]/.test(value)
+    && value.split("/").every((part) => part && !part.startsWith("."));
+  if (!safe(path) || (updates && !safe(updates))) return false;
+
+  const roots = [config.activeRoot, config.inboxRoot, config.projectRoot];
+  const configured = (value: string) => roots.some((root) => root && value.startsWith(`${root.replace(/\/$/, "")}/`));
+  if (configured(path)) return !updates || configured(updates);
+
+  // getById supplies a fresh, unambiguous indexed record. Reuse the index's path
+  // predicates and require the companion update log to belong to that objective.
+  if (!isTaskRelocationPath(path) || path.includes("/Subtasks/")) return false;
+  if (isTaskRelocationBundlePath(path)) {
+    return task.relocatedBundle && path === `${task.folderPath}/task.md`
+      && (!updates || updates === `${task.folderPath}/updates.md`);
+  }
+  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/);
+  return !!artifact && !task.relocatedBundle && artifact[1] === task.folderPath
+    && (!updates || updates === taskArtifactUpdatesPath(task.folderPath, artifact[2]));
+}
+
 /** All writes use the existing workspace service; model-supplied paths are never accepted. */
 export class LiveTaskTools {
   constructor(private service: TaskWorkspaceService, private settings: () => TaskManagerSettings,
@@ -126,11 +151,7 @@ export class LiveTaskTools {
     if (name === "read_task") return { ...summary(task), notes: task.notes.slice(0, 12000), actions: task.record.subtasks.map(a => ({ id: a.id, title: a.title, status: a.status, due: a.due, notes: a.notes.slice(0, 2000) })), updates: task.updates.slice(0, 5).map((u) => ({ timestamp: u.timestamp, text: u.text.slice(0, 2000) })) };
     if (task.archived || task.record.status === "archived") throw new Error("Reopen archived tasks from the dashboard before editing by voice.");
     if (textField(args, "expected_revision", 300) !== revision(task)) throw new Error("Task changed since it was read. Read it again before proposing a change.");
-    // Match the plugin's configured active workspace roots, including Inbox and Projects.
-    const config = this.settings();
-    const roots = [config.activeRoot, config.inboxRoot, config.projectRoot];
-    const inScope = (path: string) => !path.split(/[\\/]/).some((part) => part === "..") && roots.some((root) => root && path.startsWith(`${root.replace(/\/$/, "")}/`));
-    if (!inScope(task.taskFile.path) || (task.updatesFile && !inScope(task.updatesFile.path))) throw new Error("Task is outside the configured active task roots; edit it manually.");
+    if (!taskWriteInScope(task, this.settings())) throw new Error("Task is outside the supported active objective workspaces; edit it manually.");
     if (name === "create_action") {
       const title = textField(args, "title", 250);
       const notes = textField(args, "notes");
