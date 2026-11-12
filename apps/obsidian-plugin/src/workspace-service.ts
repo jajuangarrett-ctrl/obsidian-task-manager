@@ -200,6 +200,25 @@ export class TaskWorkspaceService {
     return pending;
   }
 
+  /** Ignore unrelated vault edits without missing new or relocated objectives. */
+  affectsWorkspace(path: string): boolean {
+    const normalized = normalizePath(path);
+    if (normalized === OBJECTIVE_AGENDA_PATH || this.isBriefingPath(normalized)) return false;
+    const overlaps = (root: string) => {
+      const target = normalizePath(root);
+      return normalized === target || normalized.startsWith(`${target}/`) || target.startsWith(`${normalized}/`);
+    };
+    const settings = this.getSettings();
+    if ([settings.activeRoot, settings.inboxRoot, settings.archiveRoot, settings.projectRoot,
+      settings.projectArchiveRoot, `${AGENDA_FOLDER}/_roster.json`].some(overlaps)) return true;
+    if (isTaskRelocationPath(normalized)) return true;
+    for (const task of this.index.values()) {
+      if (overlaps(task.folderPath) || overlaps(this.relatedFilesPath(task)) ||
+        task.record.related_files.some(overlaps)) return true;
+    }
+    return false;
+  }
+
   private async scanWorkspace(generation: number): Promise<void> {
     const duplicates = new Map<string, string[]>();
     const settings = this.getSettings();

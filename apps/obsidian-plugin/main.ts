@@ -2,7 +2,6 @@ import { revealInFileFocus } from "./src/file-focus-integration";
 import { DeleteCapabilities, validDeleteProtocol } from "./src/delete-capability";
 import { DeleteObjectiveModal } from "./src/delete-objective-modal";
 import { PeopleModal } from "./src/people-modal";
-import { OBJECTIVE_AGENDA_PATH } from "./src/people-model";
 import {
   Notice,
   normalizePath,
@@ -195,15 +194,19 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }});
 
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file.path !== OBJECTIVE_AGENDA_PATH && !this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
+      if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (file.path !== OBJECTIVE_AGENDA_PATH && !this.workspaceService.isBriefingPath(file.path)) this.scheduleRefresh();
+      if (this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
-    this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
+    this.registerEvent(this.app.vault.on("delete", (file) => {
+      if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
+    }));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path) || this.workspaceService.affectsWorkspace(oldPath)) this.scheduleRefresh();
+    }));
 
     this.app.workspace.onLayoutReady(() => {
       if (importedLegacyKey) {

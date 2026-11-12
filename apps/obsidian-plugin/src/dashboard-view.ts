@@ -1,4 +1,5 @@
 import {watchLocalDate} from "./dashboard-date";
+import { mountExpandedContent } from "./lazy-details";
 import { isSelectionView, renderSelectionCheckbox, renderSelectionSummary } from "./objective-selection";
 import { isConvertedOriginal } from "@fjg/task-core";
 import { renderConversion } from "./conversion-ui";
@@ -47,7 +48,7 @@ export class TaskDashboardView extends ItemView {
   private overviewWorkspaceId = "";
   private overviewPanelTitle?: HTMLElement;
 
-  async onClose(): Promise<void> { this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
+  async onClose(): Promise<void> { this.cancelSearchRender(); this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
 
   private toggleOverviewObjective(id: string): void {
     this.overviewSelected = this.overviewSelected === id ? "" : id;
@@ -92,12 +93,36 @@ export class TaskDashboardView extends ItemView {
   }
 
   private stopDateWatch?:()=>void;
+  private searchRenderTimer: number | null = null;
+  private pendingRender = false;
+
+  onResize(): void {
+    if (this.pendingRender && this.containerEl.isShown()) this.render();
+  }
+
+  private cancelSearchRender(): void {
+    if (this.searchRenderTimer !== null) window.clearTimeout(this.searchRenderTimer);
+    this.searchRenderTimer = null;
+  }
+
+  private queueSearchRender(render: () => void): void {
+    this.cancelSearchRender();
+    this.searchRenderTimer = window.setTimeout(() => {
+      this.searchRenderTimer = null;
+      render();
+    }, 120);
+  }
 
   async onOpen(): Promise<void> {
     this.stopDateWatch?.();
     const doc=this.containerEl.ownerDocument;
     this.stopDateWatch=watchLocalDate(()=>this.render(),doc.defaultView||window,doc);
     this.view = this.taskPlugin.settings.dashboardDefault;
+    const renderWhenVisible = () => {
+      if (this.pendingRender && this.containerEl.isShown()) this.render();
+    };
+    this.registerEvent(this.app.workspace.on("active-leaf-change", renderWhenVisible));
+    this.registerEvent(this.app.workspace.on("layout-change", renderWhenVisible));
     this.render();
   }
 
@@ -110,6 +135,9 @@ export class TaskDashboardView extends ItemView {
   }
 
   render(): void {
+    this.cancelSearchRender();
+    if (!this.containerEl.isShown()) { this.pendingRender = true; return; }
+    this.pendingRender = false;
     const root = this.containerEl.children[1] as HTMLElement;
     const top = root.scrollTop;
     const panelTop = root.querySelector<HTMLElement>(".fjg-overview-details")?.scrollTop ?? 0;
@@ -253,7 +281,7 @@ export class TaskDashboardView extends ItemView {
       button.toggleClass("is-active",this.homeScope===key);button.addEventListener("click",()=>{this.homeScope=key;this.render();});
     }
     const filters=root.createDiv({cls:"fjg-home-filters"});
-    const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.render();});
+    const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.queueSearchRender(() => this.render());});
     const select=(label:string,choices:[string,string][],value:string,changed:(value:string)=>void)=>{const el=filters.createEl("select",{attr:{"aria-label":label}});for(const [key,name] of choices)el.createEl("option",{value:key,text:name});el.value=value;el.addEventListener("change",()=>{changed(el.value);this.render();});};
     select("Filter Home by People",[["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(value=>[value,value] as [string,string])],this.person,value=>this.person=value);
     select("Filter Home by status",[["","All statuses"],...TASK_STATUSES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
@@ -320,7 +348,7 @@ export class TaskDashboardView extends ItemView {
     const eligible=tasks.filter(task=>eligibleForMove(task,roots));
     const heading=root.createDiv({cls:"fjg-section-heading"});heading.createEl("h2",{text:"Move"});heading.createEl("p",{text:"File objectives from their original task roots. Choose a Program or Area destination, then move one objective and its owned contents."});
     const filters=root.createDiv({cls:"fjg-home-filters"});
-    const search=filters.createEl("input",{type:"search",placeholder:"Search objective titles or source paths",attr:{"aria-label":"Search Move queue","data-focus-key":"move-search"}});search.value=this.moveQuery;search.addEventListener("input",()=>{this.moveQuery=search.value;this.render();});
+    const search=filters.createEl("input",{type:"search",placeholder:"Search objective titles or source paths",attr:{"aria-label":"Search Move queue","data-focus-key":"move-search"}});search.value=this.moveQuery;search.addEventListener("input",()=>{this.moveQuery=search.value;this.queueSearchRender(() => this.render());});
     const filter=filters.createEl("select",{attr:{"aria-label":"Filter Move queue by original root"}});filter.createEl("option",{value:"",text:"All original roots"});for(const path of roots)filter.createEl("option",{value:path,text:path});filter.value=this.moveRoot;filter.addEventListener("change",()=>{this.moveRoot=filter.value;this.render();});
     const refresh=filters.createEl("button",{text:"Refresh"});refresh.addEventListener("click",()=>{refresh.disabled=true;void this.taskPlugin.workspaceService.refresh().then(()=>this.render()).catch(error=>{new Notice(String(error));refresh.disabled=false;});});
     const matches=eligible.filter(task=>(!this.moveRoot||task.taskFile.path.startsWith(`${this.moveRoot}/`))&&`${task.record.title} ${task.taskFile.path}`.toLocaleLowerCase().includes(this.moveQuery.trim().toLocaleLowerCase()));
@@ -412,12 +440,12 @@ export class TaskDashboardView extends ItemView {
     const search = filters.createEl("input", {
       type: "search",
       placeholder: "Search the current view",
-      attr: { "aria-label": "Search objectives in the current view" }
+      attr: { "aria-label": "Search objectives in the current view", "data-focus-key": "task-search" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
       this.query = search.value;
-      this.renderRows(root);
+      this.queueSearchRender(() => this.renderRows(root));
     });
 
     const peopleFilter=filters.createEl("select",{attr:{"aria-label":"Filter objectives by People"}});
@@ -468,7 +496,7 @@ export class TaskDashboardView extends ItemView {
     select.addEventListener("change", () => { this.areaPath = select.value; this.render(); });
     const search = filters.createEl("input", { attr: { type: "search", placeholder: "Search objective names…", "aria-label": "Search Area objectives", "data-focus-key": "area-search" } });
     search.value = this.areaQuery;
-    search.addEventListener("input", () => { this.areaQuery = search.value; this.render(); });
+    search.addEventListener("input", () => { this.areaQuery = search.value; this.queueSearchRender(() => this.render()); });
     const matches = filterAreaObjectives(tasks, areas, this.areaPath, this.areaQuery);
     root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} objectives · ${areas.length} task folders`, attr: { "aria-live": "polite" } });
     if (!matches.length) {
@@ -490,7 +518,7 @@ export class TaskDashboardView extends ItemView {
       type: "search", placeholder: "Search objective names…", "aria-label": "Search Overview objectives", "data-focus-key": "overview-search"
     } });
     search.value = this.overviewQuery;
-    search.addEventListener("input", () => { this.overviewQuery = search.value; this.render(); });
+    search.addEventListener("input", () => { this.overviewQuery = search.value; this.queueSearchRender(() => this.render()); });
     const query = this.overviewQuery.trim().toLocaleLowerCase();
     const matches = tasks.filter(task => task.record.title.toLocaleLowerCase().includes(query));
     root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} of ${tasks.length} objectives · Drag to change status, or use each objective’s menu.`, attr: { "aria-live": "polite" } });
@@ -952,17 +980,19 @@ export class TaskDashboardView extends ItemView {
       text: `Files · ${files.length}`,
       attr: { "aria-label": `${files.length} objective ${files.length === 1 ? "file" : "files"} for ${task.record.title}` }
     });
-    const list = section.createDiv({ cls: "fjg-objective-file-list" });
-    for (const related of files) {
-      const open = list.createEl("button", {
-        cls: "fjg-objective-file-button",
-        attr: { type: "button", title: related.file.path, "aria-label": `Open ${related.file.name}` }
-      });
-      const icon = open.createSpan({ cls: "fjg-objective-file-icon" });
-      setIcon(icon, related.kind === "image" ? "image" : "file");
-      open.createSpan({ text: related.file.name });
-      open.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(related.file));
-    }
+    mountExpandedContent(section, () => {
+      const list = section.createDiv({ cls: "fjg-objective-file-list" });
+      for (const related of files) {
+        const open = list.createEl("button", {
+          cls: "fjg-objective-file-button",
+          attr: { type: "button", title: related.file.path, "aria-label": `Open ${related.file.name}` }
+        });
+        const icon = open.createSpan({ cls: "fjg-objective-file-icon" });
+        setIcon(icon, related.kind === "image" ? "image" : "file");
+        open.createSpan({ text: related.file.name });
+        open.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(related.file));
+      }
+    });
   }
 
   private renderSubtasks(parent: HTMLElement, task: IndexedTask): void {
@@ -977,61 +1007,63 @@ export class TaskDashboardView extends ItemView {
       const progress = summary.createEl("progress", { attr: { max: String(subs.length), value: String(subs.filter((sub) => sub.completed).length), "aria-label": "Action completion" } });
       progress.addClass("fjg-subtask-progress");
     }
-    const run = async (action: () => Promise<unknown>) => { try { await action(); this.render(); } catch (error) { new Notice(String(error), 8000); } };
-    for (const [index, sub] of subs.entries()) {
-      const item = section.createDiv({ cls: "fjg-subtask-item" });
-      const line = item.createDiv({ cls: "fjg-subtask-line" });
-      const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete action ${sub.title}` } });
-      check.checked = sub.completed; check.disabled = task.archived;
-      check.addEventListener("change", () => void run(() => service.updateSubtask(taskId, sub.id, { status: check.checked ? "completed" : "do-soon" })));
-      line.createSpan({ text: sub.title, cls: sub.completed ? "fjg-subtask-done" : "fjg-subtask-title" });
-      line.createSpan({ text: statusLabel(sub.status), cls: "fjg-task-static-meta" });
-      if (sub.due) line.createSpan({ text: `Due ${sub.due}`, cls: "fjg-task-static-meta" });
-      const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy action folder path for ${sub.title}` } });
-      copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Action folder path copied."); }));
-      if (!task.archived) {
-        for (const direction of ["up", "down"] as const) {
-          const move = line.createEl("button", { text: direction === "up" ? "↑ Move up" : "↓ Move down", cls: "fjg-action-move",
-            attr: { "aria-label": `Move action ${sub.title} ${direction}` } });
-          move.disabled = direction === "up" ? index === 0 : index === subs.length - 1;
-          move.addEventListener("click", () => {
-            section.querySelectorAll<HTMLButtonElement>(".fjg-action-move").forEach((button) => { button.disabled = true; });
-            this.expandedSubtasks.add(taskId);
-            void run(() => service.moveSubtask(taskId, sub.id, direction)).finally(() => this.render());
-          });
+    mountExpandedContent(section, () => {
+      const run = async (action: () => Promise<unknown>) => { try { await action(); this.render(); } catch (error) { new Notice(String(error), 8000); } };
+      for (const [index, sub] of subs.entries()) {
+        const item = section.createDiv({ cls: "fjg-subtask-item" });
+        const line = item.createDiv({ cls: "fjg-subtask-line" });
+        const check = line.createEl("input", { type: "checkbox", attr: { "aria-label": `Complete action ${sub.title}` } });
+        check.checked = sub.completed; check.disabled = task.archived;
+        check.addEventListener("change", () => void run(() => service.updateSubtask(taskId, sub.id, { status: check.checked ? "completed" : "do-soon" })));
+        line.createSpan({ text: sub.title, cls: sub.completed ? "fjg-subtask-done" : "fjg-subtask-title" });
+        line.createSpan({ text: statusLabel(sub.status), cls: "fjg-task-static-meta" });
+        if (sub.due) line.createSpan({ text: `Due ${sub.due}`, cls: "fjg-task-static-meta" });
+        const copy = line.createEl("button", { text: "Copy path", attr: { "aria-label": `Copy action folder path for ${sub.title}` } });
+        copy.addEventListener("click", () => void run(async () => { await navigator.clipboard.writeText(taskFolderClipboardPath(await service.ensureSubtaskFolder(taskId, sub.id))); new Notice("Action folder path copied."); }));
+        if (!task.archived) {
+          for (const direction of ["up", "down"] as const) {
+            const move = line.createEl("button", { text: direction === "up" ? "↑ Move up" : "↓ Move down", cls: "fjg-action-move",
+              attr: { "aria-label": `Move action ${sub.title} ${direction}` } });
+            move.disabled = direction === "up" ? index === 0 : index === subs.length - 1;
+            move.addEventListener("click", () => {
+              section.querySelectorAll<HTMLButtonElement>(".fjg-action-move").forEach((button) => { button.disabled = true; });
+              this.expandedSubtasks.add(taskId);
+              void run(() => service.moveSubtask(taskId, sub.id, direction)).finally(() => this.render());
+            });
+          }
+          const edit = line.createEl("button", { text: "Edit" });
+          edit.addEventListener("click", () => new SubtaskEditModal(this.app, sub, async (title, due, notes, status) => { await service.updateSubtask(taskId, sub.id, { title, due, notes, status }); this.render(); }).open());
+          const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to action ${sub.title}` } });
+          attach.addEventListener("click", () => new TaskFileModal(this.app, sub.title,
+            async (title, body) => { const file = await service.addSubtaskNote(taskId, sub.id, title, body); this.render(); await this.app.workspace.getLeaf("tab").openFile(file); },
+            async (files) => { await service.importSubtaskFiles(taskId, sub.id, files); this.render(); }, "action").open());
+          const existing = line.createEl("button", { text: "From vault" });
+          existing.addEventListener("click", () => new SubtaskVaultFileModal(this.app, async (file) => { await service.copyVaultFileToSubtask(taskId, sub.id, file); this.render(); }).open());
+          const promote = line.createEl("button", { text: "Promote" });
+          promote.addEventListener("click", () => new PromoteSubtaskModal(this.app, sub.title, async () => { await service.promoteSubtask(taskId, sub.id); this.render(); }).open());
         }
-        const edit = line.createEl("button", { text: "Edit" });
-        edit.addEventListener("click", () => new SubtaskEditModal(this.app, sub, async (title, due, notes, status) => { await service.updateSubtask(taskId, sub.id, { title, due, notes, status }); this.render(); }).open());
-        const attach = line.createEl("button", { text: "Attach file", attr: { "aria-label": `Attach file to action ${sub.title}` } });
-        attach.addEventListener("click", () => new TaskFileModal(this.app, sub.title,
-          async (title, body) => { const file = await service.addSubtaskNote(taskId, sub.id, title, body); this.render(); await this.app.workspace.getLeaf("tab").openFile(file); },
-          async (files) => { await service.importSubtaskFiles(taskId, sub.id, files); this.render(); }, "action").open());
-        const existing = line.createEl("button", { text: "From vault" });
-        existing.addEventListener("click", () => new SubtaskVaultFileModal(this.app, async (file) => { await service.copyVaultFileToSubtask(taskId, sub.id, file); this.render(); }).open());
-        const promote = line.createEl("button", { text: "Promote" });
-        promote.addEventListener("click", () => new PromoteSubtaskModal(this.app, sub.title, async () => { await service.promoteSubtask(taskId, sub.id); this.render(); }).open());
+        // Keep preserved notes in Edit/promotion, not in the compact Action display.
+        let files;
+        try { files = service.subtaskFiles(taskId, sub.id); } catch (error) { item.createEl("p", { text: String(error) }); continue; }
+        const attachments = item.createEl("details");
+        attachments.createEl("summary", { text: `Files · ${files.length}` });
+        mountExpandedContent(attachments, () => { for (const file of files) {
+          const link = attachments.createEl("button", { text: file.name, attr: { title: file.path } });
+          link.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(file));
+        } });
+        if (sub.history) {
+          const history = item.createEl("details"); history.createEl("summary", { text: "Preserved update history" });
+          history.createEl("pre", { text: sub.history, cls: "fjg-subtask-notes" });
+        }
       }
-      // Keep preserved notes in Edit/promotion, not in the compact Action display.
-      let files;
-      try { files = service.subtaskFiles(taskId, sub.id); } catch (error) { item.createEl("p", { text: String(error) }); continue; }
-      const attachments = item.createEl("details");
-      attachments.createEl("summary", { text: `Files · ${files.length}` });
-      for (const file of files) {
-        const link = attachments.createEl("button", { text: file.name, attr: { title: file.path } });
-        link.addEventListener("click", () => void this.app.workspace.getLeaf("tab").openFile(file));
+      if (!task.archived) {
+        const add = section.createEl("button", { text: "+ Add action" });
+        add.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
+          await service.addSubtask(taskId, title, { due, notes, status });
+          this.expandedSubtasks.add(taskId); this.render();
+        }).open());
       }
-      if (sub.history) {
-        const history = item.createEl("details"); history.createEl("summary", { text: "Preserved update history" });
-        history.createEl("pre", { text: sub.history, cls: "fjg-subtask-notes" });
-      }
-    }
-    if (!task.archived) {
-      const add = section.createEl("button", { text: "+ Add action" });
-      add.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
-        await service.addSubtask(taskId, title, { due, notes, status });
-        this.expandedSubtasks.add(taskId); this.render();
-      }).open());
-    }
+    });
   }
 
   private renderRecentUpdates(parent: HTMLElement, task: IndexedTask): void {

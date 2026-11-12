@@ -225,6 +225,33 @@ function createService() {
   };
 }
 
+describe("Workspace refresh scope", () => {
+  it("ignores unrelated files while accepting new objective records and roster changes", () => {
+    const { service } = createService();
+    expect(service.affectsWorkspace("Wiki/Ordinary note.md")).toBe(false);
+    expect(service.affectsWorkspace("03 Areas/Fiscal/Statement.pdf")).toBe(false);
+    expect(service.affectsWorkspace("08 Tasks/Inbox-old/Notes.md")).toBe(false);
+    expect(service.affectsWorkspace("08 Tasks/Inbox/Files/New/task.md")).toBe(true);
+    expect(service.affectsWorkspace("03 Areas/Fiscal/Fiscal Tasks/New/task.md")).toBe(true);
+    expect(service.affectsWorkspace("05 People/Agenda Items/_roster.json")).toBe(true);
+  });
+
+  it("keeps relocated updates, attachments, parent moves, and external references fresh", async () => {
+    const { service, vault } = createService(); await service.initialize();
+    const task = await service.createTask({ title: "Scoped refresh" });
+    await vault.createFolder("02 Programs/Basic-Needs");
+    await service.relocateTask(task.record.task_id, "02 Programs/Basic-Needs");
+    const moved = service.getById(task.record.task_id);
+    expect(service.affectsWorkspace(moved.updatesFile!.path)).toBe(true);
+    expect(service.affectsWorkspace(`${moved.folderPath}/Files/Subtasks/Review/New.pdf`)).toBe(true);
+    expect(service.affectsWorkspace("02 Programs/Basic-Needs")).toBe(true);
+    expect(service.affectsWorkspace(`${moved.folderPath}-other/notes.md`)).toBe(false);
+    moved.record.related_files.push("Wiki/External reference.md");
+    expect(service.affectsWorkspace("Wiki/External reference.md")).toBe(true);
+    expect(service.affectsWorkspace("Wiki/Unrelated.md")).toBe(false);
+  });
+});
+
 describe("Live voice writes to authoritative task Markdown", () => {
   it("creates one editable Start Here note on demand and retains it through relocation", async () => {
     const { service, vault } = createService();

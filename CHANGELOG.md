@@ -1,3 +1,9 @@
+## 0.30.11
+
+- Build collapsed action and file panels only when expanded; coalesce search rendering while typing.
+- Ignore unrelated file edits when scheduling index refreshes while preserving objective, attachment, roster, and folder-move updates.
+- Defer hidden dashboard rendering until the view is visible. Preserve serialized refresh and cancellation behavior.
+
 ## 0.30.10
 
 - Fix Talk to Dashboard action creation and supported objective changes for relocated objectives under `02 Programs` and `03 Areas`, including bundle and split Tasks/Updates layouts.
