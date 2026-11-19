@@ -163,6 +163,8 @@ export class TaskWorkspaceService {
   private agendaExportQueue: Promise<void> = Promise.resolve();
   private readonly index = new Map<string, IndexedTask>();
   private duplicatePaths = new Map<string, string[]>();
+  private moveScanFiles = new Map<string, { file: TFile; mtime: number; size: number }>();
+  private readonly movingIds = new Set<string>();
   private refreshGeneration = 0;
   private refreshRunning: Promise<void> | null = null;
   private readonly creatingIds = new Set<string>();
@@ -221,12 +223,8 @@ export class TaskWorkspaceService {
 
   private async scanWorkspace(generation: number): Promise<void> {
     const duplicates = new Map<string, string[]>();
-    const settings = this.getSettings();
-    const activePrefix = `${normalizePath(settings.activeRoot)}/`;
-    const inboxPrefix = `${normalizePath(settings.inboxRoot)}/`;
-    const archivePrefix = `${normalizePath(settings.archiveRoot)}/`;
-    const projectPrefix = `${normalizePath(settings.projectRoot)}/`;
-    const projectArchivePrefix = `${normalizePath(settings.projectArchiveRoot)}/`;
+    const { archivePrefix, projectPrefix, projectArchivePrefix, inboxPrefix, classify } = relocationObjectivePaths(this.getSettings());
+    const moveScanFiles = new Map<string, { file: TFile; mtime: number; size: number }>();
     const next = new Map<string, IndexedTask>();
     const nextProjects = new Map<string, IndexedProject>();
     // Stable active-first ordering prevents Archive traversal order hiding an active copy.
@@ -238,17 +236,11 @@ export class TaskWorkspaceService {
       if (generation !== this.refreshGeneration) return;
       // Captured emails and preserved source notes inside subtask folders are attachments.
       if (file.path.includes("/Subtasks/")) continue;
-      const legacyWorkspace = file.name === "task.md"
-        && !file.path.includes("/Tasks/")
-        && (file.path.startsWith(activePrefix) || file.path.startsWith(archivePrefix));
-      const projectTask = file.path.startsWith(projectPrefix) && file.path.includes("/Tasks/");
-      const inboxTask = file.path.startsWith(inboxPrefix) && file.path.includes("/Tasks/");
-      const archivedTask = file.path.startsWith(archivePrefix) && file.path.includes("/Tasks/");
-      const inboxBundle = file.name === "task.md" && file.path.startsWith(`${inboxPrefix}Files/`)
-        && !file.path.slice(`${inboxPrefix}Files/`.length).includes("/Tasks/");
-      const relocatedTask = isTaskRelocationPath(file.path);
-      const relocatedBundle = inboxBundle || (relocatedTask && isTaskRelocationBundlePath(file.path));
-      if (legacyWorkspace || projectTask || inboxTask || inboxBundle || archivedTask || relocatedTask) {
+      const classification = classify(file.path, file.name);
+      if (classification) {
+        const { legacyWorkspace, relocatedBundle } = classification;
+        // Snapshot before reading so a concurrent change is checked again before Move.
+        moveScanFiles.set(file.path, { file, mtime: file.stat.mtime, size: file.stat.size });
         try {
           const document = parseTaskMarkdown(await this.app.vault.cachedRead(file));
           // Preserve the saved status for Completed filtering; do not rewrite legacy records on read.
@@ -369,6 +361,7 @@ export class TaskWorkspaceService {
       if (source) (source.record.__fjgConversionLinks ||= []).push({parent_task_id:parent.record.task_id,action_id:action.id});
     }
     this.duplicatePaths = duplicates;
+    this.moveScanFiles = moveScanFiles;
     this.index.clear();
     for (const [id, task] of next) this.index.set(id, task);
     this.projectIndex.clear();
@@ -1562,6 +1555,16 @@ export class TaskWorkspaceService {
     destinationPath: string,
     actor = "Franklin"
   ): Promise<IndexedTask> {
+    if (this.movingIds.has(taskId)) throw new Error("This objective is already being moved.");
+    this.movingIds.add(taskId);
+    try {
+      return await this.relocateTaskOnce(taskId, destinationPath, actor);
+    } finally {
+      this.movingIds.delete(taskId);
+    }
+  }
+
+  private async relocateTaskOnce(taskId: string, destinationPath: string, actor: string): Promise<IndexedTask> {
     const task = this.getById(taskId);
     if (task.archived || task.record.status === "archived") {
       throw new Error("Reopen the task before moving it to Programs or Areas.");
@@ -1576,8 +1579,10 @@ export class TaskWorkspaceService {
       throw new Error("This task is already in that folder.");
     }
 
+    const originalPath = task.taskFile.path;
     const oldTaskContent = await this.app.vault.read(task.taskFile);
     const taskDocument = parseTaskMarkdown(oldTaskContent);
+    await this.checkMoveIdentity(taskId, task.taskFile, originalPath, taskDocument.record.task_id);
     const updatesFile = await this.ensureUpdatesFile(task);
     const oldUpdates = await this.app.vault.read(updatesFile);
     if (task.legacyWorkspace || task.relocatedBundle || usesTaskArtifactLayout(task.taskFile)) {
@@ -1645,6 +1650,7 @@ export class TaskWorkspaceService {
         await this.app.fileManager.renameFile(move.file, move.to);
         completed.push({ file: move.file, from: move.from });
       }
+      return await this.validateMoveResult(taskId, task.taskFile, paths.taskPath);
     } catch (error) {
       const rollbackErrors: string[] = [];
       for (const move of completed.reverse()) {
@@ -1671,30 +1677,91 @@ export class TaskWorkspaceService {
           rollbackErrors.push(rollbackError instanceof Error ? rollbackError.message : String(rollbackError));
         }
       }
-      await this.refresh();
+      try { await this.refresh(); } catch (scanError) {
+        rollbackErrors.push(`Could not refresh index: ${String(scanError)}`);
+      }
       if (rollbackErrors.length) {
         throw new Error(`Task relocation failed and rollback needs attention: ${rollbackErrors.join("; ")}`);
       }
       throw new Error(`Task relocation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    await this.refresh();
-    return this.getById(taskId);
+  }
+
+  /** Recheck new/changed record files after the last scan without reading attachments or rewriting derived notes. */
+  private async checkMoveIdentity(taskId: string, source: TFile, sourcePath: string, readId: string): Promise<void> {
+    const { classify } = relocationObjectivePaths(this.getSettings());
+    const scannedFiles = this.moveScanFiles;
+    const conflicts: string[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const path = file.path;
+      if (file === source || !classify(path, file.name)) continue;
+      const scanned = scannedFiles.get(path);
+      if (scanned?.file === file && scanned.mtime === file.stat.mtime && scanned.size === file.stat.size) continue;
+      const text = await this.app.vault.read(file);
+      try {
+        if (parseTaskMarkdown(text).record.task_id === taskId) conflicts.push(path);
+      } catch {
+        // As in the index, arbitrary or invalid Markdown is not an objective record.
+      }
+    }
+    if (conflicts.length) {
+      throw new Error(`Objective ${taskId} has conflicting copies. Reconcile them before editing: ${[sourcePath, ...conflicts].join("; ")}`);
+    }
+    // Catch conflicts published by a concurrent scan after the initial lookup.
+    this.getById(taskId);
+    if (readId !== taskId || source.path !== sourcePath || this.app.vault.getAbstractFileByPath(sourcePath) !== source) {
+      throw new Error("This objective changed location or identity. Refresh the dashboard before moving it.");
+    }
   }
 
   private async prepareMoveLinks(rewrites: Array<{from:string;to:string}>): Promise<Array<{file:TFile;oldPath:string;resolve:(link:string)=>string|undefined}>> {
-    const links=this.app.metadataCache?.resolvedLinks || {};
-    const affected=(path:string)=>movedPath(path,rewrites)!==path;
-    const candidates=this.app.vault.getMarkdownFiles().filter(file=>!this.isBriefingPath(file.path) && (affected(file.path)||Object.keys(links[file.path]||{}).some(affected)));
-    return Promise.all(candidates.map(async file=>{
-      const oldPath=file.path, text=await this.app.vault.read(file), resolved=new Map<string,string>();
-      for(const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)){
-        const link=match[1].split("|")[0].split("#")[0];
-        const dest=this.app.metadataCache?.getFirstLinkpathDest?.(link,oldPath);
-        if(dest)resolved.set(link,dest.path);
-      }
-      return {file,oldPath,resolve:(link:string)=>resolved.get(link)};
-    }));
+    const links = this.app.metadataCache?.resolvedLinks || {};
+    const affected = (path: string) => movedPath(path, rewrites) !== path;
+    const settings = this.getSettings();
+    const roots = [settings.activeRoot, settings.inboxRoot, settings.archiveRoot].map(normalizePath);
+    const files = this.app.vault.getMarkdownFiles().filter(file => !this.isBriefingPath(file.path)
+      && (affected(file.path) || roots.some(root => root && file.path.startsWith(root + "/"))));
+    // Explicit vault paths do not need the resolved-links cache. Look at cached
+    // Markdown contents in bounded batches; never read binary attachments.
+    const sources: Array<{file:TFile;oldPath:string;resolve:(link:string)=>string|undefined}> = [];
+    const batchSize = 16;
+    for (let i = 0; i < files.length; i += batchSize) {
+      const candidates = await Promise.all(files.slice(i, i + batchSize).map(async file => {
+        const oldPath = file.path;
+        const known = affected(oldPath) || Object.keys(links[oldPath] || {}).some(affected);
+        const text = await this.app.vault.cachedRead(file);
+        const explicit = (link: string): string | undefined => {
+          if (!affected(link) || link.split("/").some(part => !part || part === "." || part === "..")) return undefined;
+          const exact = [link, link + ".md"].filter(path => this.app.vault.getAbstractFileByPath(path) instanceof TFile);
+          return exact.length === 1 ? exact[0] : undefined;
+        };
+        const resolved = new Map<string, string>();
+        for (const match of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+          let link: string;
+          try { link = decodeURIComponent(match[1].split("|")[0].split("#")[0]); }
+          catch { continue; }
+          const exact = explicit(link);
+          const indexed = known && !affected(link) ? this.app.metadataCache?.getFirstLinkpathDest?.(link, oldPath)?.path : undefined;
+          const target = exact || indexed;
+          if (target) resolved.set(link, target);
+        }
+        if (!known && ![...resolved.values()].some(affected)) return undefined;
+        return {file, oldPath, resolve: (link: string) => resolved.get(link)};
+      }));
+      for (const candidate of candidates) if (candidate) sources.push(candidate);
+    }
+    return sources;
+  }
+
+  /** A scan or identity conflict is part of the transaction, not a post-move outcome. */
+  private async validateMoveResult(taskId: string, expectedFile: TFile, expectedPath: string): Promise<IndexedTask> {
+    await this.refresh();
+    const indexed = this.getById(taskId);
+    if (indexed.taskFile !== expectedFile || indexed.taskFile.path !== expectedPath) {
+      throw new Error(`Moved objective did not reopen at ${expectedPath}.`);
+    }
+    return indexed;
   }
 
   private async relocateManagedTaskWorkspace(input: {
@@ -1825,6 +1892,8 @@ export class TaskWorkspaceService {
     const completed: TaskProjectMove[] = [];
     const createdFolders: TFolder[] = [];
 
+    const expectedTaskPath = rewritePath(task.taskFile.path);
+    let result: IndexedTask;
     const metadataWrites:Array<{file:TFile;before:string;after:string}>=[];
     const checkedWrite=async(file:TFile,expected:string,after:string)=>{
       await this.app.vault.process(file,current=>{
@@ -1858,6 +1927,7 @@ export class TaskWorkspaceService {
         const folder = this.app.vault.getAbstractFileByPath(targetFiles);
         if (folder instanceof TFolder) createdFolders.push(folder);
       }
+      result = await this.validateMoveResult(task.record.task_id, task.taskFile, expectedTaskPath);
     } catch (error) {
       const rollbackErrors: string[] = [];
       for(const link of appliedLinks.reverse()){
@@ -1884,7 +1954,9 @@ export class TaskWorkspaceService {
           return change.before;
         });}catch(rollbackError){rollbackErrors.push(String(rollbackError));}
       }
-      await this.refresh();
+      try { await this.refresh(); } catch (scanError) {
+        rollbackErrors.push(`Could not refresh index: ${String(scanError)}`);
+      }
       if (rollbackErrors.length) {
         throw new Error(`Task relocation failed and rollback needs attention: ${rollbackErrors.join("; ")}`);
       }
@@ -1901,8 +1973,7 @@ export class TaskWorkspaceService {
         }
       }
     }
-    await this.refresh();
-    return this.getById(task.record.task_id);
+    return result;
   }
 
   async changeDueDate(
@@ -2620,6 +2691,29 @@ function normalizeTaskTitle(value: unknown): string {
 
 function projectIndexKey(name: string, archived: boolean): string {
   return `${archived ? "archived" : "active"}:${normalizeSearch(name)}`;
+}
+
+function relocationObjectivePaths(settings: TaskManagerSettings) {
+  const activePrefix = `${normalizePath(settings.activeRoot)}/`;
+  const inboxPrefix = `${normalizePath(settings.inboxRoot)}/`;
+  const archivePrefix = `${normalizePath(settings.archiveRoot)}/`;
+  const projectPrefix = `${normalizePath(settings.projectRoot)}/`;
+  const projectArchivePrefix = `${normalizePath(settings.projectArchiveRoot)}/`;
+  return {
+    inboxPrefix, archivePrefix, projectPrefix, projectArchivePrefix,
+    classify(path: string, name: string): { legacyWorkspace: boolean; relocatedBundle: boolean } | undefined {
+      if (path.includes("/Subtasks/")) return;
+      const inTasks = path.includes("/Tasks/");
+      const legacyWorkspace = name === "task.md" && !inTasks && (path.startsWith(activePrefix) || path.startsWith(archivePrefix));
+      const splitTask = inTasks && [projectPrefix, inboxPrefix, archivePrefix].some(prefix => path.startsWith(prefix));
+      const inboxBundle = name === "task.md" && path.startsWith(`${inboxPrefix}Files/`)
+        && !path.slice(`${inboxPrefix}Files/`.length).includes("/Tasks/");
+      const relocatedTask = isTaskRelocationPath(path);
+      if (legacyWorkspace || splitTask || inboxBundle || relocatedTask) {
+        return { legacyWorkspace, relocatedBundle: inboxBundle || (relocatedTask && isTaskRelocationBundlePath(path)) };
+      }
+    }
+  };
 }
 
 function workspaceRootFromTaskPath(path: string): string {

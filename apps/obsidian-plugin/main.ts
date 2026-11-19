@@ -675,7 +675,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async relocateTask(taskId: string, destination: string): Promise<void> {
     const task = await this.workspaceService.relocateTask(taskId, destination);
-    new Notice(`Objective moved to ${this.workspaceService.relocationLocationForTask(task.record.task_id)}: ${task.record.title}`);
+    new Notice(`Objective moved to ${task.folderPath}: ${task.record.title}`);
     this.refreshDashboard();
   }
 

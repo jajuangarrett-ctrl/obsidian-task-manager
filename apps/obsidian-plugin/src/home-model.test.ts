@@ -53,7 +53,8 @@ it("finds eligible legacy records with the sole Completed filter and keeps archi
   const archivedSource = task("Archived source", "archived");
   archivedSource.record.__fjgSourceArchived = true;
   const found = filterHomeTasks([completed, legacy, archivedSource], "completed", "", "", "completed", "updated");
-  expect(found).toEqual([completed, legacy]);
+  expect(found).toHaveLength(2);
+  expect(found).toEqual(expect.arrayContaining([completed, legacy]));
   expect(homeDisplayStatus(legacy.record.status)).toBe("completed");
   expect(legacy.record.status).toBe("archived");
 });

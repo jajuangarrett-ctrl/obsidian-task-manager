@@ -9,7 +9,7 @@ describe('current-text move references',()=>{
  });
  it('updates full wikilinks with aliases/headings and leaves ordinary text untouched',()=>{
  const before='Keep 08 Tasks/Inbox/Files/Example as historical text. [[08 Tasks/Inbox/Files/Example/task#Next|Label]]';
- expect(rewriteMovedLinks(before,'Other.md','Other.md',moves,()=>undefined)).toBe('Keep 08 Tasks/Inbox/Files/Example as historical text. [[02 Programs/CalWORKs/CalWORKs Tasks/Example/task#Next|Label]]');
+ expect(rewriteMovedLinks(before,'Other.md','Other.md',moves,()=>moves[0].from+'/task.md')).toBe('Keep 08 Tasks/Inbox/Files/Example as historical text. [[02 Programs/CalWORKs/CalWORKs Tasks/Example/task#Next|Label]]');
  });
  it('keeps relative internal references and adjusts external markdown and HTML targets',()=>{
  const a=moves[0].from+'/Note.md',b=moves[0].to+'/Note.md';

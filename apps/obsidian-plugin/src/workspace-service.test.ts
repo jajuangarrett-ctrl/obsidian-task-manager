@@ -1369,6 +1369,9 @@ describe("TaskWorkspaceService project-centered moves", () => {
     )).not.toBeNull();
     expect(await vault.read(created.taskFile as never)).toBe(taskBefore);
     expect(await vault.read(created.updatesFile as never)).toBe(updatesBefore);
+    const moved = await service.relocateTask(created.record.task_id, "02 Programs/Foundation");
+    expect(moved.folderPath).toBe("02 Programs/Foundation/Foundation Tasks/Keep relocation atomic");
+    expect(service.list({includeArchived:true}).filter(task=>task.record.task_id===created.record.task_id)).toHaveLength(1);
   });
 
   it("previews and migrates a legacy flat task without moving untracked files", async () => {
@@ -2128,4 +2131,168 @@ it("checked context reads current records and relocated paths without writing va
  expect(write).not.toHaveBeenCalled();expect(create).not.toHaveBeenCalled();expect(remove).not.toHaveBeenCalled();
  await vault.delete(moved.taskFile as never);await service.refresh();
  const missing=await service.checkedObjectiveContext(selection);expect(missing).toMatchObject({count:1,available_count:0});
+});
+
+describe("Move audit fixtures", () => {
+  const destination = "02 Programs/Move audit";
+  it("keeps source and destination unchanged when a same-ID conflict is indexed", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const task = await service.createTask({taskId:"tsk_conflict_audit",title:"Conflict audit"});
+    const originalPath=task.taskFile.path;
+    const duplicatePath="03 Areas/Audit/Audit Tasks/Conflict audit/task.md";
+    const original=await vault.read(task.taskFile as never);
+    await vault.create(duplicatePath,original);
+    await service.refresh();
+    await expect(service.relocateTask(task.record.task_id,destination)).rejects.toThrow("conflicting copies");
+    expect(await vault.read(vault.getAbstractFileByPath(originalPath) as never)).toBe(original);
+    expect(await vault.read(vault.getAbstractFileByPath(duplicatePath) as never)).toBe(original);
+    expect(vault.getAbstractFileByPath(`${destination}/Move audit Tasks/Conflict audit/task.md`)).toBeNull();
+  });
+
+  it("does not move when a sync conflict appeared since the last committed scan", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const task = await service.createTask({taskId:"tsk_late_conflict",title:"Late conflict"});
+    const originalPath=task.taskFile.path;
+    const duplicatePath="03 Areas/Audit/Audit Tasks/Late conflict/task.md";
+    const original=await vault.read(task.taskFile as never);
+    await vault.create(duplicatePath,original); // Deliberately skip refresh, as if a sync event is queued.
+    await expect(service.relocateTask(task.record.task_id,destination)).rejects.toThrow("conflicting copies");
+    expect(vault.getAbstractFileByPath(originalPath)).not.toBeNull();
+    expect(await vault.read(vault.getAbstractFileByPath(duplicatePath) as never)).toBe(original);
+    expect(vault.getAbstractFileByPath(`${destination}/Move audit Tasks/Late conflict/task.md`)).toBeNull();
+  });
+
+  it("picks a unique folder for a different ID and rejects a repeat to the selected destination", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const existing = `${destination}/Move audit Tasks/Same title`;
+    await vault.createFolder(`${destination}/Move audit Tasks`);
+    await vault.createFolder(existing);
+    const unrelated = createTaskRecord({taskId:"tsk_existing_title",title:"Same title"});
+    await vault.create(`${existing}/task.md`, renderTaskMarkdown(unrelated, "Keep existing objective."));
+    const task = await service.createTask({taskId:"tsk_same_title_move",title:"Same title"});
+    const moved = await service.relocateTask(task.record.task_id,destination);
+    expect(moved.folderPath).not.toBe(existing);
+    expect(moved.record.task_id).toBe(task.record.task_id);
+    expect(service.getById(unrelated.task_id).taskFile.path).toBe(`${existing}/task.md`);
+    await expect(service.relocateTask(task.record.task_id,destination)).rejects.toThrow("already in that folder");
+    expect(service.list({includeArchived:true}).filter(item => item.record.task_id === task.record.task_id)).toHaveLength(1);
+  });
+
+  it("moves a legacy workspace ID, action, attachments, log and neighboring owned folder", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const source="08 Tasks/Workspaces/Legacy audit";
+    await vault.createFolder(source);
+    await vault.createFolder(`${source}/attachments`);
+    await vault.createFolder(`${source}/Drafts`);
+    const id="tsk_legacy_audit";
+    await vault.create(`${source}/attachments/Proof.pdf`,"Fixture attachment");
+    await vault.create(`${source}/Drafts/Owned draft.md`,"Owned draft");
+    const seed = updateTaskFields(createTaskRecord({taskId:id,title:"Legacy audit"}), {related_files:[`${source}/attachments/Proof.pdf`]});
+    await vault.create(`${source}/task.md`,renderTaskMarkdown(seed,"User body"));
+    await vault.create(`${source}/updates.md`,renderUpdatesMarkdown());
+    await service.refresh();
+    await service.addSubtask(id,"Retained action");
+    await service.appendUpdate(id,{actor:"Test",text:"Retained historical entry"});
+    const before = service.getById(id);
+    expect(before.legacyWorkspace).toBe(true);
+    const actionId = before.record.subtasks[0].id;
+    const moved=await service.relocateTask(id,destination);
+    expect(moved.record.task_id).toBe(id);
+    expect(moved.record.subtasks[0].id).toBe(actionId);
+    expect(moved.notes).toContain("User body");
+    expect(moved.record.related_files).toEqual([`${moved.folderPath}/Files/Proof.pdf`]);
+    expect(vault.getAbstractFileByPath(`${moved.folderPath}/Drafts/Owned draft.md`)).not.toBeNull();
+    expect(vault.getAbstractFileByPath(source)).toBeNull();
+    expect(await vault.read(moved.updatesFile as never)).toContain("Retained historical entry");
+  });
+
+  it("blocks another Move for the same ID until the first call finishes", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const secondDestination = "03 Areas/Alternate";
+    await vault.createFolder(secondDestination);
+    const task = await service.createTask({taskId:"tsk_parallel_audit",title:"Parallel move"});
+    const rename=vault.rename.bind(vault);
+    let begin: () => void = () => {}, unblock: () => void = () => {};
+    const reachedRename = new Promise<void>(resolve => { begin=resolve; });
+    const proceed = new Promise<void>(resolve => { unblock=resolve; });
+    let held=false;
+    vi.spyOn(vault,"rename").mockImplementation(async (entry, path) => {
+      if (!held) { held=true; begin(); await proceed; }
+      return rename(entry,path);
+    });
+    const pending=service.relocateTask(task.record.task_id,destination);
+    await reachedRename;
+    try {
+      await expect(service.relocateTask(task.record.task_id,secondDestination)).rejects.toThrow("already being moved");
+    } finally {
+      unblock();
+    }
+    const moved=await pending;
+    expect(moved.taskFile.path.startsWith(destination + "/")).toBe(true);
+    expect(vault.getAbstractFileByPath(secondDestination + "/Alternate Tasks")).toBeNull();
+    await expect(service.relocateTask(task.record.task_id,secondDestination)).resolves.toMatchObject({
+      folderPath: secondDestination + "/Alternate Tasks/Parallel move"
+    });
+  });
+});
+
+describe("Move final validation and cache-independent links", () => {
+  const destination = "02 Programs/Move final audit";
+  it("rolls back a completed rename when a late sync copy makes it ambiguous", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const task = await service.createTask({taskId:"tsk_final_move_sync",title:"Final move sync"});
+    const originalPath = task.taskFile.path;
+    const original = await vault.read(task.taskFile as never);
+    const logPath = task.updatesFile!.path;
+    const log = await vault.read(task.updatesFile as never);
+    const duplicatePath = "03 Areas/Audit/Audit Tasks/Final move sync/task.md";
+    const target = destination + "/Move final audit Tasks/Final move sync";
+    const rename = vault.rename.bind(vault);
+    let injected = false;
+    vi.spyOn(vault,"rename").mockImplementation(async (entry, path) => {
+      await rename(entry,path);
+      if (!injected && path === target) {
+        injected = true;
+        await vault.create(duplicatePath,original);
+      }
+    });
+    await expect(service.relocateTask(task.record.task_id,destination)).rejects.toThrow("conflicting copies");
+    expect(injected).toBe(true);
+    expect(await vault.read(vault.getAbstractFileByPath(originalPath) as never)).toBe(original);
+    expect(await vault.read(vault.getAbstractFileByPath(logPath) as never)).toBe(log);
+    expect(await vault.read(vault.getAbstractFileByPath(duplicatePath) as never)).toBe(original);
+    expect(vault.getAbstractFileByPath(target)).toBeNull();
+  });
+
+  it("repairs only explicit in-scope wikilinks when the backlinks cache is missing", async () => {
+    const {service, vault} = createService();
+    await service.initialize();
+    await vault.createFolder(destination);
+    const task = await service.createTask({taskId:"tsk_uncached_move_link",title:"Uncached link source"});
+    const oldPath = task.taskFile.path.replace(/\.md$/,"");
+    const link = `[[${oldPath}#Notes|Open objective]]`;
+    const note = await vault.create("08 Tasks/Inbox/Files/In-scope reference.md",
+      [link, "", `\`${link}\``, "", "\`\`\`markdown", link, "\`\`\`", "", "[[task]]", `[[${oldPath}/Missing]]`].join("\n"));
+    const out = await vault.create("Other notes/Out-of-scope.md",link);
+    const moved = await service.relocateTask(task.record.task_id,destination);
+    const lines = (await vault.read(note)).split("\n");
+    expect(lines[0]).toBe(`[[${moved.taskFile.path.replace(/\.md$/,"")}#Notes|Open objective]]`);
+    expect(lines[2]).toBe(`\`${link}\``);
+    expect(lines[5]).toBe(link);
+    expect(lines[8]).toBe("[[task]]");
+    expect(lines[9]).toBe(`[[${oldPath}/Missing]]`);
+    expect(await vault.read(out)).toBe(link);
+  });
 });
