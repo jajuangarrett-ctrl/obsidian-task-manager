@@ -8,7 +8,7 @@ import { ObjectiveWorkspaceContent } from "./objective-workspace-modal";
 import { renderOverviewGroups } from "./overview-view";
 import { filterAreaObjectives, NO_AREA, objectiveAreas } from "./area-model";
 import { matchesPerson, personKey } from "./people-model";
-import { ItemView, Notice, setIcon, TFolder, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Platform, setIcon, TFolder, WorkspaceLeaf } from "obsidian";
 import { statusLabel } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
@@ -46,6 +46,7 @@ export class TaskDashboardView extends ItemView {
   private overviewQuery = "";
   private readonly collapsedOverviewStatuses = new Set<TaskStatus>();
   private overviewSelected = "";
+  private overviewListTop = 0;
   private overviewWorkspace?: ObjectiveWorkspaceContent;
   private overviewWorkspaceId = "";
   private overviewPanelTitle?: HTMLElement;
@@ -53,8 +54,21 @@ export class TaskDashboardView extends ItemView {
   async onClose(): Promise<void> { this.cancelSearchRender(); this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
 
   private toggleOverviewObjective(id: string): void {
-    this.overviewSelected = this.overviewSelected === id ? "" : id;
+    const closing = this.overviewSelected === id;
+    const root = this.containerEl.children[1] as HTMLElement;
+    if (Platform.isMobile && !this.overviewSelected) this.overviewListTop = root.scrollTop;
+    this.overviewSelected = closing ? "" : id;
     this.render();
+    if (!Platform.isMobile) return;
+    root.scrollTop = closing ? this.overviewListTop : 0;
+    if (closing) {
+      const row = Array.from(root.querySelectorAll<HTMLElement>(".fjg-overview-row"))
+        .find(candidate => candidate.dataset.taskId === id);
+      (row?.querySelector<HTMLElement>(".fjg-overview-title") ?? root.querySelector<HTMLElement>(".fjg-overview-search"))
+        ?.focus({ preventScroll: true });
+    } else {
+      root.querySelector<HTMLElement>(".fjg-overview-back")?.focus({ preventScroll: true });
+    }
   }
 
   private areaPath = "";
@@ -150,10 +164,18 @@ export class TaskDashboardView extends ItemView {
     const caret = focused?.selectionStart;
     root.empty();
     root.addClass("fjg-task-dashboard");
-    this.renderHeader(root);
-
-    const tasks = this.taskPlugin.workspaceService.list();
     const allTasks = this.taskPlugin.workspaceService.list({ includeArchived: true });
+    const mobileDetail = Platform.isMobile && this.mode === "overview" && this.overviewSelected
+      ? allTasks.find(task => task.record.task_id === this.overviewSelected && !task.archived && task.record.status !== "archived")
+      : undefined;
+    if (mobileDetail) {
+      this.renderOverviewDetails(root, mobileDetail, true);
+      root.scrollTop = top;
+      return;
+    }
+
+    this.renderHeader(root);
+    const tasks = this.taskPlugin.workspaceService.list();
     const projects = summarizeProjects(
       tasks.map((task) => task.record),
       this.taskPlugin.workspaceService.projectNames()
@@ -514,6 +536,8 @@ export class TaskDashboardView extends ItemView {
   }
 
   private renderOverview(root: HTMLElement, tasks: IndexedTask[]): void {
+    const selected = tasks.find(task => task.record.task_id === this.overviewSelected);
+    if (!selected) this.overviewSelected = "";
     const heading = root.createDiv({ cls: "fjg-section-heading" });
     heading.createEl("h2", { text: "Overview" });
     const search = root.createEl("input", { cls: "fjg-overview-search", attr: {
@@ -524,8 +548,6 @@ export class TaskDashboardView extends ItemView {
     const query = this.overviewQuery.trim().toLocaleLowerCase();
     const matches = tasks.filter(task => task.record.title.toLocaleLowerCase().includes(query));
     root.createEl("p", { cls: "fjg-overview-summary", text: `${matches.length} of ${tasks.length} objectives · Drag to change status, or use each objective’s menu.`, attr: { "aria-live": "polite" } });
-    const selected = tasks.find(task => task.record.task_id === this.overviewSelected);
-    if (!selected) this.overviewSelected = "";
     const layout = root.createDiv({ cls: `fjg-overview-layout${selected ? " has-details" : ""}` });
     const board = layout.createDiv({ cls: "fjg-overview-board" });
     renderOverviewGroups(board, matches, {
@@ -534,24 +556,38 @@ export class TaskDashboardView extends ItemView {
       people: id => this.taskPlugin.openPeoplePicker(id),
       move: (id, status) => void this.moveKanbanTask(id, status)
     }, this.overviewSelected, query ? undefined : this.collapsedOverviewStatuses);
-    if (selected) {
-      const panel = layout.createEl("aside", { cls: "fjg-overview-details", attr: { "aria-label": "Objective details", id: "fjg-overview-details" } });
-      const top = panel.createDiv({ cls: "fjg-overview-details-heading" });
-      this.overviewPanelTitle = top.createEl("h3", { text: selected.record.title });
-      const close = top.createEl("button", { text: "Close", attr: { type: "button", "aria-label": "Close objective details" } });
-      close.addEventListener("click", () => this.toggleOverviewObjective(selected.record.task_id));
-      if (this.overviewWorkspaceId !== selected.record.task_id) {
-        this.overviewWorkspace?.dispose();
-        const content = createDiv({ cls: "fjg-overview-details-content" });
-        this.overviewWorkspace = new ObjectiveWorkspaceContent(this.app, this.taskPlugin, selected.record.task_id, content,
-          title => { if (this.overviewPanelTitle) this.overviewPanelTitle.textContent = title; });
-        this.overviewWorkspaceId = selected.record.task_id;
-      }
-      panel.appendChild(this.overviewWorkspace!.contentEl);
-      this.overviewWorkspace!.refresh();
-    } else {
+    if (selected) this.renderOverviewDetails(layout, selected, false);
+    else {
       this.overviewWorkspace?.dispose(); this.overviewWorkspace = undefined; this.overviewWorkspaceId = "";
     }
+  }
+
+  private renderOverviewDetails(parent: HTMLElement, selected: IndexedTask, mobile: boolean): void {
+    const panel = parent.createEl("aside", {
+      cls: mobile ? "fjg-overview-mobile-details" : "fjg-overview-details",
+      attr: { "aria-label": "Objective details", id: "fjg-overview-details" }
+    });
+    if (mobile) {
+      const back = panel.createEl("button", {
+        text: "Back to Overview", cls: "fjg-overview-back", attr: { type: "button" }
+      });
+      back.addEventListener("click", () => this.toggleOverviewObjective(selected.record.task_id));
+    }
+    const top = panel.createDiv({ cls: "fjg-overview-details-heading" });
+    this.overviewPanelTitle = mobile ? top.createEl("h2", { text: selected.record.title }) : top.createEl("h3", { text: selected.record.title });
+    if (!mobile) {
+      const close = top.createEl("button", { text: "Close", attr: { type: "button", "aria-label": "Close objective details" } });
+      close.addEventListener("click", () => this.toggleOverviewObjective(selected.record.task_id));
+    }
+    if (this.overviewWorkspaceId !== selected.record.task_id) {
+      this.overviewWorkspace?.dispose();
+      const content = createDiv({ cls: "fjg-overview-details-content" });
+      this.overviewWorkspace = new ObjectiveWorkspaceContent(this.app, this.taskPlugin, selected.record.task_id, content,
+        title => { if (this.overviewPanelTitle) this.overviewPanelTitle.textContent = title; }, false, false, mobile);
+      this.overviewWorkspaceId = selected.record.task_id;
+    }
+    panel.appendChild(this.overviewWorkspace!.contentEl);
+    this.overviewWorkspace!.refresh();
   }
 
   private renderKanban(root: HTMLElement, tasks: IndexedTask[]): void {

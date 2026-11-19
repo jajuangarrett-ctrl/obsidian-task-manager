@@ -1,3 +1,8 @@
+## 0.30.14
+
+- Open Overview objective details across the full Obsidian pane on mobile, folded or unfolded. Back to Overview restores your search, collapsed sections and list position.
+- Show in Files, Copy path and Update are at the top, with Actions and Add action immediately available. Keep the desktop layout and existing workspace views.
+
 ## 0.30.13
 
 - Show one Completed choice in objective status menus and filters. Keep legacy archive history and existing Overview toggles.

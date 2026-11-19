@@ -2037,3 +2037,21 @@
 .fjg-live-search-results li p { margin: 4px 0; }
 .fjg-live-text-search button:focus-visible, .fjg-live-text-search input:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 @media (max-width: 600px) { .fjg-live-text-search button, .fjg-live-text-search input { min-height: 44px; } .fjg-live-search-form > button { width: 100%; } }
+
+/* In mobile Overview, the detail screen takes the whole pane on both Duo widths. */
+.fjg-overview-mobile-details { min-width: 0; width: 100%; max-width: 100%; }
+.fjg-overview-mobile-details .fjg-overview-details-heading h2 { min-width: 0; margin: 6px 0 0; font-size: var(--h3-size, 1.25rem); overflow-wrap: anywhere; }
+.fjg-overview-mobile-details .fjg-workspace-status { margin: 6px 0 12px; color: var(--text-muted); }
+.fjg-overview-mobile-details button, .fjg-overview-mobile-details summary { min-height: 44px; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.fjg-overview-mobile-details .fjg-overview-back { margin-bottom: 6px; }
+.fjg-overview-mobile-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 82px), 1fr)); gap: 6px; }
+.fjg-overview-mobile-controls button { min-width: 0; padding-inline: 6px; }
+.fjg-overview-mobile-actions { margin-block: 14px; }
+.fjg-overview-mobile-actions-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.fjg-overview-mobile-actions-heading h3 { margin: 0; }
+.fjg-overview-mobile-actions .fjg-workspace-action { min-height: 44px; margin: 4px 0; padding: 6px 0; gap: 10px; border-bottom: 1px solid var(--background-modifier-border); }
+.fjg-overview-mobile-actions .fjg-workspace-action span { min-width: 0; overflow-wrap: anywhere; }
+.fjg-overview-mobile-files, .fjg-overview-mobile-secondary { border-top: 1px solid var(--background-modifier-border); }
+.fjg-overview-mobile-details summary { cursor: pointer; padding: 10px 0; }
+.fjg-overview-mobile-details .fjg-workspace-controls { flex-wrap: wrap; overflow: visible; }
+.fjg-overview-mobile-details .fjg-workspace-file-list { margin-block: 4px 10px; }
