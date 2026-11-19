@@ -1,3 +1,8 @@
+## 0.30.12
+
+- Tap or click a status heading in Overview to expand or collapse its objectives. Counts stay visible, and collapsed headings remain drop targets.
+- Overview keeps collapse choices while browsing the dashboard. Searching shows matching objectives regardless of those choices; clearing the search restores them.
+
 ## 0.30.11
 
 - Build collapsed action and file panels only when expanded; coalesce search rendering while typing.

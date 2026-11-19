@@ -43,6 +43,7 @@ export class TaskDashboardView extends ItemView {
   private homeScope: HomeScope = "open";
   private homeQuery = "";
   private overviewQuery = "";
+  private readonly collapsedOverviewStatuses = new Set<TaskStatus>();
   private overviewSelected = "";
   private overviewWorkspace?: ObjectiveWorkspaceContent;
   private overviewWorkspaceId = "";
@@ -531,7 +532,7 @@ export class TaskDashboardView extends ItemView {
       copyPath: id => void this.taskPlugin.copyTaskFolderPath(id),
       people: id => this.taskPlugin.openPeoplePicker(id),
       move: (id, status) => void this.moveKanbanTask(id, status)
-    }, this.overviewSelected);
+    }, this.overviewSelected, query ? undefined : this.collapsedOverviewStatuses);
     if (selected) {
       const panel = layout.createEl("aside", { cls: "fjg-overview-details", attr: { "aria-label": "Objective details", id: "fjg-overview-details" } });
       const top = panel.createDiv({ cls: "fjg-overview-details-heading" });
