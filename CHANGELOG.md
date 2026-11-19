@@ -1,3 +1,7 @@
+## 0.30.13
+
+- Show one Completed choice in objective status menus and filters. Keep legacy archive history and existing Overview toggles.
+
 ## 0.30.12
 
 - Tap or click a status heading in Overview to expand or collapse its objectives. Counts stay visible, and collapsed headings remain drop targets.

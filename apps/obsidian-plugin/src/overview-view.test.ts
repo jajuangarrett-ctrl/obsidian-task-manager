@@ -36,6 +36,10 @@ it("routes title, People, status and drag actions by stable ID without changing 
   menus.at(-1).items.find((item: any) => item.title === "Assign People…").run(); expect(actions.people).toHaveBeenCalledWith("stable-id");
   menus.at(-1).items.find((item: any) => item.title === "Copy vault folder path").run(); expect(actions.copyPath).toHaveBeenCalledWith("stable-id");
   menus.at(-1).items.find((item: any) => item.title === "Waiting").run(); expect(actions.move).toHaveBeenCalledWith("stable-id", "waiting");
+  const completed = menus.at(-1).items.filter((item: any) => item.title === "Completed");
+  expect(completed).toHaveLength(1);
+  completed[0].run();
+  expect(actions.move).toHaveBeenLastCalledWith("stable-id", "completed");
   const payload = new Map<string,string>();
   root.find("fjg-overview-row")[0].events.dragstart({dataTransfer: {setData: (key: string, value: string) => payload.set(key,value)}});
   const target = root.find("fjg-overview-group").find(el => el.options.attr["data-overview-status"] === "ongoing")!;

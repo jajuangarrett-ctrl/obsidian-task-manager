@@ -5,10 +5,13 @@ import type { IndexedTask } from "./workspace-service";
 
 export type HomeScope = "open" | "completed" | "archived" | "all";
 export type HomeSort = "updated" | "due";
+export function homeDisplayStatus(status: TaskStatus): TaskStatus {
+  return status === "archived" ? "completed" : status;
+}
 export function matchesHomeScope(record: TaskRecord, scope: HomeScope): boolean {
   if (isConvertedOriginal(record)) return scope === "all";
   if (scope === "completed" && record.__fjgSourceArchived) return false;
-  const status = record.status === "archived" ? "completed" : record.status;
+  const status = homeDisplayStatus(record.status);
   const effectiveScope = scope === "archived" ? "completed" : scope;
   return effectiveScope === "all" || (effectiveScope === "open" ? status !== "completed" : status === effectiveScope);
 }
@@ -16,7 +19,7 @@ export function filterHomeTasks(tasks: readonly IndexedTask[], scope: HomeScope,
   const search = query.trim().toLocaleLowerCase();
   return tasks.filter(task => matchesPerson(task.record,person) && matchesHomeScope(task.record, scope)
     && (project === "" || (project === "__none__" ? !task.record.project : task.record.project === project))
-    && (status === "" || task.record.status === status)
+    && (status === "" || homeDisplayStatus(task.record.status) === status)
     && (!search || [task.record.title, task.record.task_id, task.record.project, task.taskFile.path, ...task.record.subtasks.map(sub => sub.title)].join(" ").toLocaleLowerCase().includes(search)))
     .sort((a,b) => (sort === "due" ? (a.record.due || "9999").localeCompare(b.record.due || "9999") : 0)
       || (Date.parse(b.record.updated_at) || b.taskFile.stat.mtime) - (Date.parse(a.record.updated_at) || a.taskFile.stat.mtime)

@@ -55,8 +55,11 @@ export const TASK_VIEWS: readonly TaskViewDefinition[] = [
   { key: "converted", label: "Converted", icon: "git-merge" }
 ] as const;
 
+// Keep the legacy archived status readable, but do not offer it in UI pickers.
+export const OBJECTIVE_STATUS_CHOICES = TASK_STATUSES.filter((status) => status !== "archived");
+
 export function groupTasksForKanban<TTask extends KanbanTask>(tasks: readonly TTask[]): KanbanColumn<TTask>[] {
-  return TASK_STATUSES.filter((status) => status !== "archived").map((status) => ({
+  return OBJECTIVE_STATUS_CHOICES.map((status) => ({
     status,
     tasks: tasks.filter((task) => !isConvertedOriginal(task.record as TaskRecord) && task.record.status === status)
   }));

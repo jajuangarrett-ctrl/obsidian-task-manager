@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTaskRecord } from "@fjg/task-core";
 import type { IndexedTask } from "./workspace-service";
-import { eligibleForMove, filterHomeTasks, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
+import { eligibleForMove, filterHomeTasks, homeDisplayStatus, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
 function task(title: string, status = "do-first", path = "08 Tasks/Inbox/Tasks/Test/task.md"): IndexedTask {
   return { record: { ...createTaskRecord({ title }), status }, archived: status === "archived", relocatedBundle: false, taskFile: { path, stat: { mtime: 1 } } } as IndexedTask;
 }
@@ -44,4 +44,16 @@ it("redirects saved Archive scope and legacy records to Completed without hiding
  expect(matchesHomeScope(completed,"archived")).toBe(true);
  expect(matchesHomeScope(archived,"completed")).toBe(true);
  expect(matchesHomeScope(archived,"open")).toBe(false);
+});
+
+
+it("finds eligible legacy records with the sole Completed filter and keeps archived history out of Completed scope", () => {
+  const completed = task("Complete", "completed");
+  const legacy = task("Legacy", "archived");
+  const archivedSource = task("Archived source", "archived");
+  archivedSource.record.__fjgSourceArchived = true;
+  const found = filterHomeTasks([completed, legacy, archivedSource], "completed", "", "", "completed", "updated");
+  expect(found).toEqual([completed, legacy]);
+  expect(homeDisplayStatus(legacy.record.status)).toBe("completed");
+  expect(legacy.record.status).toBe("archived");
 });

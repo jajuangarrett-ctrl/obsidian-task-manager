@@ -1,6 +1,6 @@
 import { Menu, setIcon } from "obsidian";
-import { statusLabel, TASK_STATUSES, type TaskStatus } from "@fjg/task-core";
-import { groupTasksForKanban } from "./dashboard-model";
+import { statusLabel, type TaskStatus } from "@fjg/task-core";
+import { groupTasksForKanban, OBJECTIVE_STATUS_CHOICES } from "./dashboard-model";
 import type { IndexedTask } from "./workspace-service";
 
 let nextOverviewGridId = 0;
@@ -70,7 +70,7 @@ export function renderOverviewGroups(root: HTMLElement, tasks: IndexedTask[], ac
           menu.addItem(item => item.setTitle("Assign People…").setIcon("users").onClick(() => actions.people(id)));
           menu.addItem(item => item.setTitle("Copy vault folder path").setIcon("copy").onClick(() => actions.copyPath(id)));
           menu.addSeparator();
-          for (const status of TASK_STATUSES) menu.addItem(item => item.setTitle(statusLabel(status)).setChecked(status === task.record.status).onClick(() => actions.move(id, status)));
+          for (const status of OBJECTIVE_STATUS_CHOICES) menu.addItem(item => item.setTitle(statusLabel(status)).setChecked(status === task.record.status).onClick(() => actions.move(id, status)));
           const rect = more.getBoundingClientRect();
           menu.showAtPosition({ x: rect.left, y: rect.bottom });
         });

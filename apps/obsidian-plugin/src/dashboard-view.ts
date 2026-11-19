@@ -9,7 +9,7 @@ import { renderOverviewGroups } from "./overview-view";
 import { filterAreaObjectives, NO_AREA, objectiveAreas } from "./area-model";
 import { matchesPerson, personKey } from "./people-model";
 import { ItemView, Notice, setIcon, TFolder, WorkspaceLeaf } from "obsidian";
-import { statusLabel, TASK_STATUSES } from "@fjg/task-core";
+import { statusLabel } from "@fjg/task-core";
 import type { TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import { DashboardProjectPickerModal } from "./modals";
@@ -22,6 +22,7 @@ import {
   matchesProject,
   mostRecentlyModifiedTasks,
   NO_PROJECT,
+  OBJECTIVE_STATUS_CHOICES,
   projectSelectionAfterArchive,
   ProjectSummary,
   summarizeProjects,
@@ -32,7 +33,7 @@ import {
 import type { IndexedTask } from "./workspace-service";
 import { ConvertSubtasksModal, PromoteSubtaskModal, SubtaskEditModal, SubtaskVaultFileModal } from "./subtask-modals";
 import { TaskFileModal } from "./modals";
-import { eligibleForMove, filterHomeTasks, HomeScope, HomeSort, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
+import { eligibleForMove, filterHomeTasks, HomeScope, HomeSort, homeDisplayStatus, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
 import { taskFolderClipboardPath } from "./task-folder-path";
 
 export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
@@ -285,7 +286,7 @@ export class TaskDashboardView extends ItemView {
     const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.queueSearchRender(() => this.render());});
     const select=(label:string,choices:[string,string][],value:string,changed:(value:string)=>void)=>{const el=filters.createEl("select",{attr:{"aria-label":label}});for(const [key,name] of choices)el.createEl("option",{value:key,text:name});el.value=value;el.addEventListener("change",()=>{changed(el.value);this.render();});};
     select("Filter Home by People",[["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(value=>[value,value] as [string,string])],this.person,value=>this.person=value);
-    select("Filter Home by status",[["","All statuses"],...TASK_STATUSES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
+    select("Filter Home by status",[["","All statuses"],...OBJECTIVE_STATUS_CHOICES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
     select("Sort Home objectives",[["updated","Updated newest"],["due","Due first"]],this.homeSort,value=>this.homeSort=value as HomeSort);
     const clear=filters.createEl("button",{text:"Clear filters"});clear.addEventListener("click",()=>{this.homeQuery="";this.homeProject="";this.person="";this.homeStatus="";this.render();});
     const view=filters.createEl("button",{text:this.homeList?"Status rows":"All results list",attr:{"aria-pressed":String(this.homeList)}});view.addEventListener("click",()=>{this.homeList=!this.homeList;this.render();});
@@ -295,8 +296,8 @@ export class TaskDashboardView extends ItemView {
     if(this.homeList){const list=root.createDiv({cls:"fjg-home-results"});for(const task of visible)this.renderTask(list,task,true);return;}
     const rows=root.createDiv({cls:"fjg-home-rows"});
     for(const status of homeRowStatuses(this.homeScope)){
-      const matches=visible.filter(task=>task.record.status===status);
-      const total=tasks.filter(task=>matchesHomeScope(task.record,this.homeScope)&&task.record.status===status).length;
+      const matches=visible.filter(task=>homeDisplayStatus(task.record.status)===status);
+      const total=tasks.filter(task=>matchesHomeScope(task.record,this.homeScope)&&homeDisplayStatus(task.record.status)===status).length;
       const section=rows.createEl("section",{cls:"fjg-home-status-row",attr:{"aria-label":`${statusLabel(status)} objectives`}});
       const label=section.createDiv({cls:"fjg-home-row-label"});label.createEl("h3",{text:statusLabel(status)});label.createEl("p",{text:`${matches.length} / ${total} objectives`});
       const strip=section.createDiv({cls:"fjg-home-row-cards",attr:{"data-home-row":status,"aria-label":`Browse ${statusLabel(status)} objectives`,tabindex:"0"}});
@@ -671,7 +672,7 @@ export class TaskDashboardView extends ItemView {
     const status = fallback.createEl("select", {
       attr: { "aria-label": `Change status for ${task.record.title}` }
     });
-    for (const value of TASK_STATUSES) {
+    for (const value of OBJECTIVE_STATUS_CHOICES) {
       status.createEl("option", { text: statusLabel(value), value });
     }
     status.value = task.record.status;
@@ -866,7 +867,7 @@ export class TaskDashboardView extends ItemView {
         cls: "fjg-task-meta-control fjg-task-status-select",
         attr: { "aria-label": `Status for ${task.record.title}` }
       });
-      for (const value of TASK_STATUSES.filter((item) => item !== "archived")) {
+      for (const value of OBJECTIVE_STATUS_CHOICES) {
         status.createEl("option", { text: statusLabel(value), value });
       }
       status.value = task.record.status;
