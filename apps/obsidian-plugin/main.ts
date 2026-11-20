@@ -704,7 +704,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
 
   async openTask(taskId: string): Promise<void> {
     const task = this.workspaceService.getById(taskId);
-    await this.app.workspace.getLeaf("tab").openFile(task.taskFile);
+    await this.app.workspace.getLeaf("tab").openFile(task.taskFile, { active: true });
   }
 
   async openTaskUpdates(taskId: string): Promise<void> {
@@ -1012,7 +1012,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   openLiveVoice(context?: () => string): void {
-    if (this.liveVoiceModal) return;
+    if (this.liveVoiceModal) { this.liveVoiceModal.restore(); return; }
     const describe = () => JSON.stringify({
       local_date: new Date().toLocaleDateString("en-CA"),
       time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,

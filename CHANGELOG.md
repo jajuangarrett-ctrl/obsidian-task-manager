@@ -1,3 +1,9 @@
+## 0.30.16
+
+- Give Talk to Vault a full-width layout and keyboard-aware composer on compact Obsidian mobile.
+- Open an explicitly requested objective in Obsidian, and switch mobile chat to a small Chat/Mute/End bar only after the note opens. Return to the same conversation without reconnecting or losing the transcript.
+- Keep existing desktop reference behavior and microphone permission rules.
+
 ## 0.30.15
 
 - Refuse to move objectives with conflicting copies. If a conflict appears during a move, restore the original location and update history rather than leaving the folder moved after reporting an error.

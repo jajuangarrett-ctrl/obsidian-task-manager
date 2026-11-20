@@ -217,8 +217,8 @@ export class TaskDashboardView extends ItemView {
     titleWrap.createEl("p", { text: "OBJECTIVE WORKSPACES", cls: "fjg-eyebrow" });
     titleWrap.createEl("h1", { text: "FJG Objective Manager" });
     const actions = header.createDiv({ cls: "fjg-header-actions" });
-    const voiceButton = actions.createEl("button", { text: "Talk to dashboard", cls: "fjg-live-trigger",
-      attr: { "aria-label": "Talk to dashboard with GPT-Live", title: "Ask about objectives and make updates by voice" } });
+    const voiceButton = actions.createEl("button", { text: "Talk to Vault", cls: "fjg-live-trigger",
+      attr: { "aria-label": "Talk to Vault with GPT-Live", title: "Ask about objectives and make updates by voice" } });
     const micIcon = voiceButton.createSpan();
     setIcon(micIcon, "mic");
     voiceButton.addEventListener("click", () => this.taskPlugin.openLiveVoice(() =>
