@@ -16,6 +16,8 @@ import { TaskCatalogServer } from "./src/catalog-server";
 import { ObjectiveWorkspaceModal } from "./src/objective-workspace-modal";
 import { SubtaskEditModal } from "./src/subtask-modals";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
+import { OBJECTIVES_APP_VIEW, canEditAppObjective } from "./src/objectives-app-model";
+import { ObjectivesAppView } from "./src/objectives-app-view";
 import {
   ArchiveProjectModal,
   ArchiveTaskModal,
@@ -55,6 +57,7 @@ import {
 } from "./src/gmail-task-intake";
 
 export default class FjgTaskManagerPlugin extends Plugin {
+  private pendingAppView?: Promise<void>;
   private liveVoiceModal: LiveVoiceModal | null = null;
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
@@ -76,6 +79,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.workspaceService.initialize();
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
+    this.registerView(OBJECTIVES_APP_VIEW, (leaf) => new ObjectivesAppView(leaf, this));
     this.registerView(LIVE_CONVERSATION_VIEW, leaf => new LiveConversationView(leaf));
     this.addCommand({ id: "talk-to-dashboard", name: "Talk to Dashboard", callback: () => this.openLiveVoice() });
     this.addRibbonIcon("list-checks", "Open FJG Objective Manager", () => this.activateDashboard());
@@ -109,6 +113,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.registerSystemCaptureClipboardWatcher();
 
     this.addCommand({ id: "open-dashboard", name: "Open Objective Dashboard", callback: () => this.activateDashboard() });
+    this.addCommand({ id: "open-objectives-app-view", name: "Open Objectives App View", callback: () => void this.activateObjectivesAppView() });
     this.addCommand({ id: "open-task-briefing", name: "Open Objective Briefing", callback: () => void this.openTaskBriefing() });
     this.addCommand({ id: "quick-capture", name: "Quick Capture Objective", callback: () => this.openQuickCaptureModal() });
     this.addCommand({ id: "unified-capture", name: "Capture Objective, Agenda, or Update", callback: () => this.openUnifiedCaptureModal() });
@@ -225,6 +230,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     if (this.gmailIntakeTimer !== null) window.clearTimeout(this.gmailIntakeTimer);
     await this.catalogServer.stop();
     this.app.workspace.detachLeavesOfType(TASK_DASHBOARD_VIEW);
+    this.app.workspace.detachLeavesOfType(OBJECTIVES_APP_VIEW);
   }
 
   async saveSettings(): Promise<void> {
@@ -388,6 +394,24 @@ export default class FjgTaskManagerPlugin extends Plugin {
       await leaf.setViewState({ type: TASK_DASHBOARD_VIEW, active: true });
     }
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  activateObjectivesAppView(): Promise<void> {
+    if (this.pendingAppView) return this.pendingAppView;
+    this.pendingAppView = this.revealObjectivesAppView().catch(error => {
+      new Notice(`Could not open Objectives App View: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => { this.pendingAppView = undefined; });
+    return this.pendingAppView;
+  }
+
+  private async revealObjectivesAppView(): Promise<void> {
+    const workspace = this.app.workspace;
+    let leaf = workspace.getLeavesOfType(OBJECTIVES_APP_VIEW)[0];
+    if (!leaf) {
+      leaf = workspace.getLeaf("tab");
+      await leaf.setViewState({ type: OBJECTIVES_APP_VIEW, active: true });
+    }
+    await workspace.revealLeaf(leaf);
   }
 
   openCreateModal(): void {
@@ -637,9 +661,17 @@ export default class FjgTaskManagerPlugin extends Plugin {
     this.refreshDashboard();
   }
 
-  openUpdateModal(taskId: string): void {
+  openUpdateModal(taskId: string, options?: { appView: true }): void {
     const task = this.workspaceService.getById(taskId);
+    const observedPath = task.taskFile.path;
+    const guard = () => {
+      if (!options?.appView) return;
+      const current = this.workspaceService.getById(taskId);
+      if (!canEditAppObjective(current) || current.taskFile.path !== observedPath) throw new Error("The objective moved or became read-only. Reopen it before updating.");
+    };
+    guard();
     new TextEntryModal(this.app, `Update: ${task.record.title}`, "Add Update", async (text) => {
+      guard();
       await this.workspaceService.appendUpdate(taskId, { actor: "Franklin", text, type: "update" });
       new Notice(`Objective updated: ${task.record.title}`);
       this.refreshDashboard();
@@ -695,10 +727,20 @@ export default class FjgTaskManagerPlugin extends Plugin {
     new ObjectiveWorkspaceModal(this.app, this, taskId, folder, actions).open();
   }
 
-  openObjectiveActionModal(taskId: string, done: () => void = () => {}): void {
+  openObjectiveActionModal(taskId: string, done: () => void = () => {}, options?: { appView: true }): void {
     const task = this.workspaceService.getById(taskId);
     if (task.archived) { new Notice("Reopen this objective before adding an action."); return; }
+    const observedPath = task.taskFile.path;
+    const guard = () => {
+      if (!options?.appView) return;
+      const current = this.workspaceService.getById(taskId);
+      if (!canEditAppObjective(current) || current.record.status === "completed" || current.taskFile.path !== observedPath) {
+        throw new Error("The objective moved, closed or became read-only. Reopen it before adding an action.");
+      }
+    };
+    guard();
     new SubtaskEditModal(this.app, null, async (title, due, notes, status) => {
+      guard();
       await this.workspaceService.addSubtask(taskId, title, { due, notes, status });
       this.refreshDashboard(); done(); new Notice("Action added.");
     }).open();
@@ -838,9 +880,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }
   }
 
-  async copyTaskFolderPath(taskId: string): Promise<void> {
+  async copyTaskFolderPath(taskId: string, options?: { createMissing: false }): Promise<void> {
     try {
-      const destination = await this.workspaceService.ensureFilesFolderForTask(taskId);
+      const destination = options?.createMissing === false ? this.workspaceService.copyFolderForTask(taskId)
+        : await this.workspaceService.ensureFilesFolderForTask(taskId);
       const path = taskFolderClipboardPath(destination.folderPath);
       await navigator.clipboard.writeText(path);
       new Notice(`${destination.legacy ? "Legacy objective attachments" : "Objective attachments"} folder copied: ${path}`);
@@ -1029,6 +1072,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(TASK_DASHBOARD_VIEW)) {
       const view = leaf.view;
       if (view instanceof TaskDashboardView) view.render();
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(OBJECTIVES_APP_VIEW)) {
+      if (leaf.view instanceof ObjectivesAppView) leaf.view.render();
     }
   }
 

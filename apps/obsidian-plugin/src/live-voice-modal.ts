@@ -5,6 +5,7 @@ import { LiveTaskTools } from "./live-tools";
 import { canSplitLive, followLiveViewport } from "./live-presentation";
 import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./live-conversation-view";
 import { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
+import { OBJECTIVES_APP_VIEW } from "./objectives-app-model";
 
 type WorkspacePeer = { leaf: WorkspaceLeaf; view: WorkspaceLeaf["view"]; path?: string };
 
@@ -324,7 +325,7 @@ export class LiveVoiceModal extends Modal {
     const kind = view.getViewType();
     const path = kind === "markdown" ? view.getState().file : undefined;
     if (typeof path === "string" && path) return { leaf, view, path };
-    if (kind === TASK_DASHBOARD_VIEW) return { leaf, view };
+    if (kind === TASK_DASHBOARD_VIEW || kind === OBJECTIVES_APP_VIEW) return { leaf, view };
   }
 
   private peerStillValid(peer: WorkspacePeer): boolean {

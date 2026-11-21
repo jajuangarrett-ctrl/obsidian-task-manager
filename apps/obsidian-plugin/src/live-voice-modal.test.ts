@@ -66,6 +66,7 @@ import { LiveVoiceModal } from "./live-voice-modal";
 import { LiveConversationView, LIVE_CONVERSATION_VIEW } from "./live-conversation-view";
 import { DashboardLiveSession } from "./live-session";
 import { findIndexedTasks } from "./live-tools";
+import { OBJECTIVES_APP_VIEW } from "./objectives-app-model";
 const task = (id: string, title: string, extra = {}) => ({
   record: { task_id: id, title, project: "Test", status: "do-soon", due: "", updated_at: "", subtasks: [] },
   notes: "", updates: [], taskFile: { path: id + "/Task.md", stat: { mtime: 1 } }, archived: false, ...extra
@@ -83,7 +84,7 @@ class Leaf {
   detach = vi.fn(() => { this.detached = true; if (this.view instanceof LiveConversationView) void this.view.onClose(); });
 }
 function setup(tasks = [task("a", "Budget review")], laneHost = false,
-  options: { peer?: "markdown" | "dashboard"; hidden?: boolean; drawer?: number; occupied?: boolean; setupChat?: () => Promise<void> } = {}) {
+  options: { peer?: "markdown" | "dashboard" | "app-view"; hidden?: boolean; drawer?: number; occupied?: boolean; setupChat?: () => Promise<void> } = {}) {
   const plugin = { workspaceService: { refresh: vi.fn(async () => {}), list: vi.fn(() => tasks), getById: vi.fn((id: string) => { const found = tasks.find(t => t.record.task_id === id); if (!found) throw new Error("Missing objective"); return found; }) }, openTask: vi.fn(async () => {}), resolveOpenAiApiKey: vi.fn(async () => "test-key"), settings: { liveBackendModel: "backend-test" } };
   const released = vi.fn();
   const leaves: Leaf[] = [];
@@ -108,7 +109,7 @@ function setup(tasks = [task("a", "Budget review")], laneHost = false,
     const containerEl = nativeRoot.createDiv(); containerEl.hidden = !!options.hidden;
     peer.view = options.peer === "markdown"
       ? { getViewType: () => "markdown", getState: () => ({ file: "Unrelated open note.md" }), containerEl }
-      : { getViewType: () => "fjg-task-manager-dashboard", containerEl };
+      : { getViewType: () => options.peer === "app-view" ? OBJECTIVES_APP_VIEW : "fjg-task-manager-dashboard", containerEl };
   }
   const workspace = { containerEl, getLeaf: vi.fn((_kind: string) => allocate()),
     getMostRecentLeaf: vi.fn(() => active),
@@ -210,6 +211,19 @@ describe("wide mobile Talk to Vault launch", () => {
     modal.close();
     expect(peer!.detach).not.toHaveBeenCalled();
     expect(leaves[1].detach).toHaveBeenCalledOnce();
+  });
+
+  it("docks beside the separate Objectives App View without opening a file or starting a session", async () => {
+    reset();
+    const { modal, root, peer, plugin, workspace } = setup(undefined, true, { peer: "app-view" });
+    const app = peer!.view;
+    await vi.waitFor(() => expect(root.parentElement?.classes.has("fjg-live-lane")).toBe(true));
+    expect(plugin.resolveOpenAiApiKey).not.toHaveBeenCalled();
+    expect(peer!.view).toBe(app);
+    expect(peer!.openFile).not.toHaveBeenCalled();
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    modal.close();
+    expect(peer!.detach).not.toHaveBeenCalled();
   });
 
   it("uses only the usable root width and docks after the drawer's own layout becomes wide", async () => {

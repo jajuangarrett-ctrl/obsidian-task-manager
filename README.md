@@ -125,6 +125,15 @@ folder and is retried safely.
 
 Live task notes use the readable task title. The stable `task_id` remains inside the note and is hidden from ordinary dashboard and file-title views. Duplicate titles receive a numeric suffix such as `(2)`.
 
+## Objectives App View
+
+Open **Objectives App View** from the Objective Manager dashboard, or run **Open Objectives App View** in the Obsidian command palette. It opens a separate iOS-inspired tab without changing the existing dashboard or its default.
+
+- **Overview**, **All Open**, **Today**, and a single **Completed** are at the top. **More views** includes due dates, the configured Inbox folder, converted originals, and individual workflow statuses. Overview groups can be collapsed; search temporarily reveals matching groups.
+- A narrow leaf shows either the list or full-width details. **Back to objectives** returns to the same filter, search and list position. A wide leaf keeps the list and the selected objective side by side.
+- Details show **Overview**, **Actions**, **Files**, and **History**. **Show in Files** displays the objective's existing related files in place. **Copy Path** copies the vault-relative attachments folder without creating it. **Update**, action changes, and **New objective** use the existing Objective Manager workflows, not another data store.
+- **Talk to Vault** opens the existing conversation. Opening the view alone does not connect to an AI service or use the microphone.
+
 ## Dashboard navigation
 
 The dashboard keeps **Do First** as the opening view and adds two clear sections:

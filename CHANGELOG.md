@@ -1,3 +1,9 @@
+## 0.30.19
+
+- Add the optional Objectives App View, modeled on the native FJG Objectives app, without replacing Home or Overview.
+- Browse collapsible workflow groups and focused views, search the shared index, and open full-width details on folded screens or a list-and-detail split in wider leaves.
+- Put Show in Files, Copy Path, Update, Actions and History on the same objective. Reuse existing objective writes and the shared Talk to Vault conversation.
+
 ## 0.30.18
 
 - Start Talk to Vault in the left workspace lane on wide mobile layouts when a native note or the Objectives dashboard is already visible. No search, note selection or paid session is needed to open the lane.

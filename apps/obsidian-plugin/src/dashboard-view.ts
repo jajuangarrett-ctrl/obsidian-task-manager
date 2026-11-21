@@ -227,6 +227,8 @@ export class TaskDashboardView extends ItemView {
     const createButton = actions.createEl("button", { text: "Capture objective", cls: "mod-cta" });
     createButton.addEventListener("click", () => this.taskPlugin.openQuickCaptureModal());
     actions.appendChild(voiceButton);
+    const appView = actions.createEl("button", { text: "Objectives App View", cls: "fjg-open-app-view", attr: { type: "button", title: "Open the separate iOS-style Objectives workspace" } });
+    appView.addEventListener("click", () => void this.taskPlugin.activateObjectivesAppView());
     const captureAction = actions.createEl("button", { text: "Capture action" });
     captureAction.addEventListener("click", () => new SubtaskEditModal(this.app, null, async (title, due, notes, status, parentId) => {
       if (!parentId) throw new Error("Choose a parent objective.");
