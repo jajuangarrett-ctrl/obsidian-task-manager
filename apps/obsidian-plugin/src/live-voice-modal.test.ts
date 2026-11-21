@@ -11,7 +11,12 @@ class Element {
   style = { setProperty: vi.fn((key: string, value: string) => this.properties.set(key, value)),
     getPropertyValue: (key: string) => this.properties.get(key) ?? "", removeProperty: (key: string) => this.properties.delete(key) };
   isConnected = true;
-  getBoundingClientRect() { return { left: 0, right: ui.width, top: 0, bottom: 655, width: ui.width, height: 655 }; }
+  layout?: { left: number; width: number };
+  getClientRects() { return this.hidden ? [] : [this.getBoundingClientRect()]; }
+  getBoundingClientRect() {
+    const { left, width } = this.layout ?? { left: 0, width: ui.width };
+    return { left, right: left + width, top: 0, bottom: 655, width, height: 655 };
+  }
   contains(el: Element | null) { return el === this || (el !== null && this.all().includes(el)); }
   handlers = new Map<string, (event?: any) => unknown>();
   focus = vi.fn();
@@ -66,7 +71,7 @@ const task = (id: string, title: string, extra = {}) => ({
   notes: "", updates: [], taskFile: { path: id + "/Task.md", stat: { mtime: 1 } }, archived: false, ...extra
 });
 class Leaf {
-  view: { getViewType: () => string; getState?: () => { file: string }; file?: unknown } | LiveConversationView = { getViewType: () => "empty" };
+  view: { getViewType: () => string; getState?: () => { file: string }; file?: unknown; containerEl?: Element } | LiveConversationView = { getViewType: () => "empty" };
   setViewState = vi.fn(async (_state: unknown) => {
     const view = new LiveConversationView(this as never);
     if (ui.foreignChat) (view.contentEl as unknown as Element).documentOverride = {};
@@ -77,13 +82,16 @@ class Leaf {
   detached = false;
   detach = vi.fn(() => { this.detached = true; if (this.view instanceof LiveConversationView) void this.view.onClose(); });
 }
-function setup(tasks = [task("a", "Budget review")], laneHost = false) {
+function setup(tasks = [task("a", "Budget review")], laneHost = false,
+  options: { peer?: "markdown" | "dashboard"; hidden?: boolean; drawer?: number; occupied?: boolean; setupChat?: () => Promise<void> } = {}) {
   const plugin = { workspaceService: { refresh: vi.fn(async () => {}), list: vi.fn(() => tasks), getById: vi.fn((id: string) => { const found = tasks.find(t => t.record.task_id === id); if (!found) throw new Error("Missing objective"); return found; }) }, openTask: vi.fn(async () => {}), resolveOpenAiApiKey: vi.fn(async () => "test-key"), settings: { liveBackendModel: "backend-test" } };
   const released = vi.fn();
   const leaves: Leaf[] = [];
   const nextOpen = vi.fn<(file: unknown, options?: unknown) => Promise<void>>();
   const allocate = () => {
     const leaf = new Leaf(); leaves.push(leaf);
+    const state = leaf.setViewState.getMockImplementation()!;
+    leaf.setViewState.mockImplementation(async (...args) => { await options.setupChat?.(); await state(...args); });
     const open = leaf.openFile.getMockImplementation()!;
     leaf.openFile.mockImplementation(async (...args) => { await nextOpen(...args); await open(...args); });
     return leaf;
@@ -91,15 +99,28 @@ function setup(tasks = [task("a", "Budget review")], laneHost = false) {
   const containerEl = new Element();
   const nativeRoot = laneHost ? containerEl.createDiv({ cls: "workspace-split mod-root" }) : undefined;
   if (nativeRoot) nativeRoot.style.setProperty("--foreign-layout", "untouched");
+  if (nativeRoot && options.drawer) nativeRoot.layout = { left: 0, width: options.drawer };
+  if (nativeRoot && options.occupied) nativeRoot.createDiv({ cls: "fjgduo-vault-live-split-pane" });
+  let active: Leaf | undefined;
+  let peer: Leaf | undefined;
+  if (options.peer && nativeRoot) {
+    peer = active = new Leaf(); leaves.push(peer);
+    const containerEl = nativeRoot.createDiv(); containerEl.hidden = !!options.hidden;
+    peer.view = options.peer === "markdown"
+      ? { getViewType: () => "markdown", getState: () => ({ file: "Unrelated open note.md" }), containerEl }
+      : { getViewType: () => "fjg-task-manager-dashboard", containerEl };
+  }
   const workspace = { containerEl, getLeaf: vi.fn((_kind: string) => allocate()),
+    getMostRecentLeaf: vi.fn(() => active),
+    iterateAllLeaves: (callback: (leaf: Leaf) => void) => leaves.filter(leaf => !leaf.detached).forEach(callback),
     getLeavesOfType: vi.fn((type: string) => leaves.filter(leaf => !leaf.detached && leaf.view.getViewType() === type)),
     createLeafBySplit: vi.fn((_leaf: Leaf, _direction: string, _before: boolean) => allocate()),
-    revealLeaf: vi.fn(async (_leaf: Leaf) => {}) };
+    revealLeaf: vi.fn(async (leaf: Leaf) => { active = leaf; }) };
   const modal = new LiveVoiceModal({ workspace } as never, plugin as never, () => "", released);
   modal.open();
   const root = modal.contentEl as unknown as Element;
   const input = root.all().find(el => el.tag === "input")!;
-  return { modal, root, input, plugin, released, workspace, leaves, nextOpen, nativeRoot };
+  return { modal, root, input, plugin, released, workspace, leaves, nextOpen, nativeRoot, peer, setActive: (leaf?: Leaf) => { active = leaf; } };
 }
 describe("typed messages in the shared voice panel", () => {
   it("opens a composer without connecting, then starts text-only on explicit submit", async () => {
@@ -152,6 +173,89 @@ describe("typed messages in the shared voice panel", () => {
   it("shares retrieval across notes, updates, actions and archived objectives", () => {
     const tasks = [task("n", "Other", { notes: "budget" }), task("t", "Budget"), task("u", "Update", { updates: [{ text: "budget" }] }), task("r", "Archive", { archived: true, notes: "budget" })];
     const result = findIndexedTasks(tasks as never, "budget"); expect(result.total).toBe(4); expect(result.tasks[0].task_id).toBe("t");
+  });
+});
+
+describe("wide mobile Talk to Vault launch", () => {
+  const reset = (width = 840) => {
+    Object.assign(ui, { width, mobile: true, deferClose: false, foreignChat: false, modalOpens: 0 });
+    documentFixture.body.empty(); documentFixture.activeElement = null;
+    frameCallbacks.clear();
+  };
+  const measure = () => {
+    viewport.addEventListener.mock.calls.filter(([name]) => name === "resize").at(-1)?.[1]();
+    for (const [id, fn] of [...frameCallbacks]) { frameCallbacks.delete(id); fn(); }
+  };
+
+  it("docks immediately beside the same visible Markdown leaf, without navigation or a session", async () => {
+    reset();
+    const { modal, root, input, plugin, leaves, nativeRoot, workspace, peer } = setup(undefined, true, { peer: "markdown" });
+    const audio = root.querySelector("audio"), openView = peer!.view;
+    await vi.waitFor(() => expect(root.parentElement?.classes.has("fjg-live-lane")).toBe(true));
+    expect(leaves).toHaveLength(2);
+    expect(peer!.view).toBe(openView);
+    expect(peer!.openFile).not.toHaveBeenCalled();
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    expect(plugin.resolveOpenAiApiKey).not.toHaveBeenCalled();
+    expect(root.querySelector("audio")).toBe(audio);
+    input.value = "Draft across widths";
+    ui.width = 390; measure();
+    expect(nativeRoot!.querySelector(".fjg-live-lane")).toBeUndefined();
+    documentFixture.body.all().find(el => el.text === "Chat")!.handlers.get("click")!();
+    expect(workspace.revealLeaf).toHaveBeenLastCalledWith(leaves[1]);
+    ui.width = 840; measure();
+    expect(workspace.revealLeaf).toHaveBeenLastCalledWith(peer);
+    expect(root.querySelector("audio")).toBe(audio);
+    expect(input.value).toBe("Draft across widths");
+    modal.close();
+    expect(peer!.detach).not.toHaveBeenCalled();
+    expect(leaves[1].detach).toHaveBeenCalledOnce();
+  });
+
+  it("uses only the usable root width and docks after the drawer's own layout becomes wide", async () => {
+    reset();
+    const { modal, workspace, nativeRoot, root } = setup(undefined, true, { peer: "dashboard", drawer: 640 });
+    expect(workspace.getLeaf).not.toHaveBeenCalled();
+    nativeRoot!.layout = { left: -200, width: 840 }; measure();
+    expect(workspace.getLeaf).not.toHaveBeenCalled(); // layout width alone is not enough
+    nativeRoot!.layout = { left: -42, width: 840 }; measure();
+    await vi.waitFor(() => expect(root.parentElement?.classes.has("fjg-live-lane")).toBe(true));
+    expect(root.all().find(el => el.text === "Show dashboard")?.hidden).toBe(false);
+    expect(nativeRoot!.style.getPropertyValue("--fjg-live-lane-left")).toBe("42px");
+    modal.close();
+  });
+
+  it.each([{ hidden: true }, { occupied: true }])("does not adopt a hidden note or compete with a Duo lane (%j)", options => {
+    reset();
+    const { modal, root, workspace } = setup(undefined, true, { peer: "markdown", ...options });
+    expect(workspace.getLeaf).not.toHaveBeenCalled();
+    expect(root.parentElement?.classes.has("fjg-live-lane")).not.toBe(true);
+    modal.close();
+  });
+
+  it("does not move a stale chat after the notes change during async launch", async () => {
+    reset();
+    let resume!: () => void;
+    const { modal, root, leaves, peer, workspace } = setup(undefined, true, { peer: "markdown", setupChat: () => new Promise(r => { resume = r; }) });
+    expect(leaves).toHaveLength(2);
+    peer!.view = { getViewType: () => "markdown", getState: () => ({ file: "Switched.md" }) };
+    resume();
+    await vi.waitFor(() => expect(leaves[1].detach).toHaveBeenCalledOnce());
+    expect(peer!.detach).not.toHaveBeenCalled();
+    expect(workspace.revealLeaf).not.toHaveBeenCalled();
+    expect(root.parentElement?.classes.has("fjg-live-lane")).not.toBe(true);
+    modal.close();
+  });
+
+  it("does not dock or reopen when closed during native chat initialization", async () => {
+    reset();
+    let resume!: () => void;
+    const { modal, nativeRoot, released, leaves, peer } = setup(undefined, true, { peer: "markdown", setupChat: () => new Promise(r => { resume = r; }) });
+    modal.close(); resume();
+    await vi.waitFor(() => expect(leaves[1].detach).toHaveBeenCalledOnce());
+    expect(nativeRoot!.querySelector(".fjg-live-lane")).toBeUndefined();
+    expect(peer!.detach).not.toHaveBeenCalled();
+    expect(released).toHaveBeenCalledOnce();
   });
 });
 

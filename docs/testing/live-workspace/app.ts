@@ -1,5 +1,6 @@
 import { TFile } from "obsidian";
 import { LiveVoiceModal } from "../../../apps/obsidian-plugin/src/live-voice-modal";
+import { TASK_DASHBOARD_VIEW } from "../../../apps/obsidian-plugin/src/dashboard-view-type";
 import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "../../../apps/obsidian-plugin/src/live-conversation-view";
 import { report } from "./session";
 
@@ -62,7 +63,7 @@ class Leaf {
     content.createEl("p",{ text:task.notes });
     content.createEl("p",{ text:"Synthetic Markdown view: this pane is owned by the mock Obsidian workspace, not the chat." });
     content.createEl("p",{ text:file.path });
-    this.view = { getState: () => ({ file: file.path }) };
+    this.view = { getViewType: () => "markdown", containerEl: this.root, getState: () => ({ file: file.path }) };
     active = this; render(); report(`Opened mock native note: ${task.record.title}`);
   }
   detach() {
@@ -79,6 +80,7 @@ const workspace = {
   containerEl: workspaceEl,
   getLeaf: (_kind: string) => new Leaf(),
   getMostRecentLeaf: () => active,
+  iterateAllLeaves: (fn: (leaf: Leaf) => void) => leaves.forEach(fn),
   createLeafBySplit: () => { throw new Error("The mobile fixture renders only the active group"); },
   getLeavesOfType: (type: string) => leaves.filter(leaf => leaf.type === type),
   revealLeaf: async (leaf: Leaf) => { if (leaves.includes(leaf)) { active = leaf; render(); } },
@@ -94,11 +96,22 @@ const plugin = {
   resolveOpenAiApiKey: async () => "fixture-only", refreshDashboard: () => {},
 };
 const dashboard = new Leaf();
-dashboard.type = "dashboard"; dashboard.label.setText("Mock dashboard");
+dashboard.type = TASK_DASHBOARD_VIEW; dashboard.view = { getViewType: () => TASK_DASHBOARD_VIEW, containerEl: dashboard.root };
+dashboard.label.setText("Mock dashboard");
 const home = dashboard.root.createDiv({ cls:"view-content native-markdown" });
 home.createEl("h1",{ text:"Talk to Vault QA" });
 home.createEl("p",{ text:"Choose Talk to Vault, then Type a message. Send “Find my budget,” open Budget review, and try Chat, Note, and the native note overflow. Send “Find my calendar” to switch notes in the same conversation." });
 active = dashboard; render(); report();
+document.querySelector<HTMLButtonElement>("#fixture-note")!.onclick = () => { void new Leaf().openFile(tasks[0].taskFile, {}); };
+const testDrawer = (id: string, cls: string) => {
+  document.querySelector<HTMLButtonElement>(id)!.onclick = () => {
+    const wasOpen = workspaceEl.classList.contains(cls);
+    workspaceEl.classList.remove("fixture-drawer-overlay", "fixture-drawer-pinned");
+    if (!wasOpen) workspaceEl.classList.add(cls);
+  };
+};
+testDrawer("#fixture-drawer", "fixture-drawer-overlay");
+testDrawer("#fixture-pinned-drawer", "fixture-drawer-pinned");
 let modal: LiveVoiceModal | undefined;
 document.querySelector<HTMLButtonElement>("#talk")!.onclick = () => {
   if (modal) { modal.restore(); return; }

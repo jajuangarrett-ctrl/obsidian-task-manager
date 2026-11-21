@@ -4,6 +4,9 @@ import { DashboardLiveSession, type LiveState } from "./live-session";
 import { LiveTaskTools } from "./live-tools";
 import { canSplitLive, followLiveViewport } from "./live-presentation";
 import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./live-conversation-view";
+import { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
+
+type WorkspacePeer = { leaf: WorkspaceLeaf; view: WorkspaceLeaf["view"]; path?: string };
 
 const microphoneDisclosure = "Your microphone and requested objective context go to OpenAI while connected. Uses your saved API key.";
 const typingDisclosure = "Sending starts a paid OpenAI session using your saved key. OpenAI receives your message and requested objective context. Microphone stays off until you turn it on. Clear change requests save immediately.";
@@ -14,10 +17,12 @@ export class LiveVoiceModal extends Modal {
   private muted = false;
   private surface: "chat" | "docking" | "workspace" = "chat";
   private opening = false;
+  private launchingLane = false;
   private navigationEpoch = 0;
   private chatLeaf?: WorkspaceLeaf;
   private noteLeaf?: WorkspaceLeaf;
   private notePath?: string;
+  private launchPeer?: WorkspacePeer;
   private laneRoot?: HTMLElement;
   private lane?: HTMLElement;
   private laneWidth = 0;
@@ -25,13 +30,13 @@ export class LiveVoiceModal extends Modal {
   private noteOnly = false;
   private conversationView?: LiveConversationView;
   private rendered = false;
-  private hasNote = false;
   private state: LiveState = "idle";
   private showNote?: HTMLButtonElement;
   private audioHome?: HTMLElement;
   private noteBar?: HTMLElement;
   private barStatus?: HTMLElement;
   private barMute?: HTMLButtonElement;
+  private barNote?: HTMLButtonElement;
   private barEnd?: HTMLButtonElement;
   private stopViewport?: () => void;
   private status!: HTMLElement;
@@ -101,6 +106,7 @@ export class LiveVoiceModal extends Modal {
     this.sources = scroll.createDiv({ cls: "fjg-live-search-results", attr: { "aria-label": "Referenced objectives" } });
     this.updates = scroll.createDiv({ cls: "fjg-live-updates", attr: { role: "log", "aria-label": "Saved task changes", "aria-live": "polite" } });
     this.renderTextComposer(root);
+    this.watchMobileLane();
   }
 
   private renderTextComposer(root: HTMLElement): void {
@@ -114,11 +120,15 @@ export class LiveVoiceModal extends Modal {
       if (open) this.textInput.focus();
       else { this.textInput.blur(); toggle.focus({ preventScroll: true }); }
     };
-    toggle.addEventListener("click", () => setTyping(panel.hidden));
+    toggle.addEventListener("click", () => {
+      const open = panel.hidden;
+      setTyping(open);
+      if (!open) void this.dockBesideCurrentView();
+    });
     panel.createEl("p", { text: typingDisclosure, cls: "fjg-live-caption fjg-live-desktop-policy" });
     const form = panel.createEl("form", { cls: "fjg-live-search-form" });
     form.createEl("button", { text: "×", cls: "fjg-live-hide-keyboard", type: "button", attr: { "aria-label": "Hide typing" } })
-      .addEventListener("click", () => setTyping(false));
+      .addEventListener("click", () => { setTyping(false); void this.dockBesideCurrentView(); });
     const label = form.createEl("label");
     label.createSpan({ text: "Message your dashboard", cls: "fjg-live-input-label" });
     this.textInput = label.createEl("input", { type: "text", placeholder: "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": "Message your dashboard", enterkeyhint: "send" } });
@@ -214,7 +224,6 @@ export class LiveVoiceModal extends Modal {
       // Mobile keyboards can resize only the visual viewport; never infer a fold from keyboard width.
       this.containerEl.classList.toggle("fjg-live-compact", media.matches || keyboardVisible);
       this.containerEl.classList.toggle("fjg-live-short", keyboardVisible && !!vv && vv.height < 280);
-      if (this.showNote) this.showNote.hidden = !this.hasNote;
       if (!vv) return;
       this.containerEl.style.setProperty("--fjg-live-screen-height", `${vv.height}px`);
       this.containerEl.style.setProperty("--fjg-live-screen-top", `${vv.offsetTop}px`);
@@ -267,26 +276,11 @@ export class LiveVoiceModal extends Modal {
       this.noteLeaf = note;
       this.notePath = fresh.taskFile.path;
       createdNote = undefined;
-      this.hasNote = true;
-      if (this.showNote) this.showNote.hidden = false;
       if (createdChat) {
-        const view = createdChat.view as LiveConversationView;
-        view.attachConversation(this.contentEl, () => {
-          // Obsidian may be replacing this leaf with the owner's new view. Never
-          // detach that replacement while responding to the old ItemView.onClose.
-          this.chatLeaf = undefined; this.conversationView = undefined; this.close();
-        });
-        this.chatLeaf = createdChat;
+        this.transferToWorkspace(createdChat);
         createdChat = undefined;
-        this.conversationView = view;
-        this.contentEl.addClass("fjg-live-pane-content");
-        this.surface = "docking";
-        this.shouldRestoreSelection = false;
-        if (this.containerEl.ownerDocument.activeElement === this.textInput) this.textInput.blur();
-        super.close();
-        // The modal's delayed onClose only completes this ownership transfer.
       }
-      this.ensureNoteBar();
+      this.updatePeerControls();
       await workspace.revealLeaf(note);
       if (!current()) throw new Error("Objective opening was cancelled. Your chat was not restarted.");
       this.noteOnly = false;
@@ -308,8 +302,8 @@ export class LiveVoiceModal extends Modal {
     this.barStatus = this.noteBar.createSpan({ cls: "fjg-live-note-status", attr: { role: "status", "aria-live": "polite" } });
     this.noteBar.createEl("button", { text: "Chat", attr: { "aria-label": "Return to Talk to Vault conversation" } })
       .addEventListener("click", () => this.restore());
-    this.noteBar.createEl("button", { text: "Note", attr: { "aria-label": "Show opened objective note" } })
-      .addEventListener("click", () => this.revealNote());
+    this.barNote = this.noteBar.createEl("button", { text: "Note", attr: { "aria-label": "Show note" } });
+    this.barNote.addEventListener("click", () => this.revealNote());
     this.barMute = this.noteBar.createEl("button", { text: "Mute", attr: { "aria-label": "Mute microphone", "aria-pressed": "false" } });
     this.barMute.addEventListener("click", () => this.toggleMute());
     this.barEnd = this.noteBar.createEl("button", { text: "End", attr: { "aria-label": "End conversation" } });
@@ -320,15 +314,56 @@ export class LiveVoiceModal extends Modal {
     this.updateNoteBar();
   }
 
+  /** Use the existing real workspace view; never open or read a file merely to lay out chat. */
+  private activePeer(visibleOnly = false): WorkspacePeer | undefined {
+    const { workspace } = this.app;
+    const leaf = workspace.getMostRecentLeaf?.(workspace.rootSplit);
+    const view = leaf?.view, container = view?.containerEl;
+    if (!leaf || !view || !container || !this.laneRoot?.contains(container)) return;
+    if (visibleOnly && !container.getClientRects().length) return;
+    const kind = view.getViewType();
+    const path = kind === "markdown" ? view.getState().file : undefined;
+    if (typeof path === "string" && path) return { leaf, view, path };
+    if (kind === TASK_DASHBOARD_VIEW) return { leaf, view };
+  }
+
+  private peerStillValid(peer: WorkspacePeer): boolean {
+    return this.app.workspace.getLeavesOfType(peer.view.getViewType()).includes(peer.leaf)
+      && peer.leaf.view === peer.view && (peer.path === undefined || peer.view.getState().file === peer.path);
+  }
+
+  private get returnPeer(): WorkspacePeer | undefined {
+    if (this.noteLeaf && this.app.workspace.getLeavesOfType("markdown").includes(this.noteLeaf)
+        && this.noteLeaf.view.getState().file === this.notePath) {
+      return { leaf: this.noteLeaf, view: this.noteLeaf.view, path: this.notePath };
+    }
+    if (this.launchPeer && this.peerStillValid(this.launchPeer)) return this.launchPeer;
+  }
+
+  private updatePeerControls(): void {
+    const peer = this.returnPeer;
+    const noun = peer?.path ? "note" : "dashboard";
+    if (this.showNote) {
+      this.showNote.hidden = !peer;
+      this.showNote.setText("Show " + noun);
+    }
+    if (this.barNote) {
+      this.barNote.hidden = !peer;
+      this.barNote.setText(peer?.path ? "Note" : "Dashboard");
+      this.barNote.setAttribute("aria-label", "Show " + noun);
+    }
+  }
+
   private revealNote(): void {
     this.noteOnly = true; this.unmountMobileLane();
-    if (this.closed || !this.noteLeaf) return;
-    if (!this.app.workspace.getLeavesOfType("markdown").includes(this.noteLeaf) || this.noteLeaf.view.getState().file !== this.notePath) {
+    if (this.closed) return;
+    const peer = this.returnPeer;
+    if (!peer) {
       this.status.setText("The opened note was closed or changed. Choose the objective again; your chat is still here.");
       this.restore();
       return;
     }
-    void this.app.workspace.revealLeaf(this.noteLeaf);
+    void this.app.workspace.revealLeaf(peer.leaf);
   }
 
   restore(): void {
@@ -336,32 +371,95 @@ export class LiveVoiceModal extends Modal {
     this.noteOnly = false;
     if (this.mountMobileLane()) return;
     if (this.chatLeaf) void this.app.workspace.revealLeaf(this.chatLeaf);
+    else void this.dockBesideCurrentView();
+  }
+
+  private transferToWorkspace(chat: WorkspaceLeaf): void {
+    if (!(chat.view instanceof LiveConversationView)) throw new Error("Chat pane is unavailable.");
+    const view = chat.view;
+    view.attachConversation(this.contentEl, () => {
+      // An Obsidian view replacement may close this ItemView. Never detach the replacement.
+      this.chatLeaf = undefined; this.conversationView = undefined; this.close();
+    });
+    this.chatLeaf = chat;
+    this.conversationView = view;
+    this.contentEl.addClass("fjg-live-pane-content");
+    this.surface = "docking";
+    this.shouldRestoreSelection = false;
+    if (this.containerEl.ownerDocument.activeElement === this.textInput) this.textInput.blur();
+    super.close();
+    // The modal's delayed onClose only completes this ownership transfer.
+    this.ensureNoteBar();
+  }
+
+  private laneAvailable(): boolean {
+    const root = this.laneRoot;
+    return !this.closed && !this.noteOnly && !!root?.isConnected
+      && canSplitLive(this.laneWidth, !!this.lane)
+      && !root.querySelector(":scope > .fjgduo-vault-live-split-pane");
+  }
+
+  private async dockBesideCurrentView(): Promise<void> {
+    if (this.surface !== "chat" || this.opening || this.launchingLane || !this.laneAvailable()
+        || this.contentEl.ownerDocument.activeElement === this.textInput) return;
+    const peer = this.activePeer(true);
+    if (!peer) return;
+    this.launchingLane = true;
+    const epoch = this.navigationEpoch;
+    let chat: WorkspaceLeaf | undefined;
+    try {
+      const { workspace } = this.app;
+      const existing = new Set<WorkspaceLeaf>();
+      workspace.iterateAllLeaves?.(leaf => existing.add(leaf));
+      const candidate = workspace.getLeaf("tab");
+      if (existing.has(candidate)) return; // getLeaf("tab") may reuse a pre-existing empty tab.
+      chat = candidate;
+      await chat.setViewState({ type: LIVE_CONVERSATION_VIEW, active: false });
+      const active = workspace.getMostRecentLeaf?.(workspace.rootSplit);
+      if (this.navigationEpoch !== epoch || this.opening || this.surface !== "chat" || !this.laneAvailable()
+          || this.contentEl.ownerDocument.activeElement === this.textInput || !this.peerStillValid(peer)
+          || (active !== peer.leaf && active !== chat)) return;
+      this.launchPeer = peer;
+      this.transferToWorkspace(chat);
+      chat = undefined;
+      this.updatePeerControls();
+      this.mountMobileLane();
+    } catch {
+      // Keep the original working modal if the host can't supply a native pane.
+    } finally {
+      if (chat?.view instanceof LiveConversationView || chat?.view.getViewType() === "empty") chat.detach();
+      this.launchingLane = false;
+    }
   }
 
   private watchMobileLane(): void {
-    if (this.closed) return;
-    if (!Platform.isMobile || this.stopLane) { this.mountMobileLane(); return; }
+    if (this.closed || !Platform.isMobile) return;
+    if (this.stopLane) { this.mountMobileLane(); return; }
     const root = this.app.workspace.containerEl?.querySelector<HTMLElement>(".workspace-split.mod-root");
     if (!root?.isConnected || root.ownerDocument !== this.contentEl.ownerDocument) return;
     this.laneRoot = root;
     this.stopLane = followLiveViewport(root, width => {
       this.laneWidth = width;
       if (this.closed) return;
-      if (!canSplitLive(width, !!this.lane)) {
+      if (!this.laneAvailable()) {
         const focused = !!this.lane?.contains(root.ownerDocument.activeElement);
         this.unmountMobileLane();
         if (focused && this.chatLeaf) void this.app.workspace.revealLeaf(this.chatLeaf);
-      } else if (!this.noteOnly) this.mountMobileLane();
+      } else if (this.chatLeaf) this.mountMobileLane();
+      else void this.dockBesideCurrentView();
     }, true);
   }
 
   private mountMobileLane(): boolean {
     const root = this.laneRoot;
-    if (this.closed || this.noteOnly || !root?.isConnected || !this.chatLeaf || !this.conversationView || !canSplitLive(this.laneWidth, !!this.lane)) return false;
-    // Another Talk plugin may already own the workspace lane. Fall back to the native
-    // Chat/Note tabs instead of piling two overlays on top of the user's note.
-    if (root.querySelector(":scope > .fjgduo-vault-live-split-pane")) return false;
-    root.style.setProperty("--fjg-live-lane-pane-width", `${Math.round(Math.max(288, Math.min(390, this.laneWidth * 0.42)))}px`);
+    if (!root || !this.chatLeaf || !this.conversationView || !this.laneAvailable()) return false;
+    const { workspace } = this.app;
+    const active = workspace.getMostRecentLeaf?.(workspace.rootSplit);
+    const returnPeer = this.returnPeer;
+    if (active === this.chatLeaf && !returnPeer) return false;
+    const prop = "--fjg-live-lane-pane-width";
+    const width = `${Math.round(Math.max(288, Math.min(390, this.laneWidth * 0.42)))}px`;
+    if (root.style.getPropertyValue(prop) !== width) root.style.setProperty(prop, width);
     if (!this.lane) {
       root.classList.add("fjg-live-lane-root");
       this.lane = root.createEl("aside", { cls: "fjg-live-lane", attr: { "aria-label": "Talk to Vault conversation" } });
@@ -372,9 +470,8 @@ export class LiveVoiceModal extends Modal {
     }
     // The owner may have selected Chat in the compact tab group. Show the already
     // requested note in-place; never create a duplicate editor or move its DOM.
-    if (this.app.workspace.getMostRecentLeaf?.() === this.chatLeaf && this.noteLeaf
-        && this.app.workspace.getLeavesOfType("markdown").includes(this.noteLeaf)
-        && this.noteLeaf.view.getState().file === this.notePath) void this.app.workspace.revealLeaf(this.noteLeaf);
+    if (this.noteBar) this.noteBar.hidden = true;
+    if (active === this.chatLeaf && returnPeer) void workspace.revealLeaf(returnPeer.leaf);
     return true;
   }
 
@@ -382,6 +479,7 @@ export class LiveVoiceModal extends Modal {
     if (!this.lane) return;
     this.conversationView?.contentEl.appendChild(this.contentEl);
     this.lane.remove(); this.lane = undefined;
+    if (this.noteBar) this.noteBar.hidden = false;
     this.laneRoot?.classList.remove("fjg-live-lane-root");
     this.laneRoot?.style.removeProperty("--fjg-live-lane-pane-width");
   }
@@ -414,7 +512,7 @@ export class LiveVoiceModal extends Modal {
 
   private removeNoteBar(): void {
     this.noteBar?.remove();
-    this.noteBar = this.barStatus = this.barMute = this.barEnd = undefined;
+    this.noteBar = this.barStatus = this.barMute = this.barEnd = this.barNote = undefined;
   }
 
   override close(): void {

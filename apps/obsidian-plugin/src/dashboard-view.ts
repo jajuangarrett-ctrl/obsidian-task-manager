@@ -36,7 +36,8 @@ import { TaskFileModal } from "./modals";
 import { eligibleForMove, filterHomeTasks, HomeScope, HomeSort, homeDisplayStatus, homeRowStatuses, matchesHomeScope, nextObjectiveAction } from "./home-model";
 import { taskFolderClipboardPath } from "./task-folder-path";
 
-export const TASK_DASHBOARD_VIEW = "fjg-task-manager-dashboard";
+import { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
+export { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
 
 export class TaskDashboardView extends ItemView {
   private mode: DashboardMode = "home";

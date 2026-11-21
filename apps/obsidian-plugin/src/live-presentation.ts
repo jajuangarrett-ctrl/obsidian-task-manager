@@ -14,6 +14,7 @@ export function followLiveViewport(host: HTMLElement, onWidth: (width: number) =
   if (!win) return () => {};
   const visual = win.visualViewport;
   let frame = 0;
+  let settleUntil = 0;
   const measure = () => {
     frame = 0;
     const rect = host.getBoundingClientRect();
@@ -31,10 +32,31 @@ export function followLiveViewport(host: HTMLElement, onWidth: (width: number) =
       const prop = `--fjg-live-lane-${key}`, value = `${pixels[i]}px`;
       if (host.style.getPropertyValue(prop) !== value) host.style.setProperty(prop, value);
     });
-    host.classList.toggle('fjg-live-lane-keyboard', rect.bottom - viewportBottom > 80);
+    const keyboard = rect.bottom - viewportBottom > 80;
+    if (host.classList.contains("fjg-live-lane-keyboard") !== keyboard) host.classList.toggle("fjg-live-lane-keyboard", keyboard);
     onWidth(width);
   };
-  const schedule = () => { if (!frame) frame = win.requestAnimationFrame(measure); };
+  const schedule = () => {
+    if (!frame) frame = win.requestAnimationFrame(() => {
+      measure();
+      if (Date.now() < settleUntil) schedule();
+    });
+  };
+  // Mobile drawers can translate the native root without changing its layout size.
+  // Watch only the host/ancestor attributes and follow their transitions to the final
+  // frame. Do not modify, close or unpin any Obsidian drawer.
+  const movingHosts = new Set<HTMLElement>();
+  for (let el: HTMLElement | null = host; el; el = el.parentElement) movingHosts.add(el);
+  const onTransition = (event: Event) => {
+    if (!movingHosts.has(event.target as HTMLElement)) return;
+    if (event.type === "transitionrun") settleUntil = Date.now() + 500;
+    schedule();
+  };
+  const transitions = ["transitionrun", "transitionend", "transitioncancel"];
+  transitions.forEach(name => doc.addEventListener?.(name, onTransition, true));
+  const mutations = typeof MutationObserver === "undefined" ? undefined : new MutationObserver(schedule);
+  movingHosts.forEach(el => mutations?.observe(el, { attributes: true, attributeFilter: ["class", "style"] }));
+
   const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
   observer?.observe(host);
   win.addEventListener('resize', schedule);
@@ -44,6 +66,8 @@ export function followLiveViewport(host: HTMLElement, onWidth: (width: number) =
   return () => {
     if (frame) win.cancelAnimationFrame(frame);
     observer?.disconnect();
+    mutations?.disconnect();
+    transitions.forEach(name => doc.removeEventListener?.(name, onTransition, true));
     win.removeEventListener('resize', schedule);
     visual?.removeEventListener('resize', schedule);
     visual?.removeEventListener('scroll', schedule);

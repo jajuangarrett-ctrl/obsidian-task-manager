@@ -7,10 +7,13 @@
 <header id="fixture-header">
   <strong>Mock Obsidian</strong>
   <button type="button" id="talk">Talk to Vault</button>
+  <button type="button" id="fixture-note">Open fixture note</button>
+  <button type="button" id="fixture-drawer">Toggle overlay drawer</button>
+  <button type="button" id="fixture-pinned-drawer">Toggle pinned drawer</button>
   <output id="counts" aria-label="Mock session counters"></output>
   <output id="result" aria-label="Mock result status" aria-live="polite">No query sent.</output>
 </header>
-<main class="workspace" aria-label="Synthetic native workspace"><div class="workspace-split mod-root"></div></main>
+<main class="workspace" aria-label="Synthetic native workspace"><aside class="fixture-drawer">Mock sidebar</aside><div class="workspace-split mod-root"></div></main>
 <footer class="mobile-navbar" aria-label="Mock native navigation">Mock mobile navigation</footer>
 <div id="fixture-keyboard" aria-hidden="true" hidden>Simulated keyboard occupies this space. No real keyboard or microphone is used.</div>
 <script src="./app.js"></script>

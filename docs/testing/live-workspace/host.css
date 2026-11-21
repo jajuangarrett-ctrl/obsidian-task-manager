@@ -34,3 +34,10 @@ body { --mobile-toolbar-height:36px; }
 .modal-close-button {position:absolute;right:5px;top:5px}
 #fixture-keyboard {position:fixed;inset:auto 0 0;height:255px;padding:18px;z-index:58;background:repeating-linear-gradient(110deg,#e3e9f2,#e3e9f2 10px,#dae2ee 10px,#dae2ee 20px);color:var(--text-muted)}
 body[data-keyboard="true"] .fjg-live-workspace-switch {--mobile-toolbar-height:255px}
+
+.workspace { position:relative; overflow:hidden; }
+.workspace-split.mod-root { transition:transform .18s ease-out; }
+.fixture-drawer { display:none; width:360px; flex:none; padding:12px; background:var(--background-secondary); }
+.workspace.fixture-drawer-pinned .fixture-drawer { display:block; }
+.workspace.fixture-drawer-overlay .fixture-drawer { display:block; position:absolute; inset:0 auto 0 0; }
+.workspace.fixture-drawer-overlay .workspace-split.mod-root { transform:translateX(360px); }

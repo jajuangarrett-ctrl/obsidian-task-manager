@@ -1,3 +1,8 @@
+## 0.30.18
+
+- Start Talk to Vault in the left workspace lane on wide mobile layouts when a native note or the Objectives dashboard is already visible. No search, note selection or paid session is needed to open the lane.
+- Measure the visible workspace when a native drawer opens, moves or takes up space. Keep compact chat available when room is limited and restore the same chat and draft when the workspace widens. Existing notes and native menus stay in place.
+
 ## 0.30.17
 
 - Repair typed Live requests whose Responses events omit a delegation ID, keep Send busy across overlapping responses and tool continuations, and preserve drafts when local delivery fails.

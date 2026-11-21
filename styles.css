@@ -2170,8 +2170,8 @@
 
 /* Mobile Obsidian renders only its active tab group. Reserve one scoped lane on
    the existing root, keeping the real note/editor in-place. No transforms or native menu rules. */
-.workspace-split.mod-root.fjg-live-lane-root { position: relative; padding-left: calc(var(--fjg-live-lane-pane-width, 304px) + var(--safe-area-inset-left, 0px)); }
-.workspace-split.mod-root > .fjg-live-lane { box-sizing: border-box; position: absolute; top: var(--fjg-live-lane-top, 0px); left: 0; z-index: 1; display: flex; flex-direction: column; flex: none; width: calc(var(--fjg-live-lane-pane-width, 304px) + var(--safe-area-inset-left, 0px)); height: var(--fjg-live-lane-height, 100%); overflow: hidden; background: var(--background-primary); border-right: 1px solid var(--background-modifier-border); padding: 6px 8px 6px calc(8px + var(--safe-area-inset-left, 0px)); container-type: inline-size; }
+.workspace-split.mod-root.fjg-live-lane-root { position: relative; padding-left: calc(var(--fjg-live-lane-left, 0px) + var(--fjg-live-lane-pane-width, 304px) + var(--safe-area-inset-left, 0px)); }
+.workspace-split.mod-root > .fjg-live-lane { box-sizing: border-box; position: absolute; top: var(--fjg-live-lane-top, 0px); left: var(--fjg-live-lane-left, 0px); z-index: 1; display: flex; flex-direction: column; flex: none; width: calc(var(--fjg-live-lane-pane-width, 304px) + var(--safe-area-inset-left, 0px)); height: var(--fjg-live-lane-height, 100%); overflow: hidden; background: var(--background-primary); border-right: 1px solid var(--background-modifier-border); padding: 6px 8px 6px calc(8px + var(--safe-area-inset-left, 0px)); container-type: inline-size; }
 .fjg-live-lane-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; min-height: 44px; }
 .fjg-live-lane-header h2 { margin: 0; font-size: var(--font-ui-medium, 17px); }
 .fjg-live-lane-header button { min-width: 44px; min-height: 44px; }
