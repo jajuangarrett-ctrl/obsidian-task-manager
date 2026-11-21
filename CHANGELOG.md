@@ -1,3 +1,10 @@
+## 0.30.17
+
+- Repair typed Live requests whose Responses events omit a delegation ID, keep Send busy across overlapping responses and tool continuations, and preserve drafts when local delivery fails.
+- Prime silent audio within the Send gesture before saved-key lookup, without requesting microphone access. Cancellation/incomplete responses no longer unnecessarily end the Live conversation.
+- Keep the same conversation, audio element and draft when opening an objective. Wide mobile workspaces reserve a scoped chat lane beside the existing native note, and desktop uses native panes; compact windows provide explicit Chat/Note switching with visible microphone controls.
+- Only Talk-owned panes and controls change. Native note overflow menus, global touch handling, existing writer permissions and other views are unchanged.
+
 ## 0.30.16
 
 - Give Talk to Vault a full-width layout and keyboard-aware composer on compact Obsidian mobile.

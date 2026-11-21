@@ -1,7 +1,9 @@
-import { Modal, Platform, type App } from "obsidian";
+import { Modal, Platform, type App, type WorkspaceLeaf } from "obsidian";
 import type FjgTaskManagerPlugin from "../main";
 import { DashboardLiveSession, type LiveState } from "./live-session";
 import { LiveTaskTools } from "./live-tools";
+import { canSplitLive, followLiveViewport } from "./live-presentation";
+import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./live-conversation-view";
 
 const microphoneDisclosure = "Your microphone and requested objective context go to OpenAI while connected. Uses your saved API key.";
 const typingDisclosure = "Sending starts a paid OpenAI session using your saved key. OpenAI receives your message and requested objective context. Microphone stays off until you turn it on. Clear change requests save immediately.";
@@ -10,8 +12,18 @@ export class LiveVoiceModal extends Modal {
   private session?: DashboardLiveSession;
   private closed = false;
   private muted = false;
-  private surface: "chat" | "minimizing" | "note" = "chat";
+  private surface: "chat" | "docking" | "workspace" = "chat";
   private opening = false;
+  private navigationEpoch = 0;
+  private chatLeaf?: WorkspaceLeaf;
+  private noteLeaf?: WorkspaceLeaf;
+  private notePath?: string;
+  private laneRoot?: HTMLElement;
+  private lane?: HTMLElement;
+  private laneWidth = 0;
+  private stopLane?: () => void;
+  private noteOnly = false;
+  private conversationView?: LiveConversationView;
   private rendered = false;
   private hasNote = false;
   private state: LiveState = "idle";
@@ -66,10 +78,10 @@ export class LiveVoiceModal extends Modal {
     });
     this.endButton = controls.createEl("button", { text: "End conversation" });
     this.endButton.disabled = true;
-    this.endButton.addEventListener("click", () => this.session?.end());
+    this.endButton.addEventListener("click", () => { this.navigationEpoch++; this.session?.end(); });
     this.showNote = controls.createEl("button", { text: "Show note", cls: "fjg-live-show-note" });
     this.showNote.hidden = true;
-    this.showNote.addEventListener("click", () => this.minimize());
+    this.showNote.addEventListener("click", () => this.revealNote());
     this.audioHome = root.createDiv();
     this.audio = this.audioHome.createEl("audio", { attr: { autoplay: "", playsinline: "", "aria-label": "Assistant voice playback" } });
     this.audio.controls = !Platform.isMobile;
@@ -121,7 +133,7 @@ export class LiveVoiceModal extends Modal {
     if (this.session?.active) {
       this.lastText = undefined;
       if (this.session.sendText(text)) this.textInput.value = "";
-      else this.status.setText("Wait for the current request to finish before sending another message.");
+      else if (this.session.active) this.status.setText("Wait for the current request to finish before sending another message.");
       return;
     }
     this.pendingText = text;
@@ -144,12 +156,13 @@ export class LiveVoiceModal extends Modal {
     }, () => !this.closed && session.active, message => { if (!this.closed) this.coverage.setText(message); },
     (taskId) => this.openObjective(taskId, "voice", () => session.active && this.session === session));
     session = new DashboardLiveSession(this.audio, {
-      state: (state, message) => this.setState(state, message),
-      busy: busy => { if (!this.closed) this.textButton.disabled = busy; },
-      transcript: (speaker, delta) => this.addTranscript(speaker, delta),
+      state: (state, message) => { if (this.session === session) this.setState(state, message); },
+      busy: busy => { if (!this.closed && this.session === session) this.textButton.disabled = busy; },
+      transcript: (speaker, delta) => { if (this.session === session) this.addTranscript(speaker, delta); },
       execute: async (name, args, id) => {
+        if (this.closed || this.session !== session) throw new Error("Conversation ended.");
         const result = await tools.execute(name, args, id);
-        if (!this.closed && (name === "find_tasks" || name === "read_task")) {
+        if (!this.closed && this.session === session && (name === "find_tasks" || name === "read_task")) {
           const data = result as { tasks?: { task_id: string; title: string }[]; task_id?: string; title?: string };
           const tasks = data.tasks ?? (data.task_id && data.title ? [{ task_id: data.task_id, title: data.title }] : []);
           this.sources.empty();
@@ -169,6 +182,13 @@ export class LiveVoiceModal extends Modal {
       }
     });
     this.session = session;
+    // Preserve the explicit Send user gesture before the asynchronous saved-key lookup.
+    try { if (inputMode === "text") session.prepareTextInput(); }
+    catch {
+      session.dispose();
+      this.setState("error", "Could not prepare audio playback. Your draft is kept; try Send again. Microphone remains off.");
+      return;
+    }
     this.setState("connecting", "Connecting… Please wait before speaking.");
     try {
       const key = await this.plugin.resolveOpenAiApiKey();
@@ -176,6 +196,7 @@ export class LiveVoiceModal extends Modal {
       await session.start(key, this.plugin.settings.liveBackendModel, this.context(), inputMode);
     } catch {
       session.dispose();
+      if (this.closed || this.session !== session) return;
       this.setState("error", "Could not read the saved OpenAI key. Check FJG Task Manager settings.");
     }
   }
@@ -192,6 +213,7 @@ export class LiveVoiceModal extends Modal {
         && !!vv && Math.abs(vv.scale - 1) < 0.02 && win.innerHeight - vv.height > 100;
       // Mobile keyboards can resize only the visual viewport; never infer a fold from keyboard width.
       this.containerEl.classList.toggle("fjg-live-compact", media.matches || keyboardVisible);
+      this.containerEl.classList.toggle("fjg-live-short", keyboardVisible && !!vv && vv.height < 280);
       if (this.showNote) this.showNote.hidden = !this.hasNote;
       if (!vv) return;
       this.containerEl.style.setProperty("--fjg-live-screen-height", `${vv.height}px`);
@@ -209,53 +231,159 @@ export class LiveVoiceModal extends Modal {
     };
   }
 
-  private async openObjective(taskId: string, origin: "voice" | "reference", active: () => boolean = () => true): Promise<void> {
+  private async openObjective(taskId: string, _origin: "voice" | "reference", active: () => boolean = () => true): Promise<void> {
     if (this.closed || this.opening || !active()) throw new Error("Conversation ended or an objective is already opening.");
     this.opening = true;
+    const epoch = ++this.navigationEpoch;
+    let createdChat: WorkspaceLeaf | undefined;
+    let createdNote: WorkspaceLeaf | undefined;
+    const current = () => !this.closed && this.navigationEpoch === epoch && active();
     try {
-      await this.plugin.openTask(taskId);
-      if (this.closed || !active()) return;
+      const workspace = this.app.workspace;
+      // Resolve identity locally again, never a model-supplied file path or arbitrary native tab.
+      const task = this.plugin.workspaceService.getById(taskId);
+      if (!this.chatLeaf) {
+        createdChat = workspace.getLeaf("tab");
+        await createdChat.setViewState({ type: LIVE_CONVERSATION_VIEW, active: false });
+        if (!current()) throw new Error("Objective opening was cancelled. Your chat was not restarted.");
+        if (!(createdChat.view instanceof LiveConversationView)) throw new Error("Chat pane is unavailable.");
+        if (createdChat.view.contentEl.ownerDocument !== this.contentEl.ownerDocument) throw new Error("Keep Talk to Vault in its original window.");
+      }
+      const chat = this.chatLeaf ?? createdChat!;
+      let note = this.noteLeaf;
+      // Reuse only a leaf that still contains the selected native Markdown view. If the
+      // owner navigated it elsewhere, open another leaf rather than replacing their work.
+      if (note && (!workspace.getLeavesOfType("markdown").includes(note) || note.view.getState().file !== this.notePath)) note = undefined;
+      if (!note) {
+        const wide = this.containerEl.ownerDocument.defaultView?.matchMedia("(min-width: 760px)").matches;
+        createdNote = wide && !Platform.isMobile ? workspace.createLeafBySplit(chat, "vertical", false) : workspace.getLeaf("tab");
+        note = createdNote;
+      }
+      if (!current()) throw new Error("Objective opening was cancelled. Your chat was not restarted.");
+      const fresh = this.plugin.workspaceService.getById(taskId);
+      if (fresh.taskFile !== task.taskFile) throw new Error("Objective changed; search again.");
+      await note.openFile(fresh.taskFile, { active: true, state: { mode: "preview" } });
+      if (!current()) throw new Error("Objective opening was cancelled. Your chat was not restarted.");
+      this.noteLeaf = note;
+      this.notePath = fresh.taskFile.path;
+      createdNote = undefined;
       this.hasNote = true;
-      if (Platform.isMobile) this.minimize();
-      else if (origin === "reference") this.close();
+      if (this.showNote) this.showNote.hidden = false;
+      if (createdChat) {
+        const view = createdChat.view as LiveConversationView;
+        view.attachConversation(this.contentEl, () => {
+          // Obsidian may be replacing this leaf with the owner's new view. Never
+          // detach that replacement while responding to the old ItemView.onClose.
+          this.chatLeaf = undefined; this.conversationView = undefined; this.close();
+        });
+        this.chatLeaf = createdChat;
+        createdChat = undefined;
+        this.conversationView = view;
+        this.contentEl.addClass("fjg-live-pane-content");
+        this.surface = "docking";
+        this.shouldRestoreSelection = false;
+        if (this.containerEl.ownerDocument.activeElement === this.textInput) this.textInput.blur();
+        super.close();
+        // The modal's delayed onClose only completes this ownership transfer.
+      }
+      this.ensureNoteBar();
+      await workspace.revealLeaf(note);
+      if (!current()) throw new Error("Objective opening was cancelled. Your chat was not restarted.");
+      this.noteOnly = false;
+      this.watchMobileLane();
+      createdChat = createdNote = undefined;
     } finally {
+      // Only new leaves from this operation are removed after a failed/cancelled transfer.
+      // Never detach a user's pre-existing native note or unrelated workspace leaf.
+      if (createdNote && createdNote !== this.noteLeaf) createdNote.detach();
+      if (createdChat && createdChat !== this.chatLeaf) createdChat.detach();
       this.opening = false;
     }
   }
 
-  private minimize(): void {
-    if (this.closed || this.surface !== "chat" || !this.hasNote || !Platform.isMobile) return;
-    this.surface = "minimizing";
-    const doc = this.containerEl.ownerDocument;
-    this.noteBar = doc.body.createDiv({ cls: "fjg-live-note-bar", attr: { "aria-label": "Talk to Vault controls", role: "group" } });
-    this.noteBar.hidden = true;
-    // Keep the same media element connected while the native modal detaches. Do not create another WebRTC session.
-    this.noteBar.appendChild(this.audio);
+  private ensureNoteBar(): void {
+    if (this.closed || this.noteBar) return;
+    const doc = this.contentEl.ownerDocument;
+    this.noteBar = doc.body.createDiv({ cls: "fjg-live-note-bar fjg-live-workspace-switch", attr: { "aria-label": "Talk to Vault controls", role: "group" } });
     this.barStatus = this.noteBar.createSpan({ cls: "fjg-live-note-status", attr: { role: "status", "aria-live": "polite" } });
     this.noteBar.createEl("button", { text: "Chat", attr: { "aria-label": "Return to Talk to Vault conversation" } })
       .addEventListener("click", () => this.restore());
+    this.noteBar.createEl("button", { text: "Note", attr: { "aria-label": "Show opened objective note" } })
+      .addEventListener("click", () => this.revealNote());
     this.barMute = this.noteBar.createEl("button", { text: "Mute", attr: { "aria-label": "Mute microphone", "aria-pressed": "false" } });
     this.barMute.addEventListener("click", () => this.toggleMute());
     this.barEnd = this.noteBar.createEl("button", { text: "End", attr: { "aria-label": "End conversation" } });
     this.barEnd.addEventListener("click", () => {
-      if (this.state === "connecting" || this.state === "connected") this.session?.end();
+      if (this.state === "connecting" || this.state === "connected") { this.navigationEpoch++; this.session?.end(); }
       else if (this.state !== "ending") this.close();
     });
     this.updateNoteBar();
-    if (doc.activeElement === this.textInput) this.textInput.blur();
-    // Avoid pulling focus back into the dashboard and away from the newly opened note.
-    this.shouldRestoreSelection = false;
-    super.close();
+  }
+
+  private revealNote(): void {
+    this.noteOnly = true; this.unmountMobileLane();
+    if (this.closed || !this.noteLeaf) return;
+    if (!this.app.workspace.getLeavesOfType("markdown").includes(this.noteLeaf) || this.noteLeaf.view.getState().file !== this.notePath) {
+      this.status.setText("The opened note was closed or changed. Choose the objective again; your chat is still here.");
+      this.restore();
+      return;
+    }
+    void this.app.workspace.revealLeaf(this.noteLeaf);
   }
 
   restore(): void {
-    if (this.closed || this.surface !== "note") return;
-    this.surface = "chat";
-    this.shouldRestoreSelection = true;
-    this.audioHome?.appendChild(this.audio);
-    this.removeNoteBar();
-    this.open();
-    if (this.hasNote) this.showNote?.focus({ preventScroll: true });
+    if (this.closed) return;
+    this.noteOnly = false;
+    if (this.mountMobileLane()) return;
+    if (this.chatLeaf) void this.app.workspace.revealLeaf(this.chatLeaf);
+  }
+
+  private watchMobileLane(): void {
+    if (this.closed) return;
+    if (!Platform.isMobile || this.stopLane) { this.mountMobileLane(); return; }
+    const root = this.app.workspace.containerEl?.querySelector<HTMLElement>(".workspace-split.mod-root");
+    if (!root?.isConnected || root.ownerDocument !== this.contentEl.ownerDocument) return;
+    this.laneRoot = root;
+    this.stopLane = followLiveViewport(root, width => {
+      this.laneWidth = width;
+      if (this.closed) return;
+      if (!canSplitLive(width, !!this.lane)) {
+        const focused = !!this.lane?.contains(root.ownerDocument.activeElement);
+        this.unmountMobileLane();
+        if (focused && this.chatLeaf) void this.app.workspace.revealLeaf(this.chatLeaf);
+      } else if (!this.noteOnly) this.mountMobileLane();
+    }, true);
+  }
+
+  private mountMobileLane(): boolean {
+    const root = this.laneRoot;
+    if (this.closed || this.noteOnly || !root?.isConnected || !this.chatLeaf || !this.conversationView || !canSplitLive(this.laneWidth, !!this.lane)) return false;
+    // Another Talk plugin may already own the workspace lane. Fall back to the native
+    // Chat/Note tabs instead of piling two overlays on top of the user's note.
+    if (root.querySelector(":scope > .fjgduo-vault-live-split-pane")) return false;
+    root.style.setProperty("--fjg-live-lane-pane-width", `${Math.round(Math.max(288, Math.min(390, this.laneWidth * 0.42)))}px`);
+    if (!this.lane) {
+      root.classList.add("fjg-live-lane-root");
+      this.lane = root.createEl("aside", { cls: "fjg-live-lane", attr: { "aria-label": "Talk to Vault conversation" } });
+      const header = this.lane.createDiv({ cls: "fjg-live-lane-header" });
+      header.createEl("h2", { text: "Talk to Vault" });
+      header.createEl("button", { text: "Close", attr: { "aria-label": "Close conversation" } }).addEventListener("click", () => this.close());
+      this.lane.appendChild(this.contentEl);
+    }
+    // The owner may have selected Chat in the compact tab group. Show the already
+    // requested note in-place; never create a duplicate editor or move its DOM.
+    if (this.app.workspace.getMostRecentLeaf?.() === this.chatLeaf && this.noteLeaf
+        && this.app.workspace.getLeavesOfType("markdown").includes(this.noteLeaf)
+        && this.noteLeaf.view.getState().file === this.notePath) void this.app.workspace.revealLeaf(this.noteLeaf);
+    return true;
+  }
+
+  private unmountMobileLane(): void {
+    if (!this.lane) return;
+    this.conversationView?.contentEl.appendChild(this.contentEl);
+    this.lane.remove(); this.lane = undefined;
+    this.laneRoot?.classList.remove("fjg-live-lane-root");
+    this.laneRoot?.style.removeProperty("--fjg-live-lane-pane-width");
   }
 
   private toggleMute(): void {
@@ -298,9 +426,8 @@ export class LiveVoiceModal extends Modal {
 
   onClose(): void {
     this.stopViewport?.();
-    if (!this.closed && this.surface === "minimizing") {
-      this.surface = "note";
-      if (this.noteBar) this.noteBar.hidden = false;
+    if (!this.closed && this.surface === "docking") {
+      this.surface = "workspace";
       return;
     }
     this.finish();
@@ -309,6 +436,11 @@ export class LiveVoiceModal extends Modal {
   private finish(): void {
     if (this.closed) return;
     this.closed = true;
+    this.navigationEpoch++;
+    this.unmountMobileLane(); this.stopLane?.(); this.stopLane = undefined;
+    this.conversationView?.releaseConversation();
+    if (this.chatLeaf?.view === this.conversationView) this.chatLeaf?.detach();
+    this.chatLeaf = undefined;
     this.pendingText = "";
     this.stopViewport?.();
     this.session?.end();

@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk to Vault | Synthetic native workspace QA</title>
+<style>
+  body {margin:10px;font:14px system-ui;background:#e8edf4;color:#172336}
+  nav {display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+  button {font:inherit;padding:6px 9px}
+  iframe {display:block;border:1px solid #9aa9b7;background:white}
+</style>
+<nav aria-label="Synthetic viewport controls">
+  <strong>Synthetic workspace QA</strong>
+  <button data-width="386">386 px</button><button data-width="600">600 px</button><button data-width="1024">1024 px</button>
+  <button id="keyboard" aria-pressed="false">Virtual keyboard</button><button id="reset">Reset fixture</button>
+  <output id="dimensions" aria-live="polite"></output>
+</nav>
+<iframe id="workspace" src="./workspace.html" title="Synthetic Obsidian workspace"></iframe>
+<script>
+const frame = document.querySelector("#workspace"), keyboard = document.querySelector("#keyboard");
+let width = 386;
+const render = () => {
+  frame.style.width = width + "px";
+  frame.style.height = Math.max(440, innerHeight - 100) + "px";
+  document.querySelector("#dimensions").textContent = width + " px iframe";
+};
+render(); addEventListener("resize", render);
+document.querySelectorAll("[data-width]").forEach(button => button.onclick = () => { width = Number(button.dataset.width); render(); });
+keyboard.onclick = () => {
+  const on = keyboard.getAttribute("aria-pressed") === "false";
+  keyboard.setAttribute("aria-pressed", String(on));
+  frame.contentWindow.dispatchEvent(new frame.contentWindow.CustomEvent("fixture-keyboard", { detail: on }));
+};
+document.querySelector("#reset").onclick = () => {
+  keyboard.setAttribute("aria-pressed","false");
+  frame.contentWindow.location.reload();
+};
+</script>

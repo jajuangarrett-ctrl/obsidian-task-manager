@@ -120,6 +120,7 @@ describe("Live connection lifecycle", () => {
     const silentTrack = { kind: "audio", stop: vi.fn(), enabled: true };
     const stop = vi.fn(); const close = vi.fn(async () => {});
     vi.stubGlobal("AudioContext", class {
+      state = "running";
       createMediaStreamDestination() { return { stream: { getTracks: () => [silentTrack], getAudioTracks: () => [silentTrack] } }; }
       createOscillator() { return { connect: vi.fn(), start: vi.fn(), stop }; }
       createGain() { return { gain: { value: 1 }, connect: vi.fn() }; }
@@ -157,6 +158,7 @@ describe("Live connection lifecycle", () => {
   it("keeps text enabled when an explicit microphone grant is denied", async () => {
     const { session } = setup();
     vi.stubGlobal("AudioContext", class {
+      state = "running";
       createMediaStreamDestination() { return { stream: { getTracks: () => [], getAudioTracks: () => [] } }; }
       createOscillator() { return { connect() {}, start() {}, stop() {} }; }
       createGain() { return { gain: { value: 1 }, connect() {} }; }
@@ -166,6 +168,116 @@ describe("Live connection lifecycle", () => {
     await session.start("key", "backend", "", "text"); Peer.last.channel.event({ type: "session.started" });
     vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(new Error("denied"));
     await session.enableMicrophone(); expect(session.active).toBe(true); expect(session.textOnly).toBe(true); session.dispose();
+  });
+
+  const startText = async () => {
+    const fixture = setup();
+    const silentTrack = { kind: "audio", stop: vi.fn(), enabled: true };
+    const resume = vi.fn(async () => {}); const close = vi.fn(async () => {});
+    const construct = vi.fn();
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      constructor() { construct(); }
+      createMediaStreamDestination() { return { stream: { getTracks: () => [silentTrack], getAudioTracks: () => [silentTrack] } }; }
+      createOscillator() { return { connect() {}, start() {}, stop() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {} }; }
+      resume = resume; close = close;
+    });
+    mocks.request.mockResolvedValue({ status: 201, json: { transport: { sdp: "answer" } } });
+    await fixture.session.start("fixture", "backend", "", "text");
+    Peer.last.channel.event({ type: "session.started" });
+    return { ...fixture, channel: Peer.last.channel, silentTrack, resume, close, construct };
+  };
+
+  it.each([null, undefined])("executes and continues typed tools with delegation %s, once per call", async delegation => {
+    const { session, channel, execute } = await startText();
+    execute.mockResolvedValue({ title: "Budget" });
+    const event = (nested: any) => channel.event({ type: "response.event", delegation_id: delegation, event: nested });
+    expect(session.sendText("Read my budget")).toBe(true);
+    event({ type: "response.created", response: { id: "typed-1" } });
+    event({ type: "response.output_item.done", response_id: "typed-1", item: { type: "function_call", name: "read_task", arguments: "{}", call_id: "call-typed" } });
+    event({ type: "response.completed", response: { id: "typed-1", output: [] } });
+    event({ type: "response.completed", response: { id: "typed-1", output: [] } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(channel.sent.map(e => e.type)).toEqual(["response.item.create", "response.create", "response.item.create", "response.create"]);
+    expect(channel.sent[2].item.call_id).toBe("call-typed");
+    expect(channel.sent.every(e => !("delegation_id" in e))).toBe(true);
+    expect(session.acceptingText).toBe(false);
+    event({ type: "response.created", response: { id: "typed-2" } });
+    event({ type: "response.completed", response: { id: "typed-2" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.acceptingText).toBe(true);
+    event({ type: "response.created", response: { id: "typed-1" } });
+    event({ type: "response.completed", response: { id: "typed-1" } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.acceptingText).toBe(true);
+    expect(session.sendText("Now another question")).toBe(true);
+    event({ type: "response.created", response: { id: "typed-3" } });
+    event({ type: "response.completed", response: { id: "typed-3" } });
+    await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(true);
+    session.dispose();
+  });
+
+  it.each(["response.cancelled", "response.incomplete"])("keeps the session usable after %s without executing partial calls", async type => {
+    const { session, channel, execute } = await startText();
+    session.sendText("Find my task");
+    channel.event({ type: "response.event", event: { type: "response.created", response: { id: "cancelled" } } });
+    channel.event({ type: "response.event", event: { type: "response.output_item.done", item: { type: "function_call", name: "read_task", arguments: "{}", call_id: "partial" } } });
+    channel.event({ type: "response.event", event: { type, response: { id: "cancelled" } } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(execute).not.toHaveBeenCalled(); expect(session.active).toBe(true); expect(session.acceptingText).toBe(true);
+    expect(session.sendText("Another request")).toBe(true);
+    session.dispose();
+  });
+
+  it("keeps unrelated backend work busy when an older response completes", async () => {
+    const { session, channel } = await startText();
+    channel.event({ type: "session.delegation.created", delegation: { target: "responses", id: "voice", response_id: "r1" } });
+    expect(session.acceptingText).toBe(false);
+    const event = (type: string, id: string) => channel.event({ type: "response.event", delegation_id: "voice", event: { type, response: { id } } });
+    event("response.created", "r1"); event("response.created", "r2"); event("response.completed", "r1");
+    await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(false);
+    event("response.completed", "r2"); await vi.advanceTimersByTimeAsync(0); expect(session.acceptingText).toBe(true);
+    session.dispose();
+  });
+
+  it.each([1, 2])("returns false and keeps the caller draft when send %s fails", async failingSend => {
+    const { session, channel, transcript, state } = await startText();
+    const original = channel.send.bind(channel); let count = 0;
+    vi.spyOn(channel, "send").mockImplementation(text => { if (++count === failingSend) throw Error("synthetic failure"); original(text); });
+    let draft = "Keep this exact draft";
+    if (session.sendText(draft)) draft = "";
+    expect(draft).toBe("Keep this exact draft"); expect(transcript).not.toHaveBeenCalled();
+    expect(session.active).toBe(false); expect(state.mock.calls.at(-1)?.[1]).toContain("draft was kept");
+    expect(session.sendText(draft)).toBe(false); // No duplicate retry into partially queued conversation.
+  });
+
+  it("rejects sends on closed transport without claiming success", async () => {
+    const { session, channel, transcript } = await startText();
+    channel.readyState = "closed";
+    expect(session.sendText("Keep me")).toBe(false); expect(transcript).not.toHaveBeenCalled(); session.dispose();
+  });
+
+  it("primes silent audio synchronously before key lookup and reuses it without microphone access", async () => {
+    const { session: unused } = await startText(); unused.dispose(); mocks.request.mockClear();
+    const { session } = setup();
+    const construct = vi.fn(); const resume = vi.fn(async () => {}); const stop = vi.fn();
+    vi.stubGlobal("AudioContext", class {
+      state = "running";
+      constructor() { construct(); }
+      createMediaStreamDestination() { const track = { stop }; return { stream: { getTracks: () => [track], getAudioTracks: () => [track] } }; }
+      createOscillator() { return { connect() {}, start() {}, stop() {} }; }
+      createGain() { return { gain: { value: 1 }, connect() {} }; }
+      resume = resume; async close() {}
+    });
+    session.prepareTextInput();
+    expect(resume).toHaveBeenCalledTimes(1); expect(mocks.request).not.toHaveBeenCalled();
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    await Promise.resolve(); // Represents asynchronous saved-key lookup.
+    await session.start("fixture", "backend", "", "text");
+    expect(construct).toHaveBeenCalledTimes(1); expect(resume).toHaveBeenCalledTimes(1);
+    session.dispose(); expect(stop).toHaveBeenCalled();
   });
 
 });

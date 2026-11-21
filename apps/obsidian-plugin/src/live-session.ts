@@ -19,10 +19,15 @@ export function liveRequest(sdp: string, backendModel: string, context: string) 
 /** Runs in Obsidian's trusted plugin runtime, using its native HTTP API for the saved key. */
 export class DashboardLiveSession {
   private backendBusy = false;
-  private backendHasTools = false;
+  private pendingResponses = 0;
+  private responses = new Map<string, { started: boolean; finished: boolean; settled: boolean }>();
+  private currentResponses = new Map<string, string>();
   private inputMode: "voice" | "text" = "voice";
   private silentContext?: AudioContext;
   private silentSource?: OscillatorNode;
+  private silentStream?: MediaStream;
+  private silentResume?: Promise<void>;
+  private silentResumeError?: unknown;
   private peer?: RTCPeerConnection;
   private channel?: RTCDataChannel;
   private microphone?: MediaStream;
@@ -41,6 +46,19 @@ export class DashboardLiveSession {
     this.loop = new LiveToolLoop(callbacks.execute, (event) => this.send(event));
   }
   get active(): boolean { return this.ready && !this.disposed && !this.ending; }
+
+  /** Call in the original Send/Type click, before awaiting key lookup (iOS activation). */
+  prepareTextInput(): void {
+    if (this.disposed || this.silentContext) return;
+    const context = this.silentContext = new AudioContext();
+    const destination = context.createMediaStreamDestination();
+    this.silentStream = destination.stream;
+    const source = this.silentSource = context.createOscillator();
+    const gain = context.createGain(); gain.gain.value = 0;
+    source.connect(gain); gain.connect(destination); source.start();
+    // Attach a rejection handler immediately, even if key lookup has not finished.
+    this.silentResume = context.resume().catch(error => { this.silentResumeError = error; });
+  }
 
   async start(apiKey: string, backendModel: string, context: string, inputMode: "voice" | "text" = "voice"): Promise<void> {
     if (this.disposed) return;
@@ -61,18 +79,15 @@ export class DashboardLiveSession {
       // Start from the user's click; never automatically reopen a microphone after disconnecting.
       let microphone: MediaStream;
       if (inputMode === "text") {
-        // A generated silent track negotiates two-way audio without accessing any input device.
-        const context = this.silentContext = new AudioContext();
-        const destination = context.createMediaStreamDestination();
-        const source = this.silentSource = context.createOscillator();
-        const gain = context.createGain(); gain.gain.value = 0;
-        source.connect(gain); gain.connect(destination); source.start();
+        // Reuse the silent track primed by the original user gesture, if provided.
+        this.prepareTextInput();
         let resumeTimer: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
-          context.resume(),
+          this.silentResume!,
           new Promise<never>((_, reject) => { resumeTimer = setTimeout(() => reject(new Error("Audio playback could not start. Close this panel and try Type a message again.")), 10000); })
         ]).finally(() => clearTimeout(resumeTimer));
-        microphone = destination.stream;
+        if (this.silentResumeError || this.silentContext?.state !== "running") throw new Error("Audio playback could not start. Close this panel and try Type a message again.");
+        microphone = this.silentStream!;
       } else {
         microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       }
@@ -144,12 +159,17 @@ export class DashboardLiveSession {
   sendText(text: string): boolean {
     const value = text.trim();
     if (!value || value.length > 4000 || !this.acceptingText) return false;
-    this.backendBusy = true;
-    this.callbacks.busy?.(true);
-    this.callbacks.transcript("You", value);
-    this.send({ type: "response.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: value }] } });
-    this.send({ type: "response.create" });
-    return true;
+    try {
+      this.send({ type: "response.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text: value }] } });
+      this.send({ type: "response.create" });
+      this.callbacks.transcript("You", value);
+      return true;
+    } catch {
+      // The item may already have been queued. Never retry into this conversation:
+      // close it and leave the caller's draft intact instead of duplicating a change.
+      this.fail("Could not send the message. Your draft was kept. Reconnect before trying again; check any changes first.");
+      return false;
+    }
   }
 
   mute(muted: boolean): void { this.microphone?.getAudioTracks().forEach((track) => { track.enabled = !muted; }); }
@@ -164,7 +184,8 @@ export class DashboardLiveSession {
     this.audio.pause();
     if (this.sessionStarted && this.channel?.readyState === "open") {
       this.callbacks.state("ending", "Ending conversation…");
-      this.send({ type: "session.close" });
+      try { this.send({ type: "session.close" }); }
+      catch { this.dispose(); this.callbacks.state("ended", "Conversation ended; final usage was not received."); return; }
       clearTimeout(this.timer);
       this.timer = setTimeout(() => { this.dispose(); this.callbacks.state("ended", "Conversation ended; final usage was not received."); }, 5000);
     } else {
@@ -180,13 +201,16 @@ export class DashboardLiveSession {
     clearTimeout(this.timer);
     clearTimeout(this.readinessTimer);
     this.microphone?.getTracks().forEach((track) => track.stop());
-    this.silentSource?.stop();
-    void this.silentContext?.close().catch(() => {});
+    this.silentSource?.stop(); this.silentSource = undefined;
+    this.silentStream?.getTracks().forEach(track => track.stop()); this.silentStream = undefined;
+    void this.silentContext?.close().catch(() => {}); this.silentContext = undefined;
     this.channel?.close();
     this.peer?.close();
     this.audio.pause();
     this.audio.srcObject = null;
     this.ready = false;
+    this.responses.clear(); this.currentResponses.clear(); this.pendingResponses = 0;
+    this.updateBusy();
   }
 
   private onEvent(event: Record<string, any>): void {
@@ -209,18 +233,55 @@ export class DashboardLiveSession {
       this.fail("OpenAI reported a voice session error. Ended the connection; saved changes remain saved.");
     } else if (["session.input_transcript.delta", "session.output_transcript.delta"].includes(event.type) && typeof event.delta === "string") {
       this.callbacks.transcript(event.type === "session.input_transcript.delta" ? "You" : "Assistant", event.delta);
-    } else if (event.type === "response.event" && this.active) {
-      const nested = event.event;
-      if (nested?.type === "response.created") { this.backendBusy = true; this.backendHasTools = false; this.callbacks.busy?.(true); }
-      if (nested?.type === "response.output_item.done" && nested.item?.type === "function_call") this.backendHasTools = true;
-      const final = nested?.type === "response.completed" && !this.backendHasTools;
-      void this.loop.handle(event).then(() => {
-        if (final && this.active) { this.backendBusy = false; this.callbacks.busy?.(false); }
-      }).catch(() => this.fail("Could not finish a voice task request. Check the dashboard before trying the change again."));
-      if (["response.failed", "response.cancelled", "response.incomplete"].includes(nested?.type)) {
-        this.fail("The backend request did not complete. Check your objectives before retrying any change.");
+    } else if (event.type === "session.delegation.created" && this.active && event.delegation?.target === "responses") {
+      const { id, response_id: responseId } = event.delegation;
+      if (typeof id === "string" && typeof responseId === "string" && !this.responses.has(responseId)) {
+        this.currentResponses.set(id, responseId);
+        this.responses.set(responseId, { started: false, finished: false, settled: false });
+        this.updateBusy();
       }
+    } else if (event.type === "response.event" && this.active) {
+      this.handleBackendEvent(event);
     }
+  }
+
+  private handleBackendEvent(envelope: Record<string, any>): void {
+    const event = envelope.event;
+    if (!event || typeof event.type !== "string") return;
+    // Live permits null/omitted delegation_id for application-initiated Responses.
+    // This local key is only for the existing tool loop, never sent to OpenAI.
+    const delegation = typeof envelope.delegation_id === "string" ? envelope.delegation_id : "local:typed-responses";
+    const id = event.response?.id || event.response_id || this.currentResponses.get(delegation);
+    if (typeof id !== "string") return;
+    if (event.type === "response.created") {
+      if (this.responses.get(id)?.started) return; // Repeated created events cannot reset a response.
+      this.currentResponses.set(delegation, id);
+      this.responses.set(id, { started: true, finished: false, settled: false });
+      this.pendingResponses = Math.max(0, this.pendingResponses - 1);
+      this.updateBusy();
+    }
+    const response = this.responses.get(id);
+    if (!response || response.finished) return;
+    const terminal = ["response.completed", "response.cancelled", "response.incomplete", "response.failed"].includes(event.type);
+    // Mark terminal events immediately, but keep this response busy until tools finish.
+    if (terminal) response.finished = true;
+    const normalized = { ...envelope, delegation_id: delegation,
+      event: { ...event, response: { ...event.response, id } } };
+    void this.loop.handle(normalized).then(() => {
+      if (!terminal || this.disposed || this.ending) return;
+      response.settled = true;
+      this.updateBusy();
+      if (event.type === "response.failed") {
+        this.fail("The backend request failed. Check your objectives before retrying any change.");
+      } else if (this.active && ["response.cancelled", "response.incomplete"].includes(event.type)) {
+        this.callbacks.state("connected", "The request did not finish. You can continue the conversation; check any changes before retrying.");
+      }
+    }).catch(() => this.fail("Could not finish a voice task request. Check the dashboard before trying the change again."));
+  }
+
+  private updateBusy(): void {
+    const busy = this.pendingResponses > 0 || [...this.responses.values()].some(response => !response.settled);
+    if (busy !== this.backendBusy) { this.backendBusy = busy; this.callbacks.busy?.(busy); }
   }
 
   /** A session event alone does not establish that the phone audio path is sending. */
@@ -261,7 +322,9 @@ export class DashboardLiveSession {
   }
 
   private send(event: Record<string, unknown>): void {
-    if (!this.disposed && this.channel?.readyState === "open") this.channel.send(JSON.stringify({ event_id: crypto.randomUUID(), ...event }));
+    if (this.disposed || this.channel?.readyState !== "open") throw new Error("Live channel is not open.");
+    this.channel.send(JSON.stringify({ event_id: crypto.randomUUID(), ...event }));
+    if (event.type === "response.create") { this.pendingResponses++; this.updateBusy(); }
   }
 
   private fail(message: string): void {

@@ -34,6 +34,7 @@ import {
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
 import { LiveVoiceModal } from "./src/live-voice-modal";
+import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./src/live-conversation-view";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
 import { UnifiedCaptureModal } from "./src/unified-capture-modal";
 import type { UnifiedCaptureRequest } from "./src/unified-capture-model";
@@ -75,6 +76,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.workspaceService.initialize();
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
+    this.registerView(LIVE_CONVERSATION_VIEW, leaf => new LiveConversationView(leaf));
     this.addCommand({ id: "talk-to-dashboard", name: "Talk to Dashboard", callback: () => this.openLiveVoice() });
     this.addRibbonIcon("list-checks", "Open FJG Objective Manager", () => this.activateDashboard());
     this.addRibbonIcon("circle-plus", "Quick capture an objective", () => this.openQuickCaptureModal());
