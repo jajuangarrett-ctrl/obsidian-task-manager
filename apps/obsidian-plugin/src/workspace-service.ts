@@ -1,4 +1,5 @@
 import type { ObjectiveSelection } from "./objective-selection";
+import { isReviewArtifact } from "./objective-file-review";
 import { movedPath, rewriteMovedLinks } from "./move-links";
 import { DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
 import YAML from "yaml";
@@ -320,6 +321,7 @@ export class TaskWorkspaceService {
       const related = vaultFiles
         .filter((file) => {
           const filePath = normalizePath(file.path);
+          if (isReviewArtifact(file.name)) return false;
           if (referencedPaths.has(filePath)) return true;
           if (!filePath.startsWith(relatedRoot) || isCanonicalTaskFile(file.name) || file.name.startsWith(".")) {
             return false;

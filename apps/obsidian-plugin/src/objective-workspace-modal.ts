@@ -6,6 +6,7 @@ import type FjgTaskManagerPlugin from "../main";
 import type { IndexedTask } from "./workspace-service";
 import { nextObjectiveAction } from "./home-model";
 import { canEditAppObjective } from "./objectives-app-model";
+import { renderObjectiveFileReviewActions, renderObjectiveFilesDisclosure } from "./objective-file-review-ui";
 
 const APP_DETAIL_SECTIONS = ["Overview", "Actions", "Files", "History"] as const;
 type AppDetailSection = typeof APP_DETAIL_SECTIONS[number];
@@ -79,7 +80,10 @@ export class ObjectiveWorkspaceContent {
       body.createEl("h3",{text:"Objective brief"});
       if(brief){this.button(body,"Edit Start Here note",()=>void this.app.workspace.getLeaf("tab").openFile(brief));const content=await this.app.vault.read(brief);if(generation!==this.generation)return;await MarkdownRenderer.render(this.app,content,body.createDiv({cls:"fjg-start-here-markdown"}),brief.path,this.markdownComponent);}
       else {body.createEl("p",{text:"Create a Start Here note for the outcome, open questions, waiting items and key files. Status and next action above stay linked to the objective record."});const create=this.button(body,"Create Start Here note",()=>{create.disabled=true;void service.ensureStartHereNote(this.taskId).then(file=>{void this.app.workspace.getLeaf("tab").openFile(file);void this.render();}).catch(error=>{new Notice(String(error));create.disabled=false;});});create.disabled=task.archived;}
-      body.createEl("h3",{text:"Key files"});
+      const fileHeading = body.createDiv({ cls: "fjg-objective-files-heading" });
+      fileHeading.createEl("h3", { text: "Key files" });
+      const observedPath = task.taskFile.path;
+      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode));
       this.renderFiles(body, service.objectiveFiles(this.taskId), true);
     } catch(error){this.contentEl.createEl("p",{text:`Unable to open this objective: ${String(error)}`,cls:"fjg-workspace-error"});}
   }
@@ -126,7 +130,9 @@ export class ObjectiveWorkspaceContent {
       return;
     }
     if (this.appSection === "Files") {
-      body.createEl("h3", { text: "Related files" });
+      const fileHeading = body.createDiv({ cls: "fjg-objective-files-heading" });
+      fileHeading.createEl("h3", { text: "Related files" });
+      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode));
       body.createEl("code", { text: service.copyFolderForTask(this.taskId).folderPath, cls: "fjg-workspace-path" });
       const files = service.objectiveFiles(this.taskId);
       this.renderFiles(body.createDiv({ cls: "fjg-workspace-file-list" }), files, false, observedPath);
@@ -194,12 +200,13 @@ export class ObjectiveWorkspaceContent {
 
     renderConversion(body, task, this.plugin);
     const files = this.plugin.workspaceService.objectiveFiles(this.taskId);
-    const filesSection = body.createEl("details", { cls: "fjg-overview-mobile-files" });
-    filesSection.open = this.mobileFilesOpen;
-    filesSection.createEl("summary", { text: `Files (${files.length})` });
-    filesSection.addEventListener("toggle", () => { if (this.contentEl.contains(filesSection)) this.mobileFilesOpen = filesSection.open; });
-    const filesList = filesSection.createDiv({ cls: "fjg-workspace-file-list" });
-    this.renderFiles(filesList, files, false);
+    const observedPath = task.taskFile.path;
+    renderObjectiveFilesDisclosure(body, {
+      count: files.length,
+      initiallyOpen: this.mobileFilesOpen,
+      onToggle: (open) => { this.mobileFilesOpen = open; },
+      openReview: (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode),
+    }, (section) => this.renderFiles(section.createDiv({ cls: "fjg-workspace-file-list" }), files, false));
 
     const secondary = body.createEl("details", { cls: "fjg-overview-mobile-secondary" });
     secondary.open = this.mobileMoreOpen;

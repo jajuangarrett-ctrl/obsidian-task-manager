@@ -14,6 +14,9 @@ import {
 import { decodeProtocolPayload } from "@fjg/task-protocol";
 import { TaskCatalogServer } from "./src/catalog-server";
 import { ObjectiveWorkspaceModal } from "./src/objective-workspace-modal";
+import { ObjectiveFileReviewService } from "./src/objective-file-review";
+import { isReviewStorePath, VaultObjectiveReviewWorkspace } from "./src/objective-file-review-vault";
+import { ObjectiveFileReviewModal, type ObjectiveFileReviewMode } from "./src/objective-file-review-ui";
 import { SubtaskEditModal } from "./src/subtask-modals";
 import { TaskDashboardView, TASK_DASHBOARD_VIEW } from "./src/dashboard-view";
 import { OBJECTIVES_APP_VIEW, canEditAppObjective } from "./src/objectives-app-model";
@@ -61,6 +64,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private liveVoiceModal: LiveVoiceModal | null = null;
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
+  private objectiveFileReviewService!: ObjectiveFileReviewService;
   readonly objectiveSelection = new ObjectiveSelection();
   private readonly deleteCapabilities = new DeleteCapabilities();
   private readonly catalogServer = new TaskCatalogServer();
@@ -77,6 +81,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.saveData(this.settings);
     this.workspaceService = new TaskWorkspaceService(this.app, () => this.settings);
     await this.workspaceService.initialize();
+    this.objectiveFileReviewService = new ObjectiveFileReviewService(
+      new VaultObjectiveReviewWorkspace(this.app, this.workspaceService, () => this.settings),
+      () => this.settings.openAiApiKey,
+    );
 
     this.registerView(TASK_DASHBOARD_VIEW, (leaf) => new TaskDashboardView(leaf, this));
     this.registerView(OBJECTIVES_APP_VIEW, (leaf) => new ObjectivesAppView(leaf, this));
@@ -201,17 +209,21 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }});
 
     this.registerEvent(this.app.vault.on("create", (file) => {
+      if (isReviewStorePath(file.path, this.settings.activeRoot)) return;
       if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
+      if (isReviewStorePath(file.path, this.settings.activeRoot)) return;
       if (this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
       this.scheduleGmailTaskIntake(file);
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
+      if (isReviewStorePath(file.path, this.settings.activeRoot)) return;
       if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path)) this.scheduleRefresh();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      if (isReviewStorePath(file.path, this.settings.activeRoot) && isReviewStorePath(oldPath, this.settings.activeRoot)) return;
       if (!(file instanceof TFile) || this.workspaceService.affectsWorkspace(file.path) || this.workspaceService.affectsWorkspace(oldPath)) this.scheduleRefresh();
     }));
 
@@ -225,6 +237,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
+    this.objectiveFileReviewService?.dispose();
     this.liveVoiceModal?.shutdown();
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     if (this.gmailIntakeTimer !== null) window.clearTimeout(this.gmailIntakeTimer);
@@ -721,6 +734,10 @@ export default class FjgTaskManagerPlugin extends Plugin {
         : `Objective due date cleared: ${task.record.title}`
     );
     this.refreshDashboard();
+  }
+
+  openObjectiveFileReview(taskId: string, observedPath: string, mode: ObjectiveFileReviewMode): void {
+    new ObjectiveFileReviewModal(this.app, this.objectiveFileReviewService, { id: taskId, observedPath }, mode).open();
   }
 
   openObjectiveWorkspace(taskId: string, folder = false, actions = false): void {

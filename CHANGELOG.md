@@ -1,3 +1,9 @@
+## 0.30.20
+
+- Add **Review Files** and **View Review** to objective Files rows on desktop and mobile. Get cited analysis, conflicting evidence, prioritized next steps, blockers, and decisions using GPT-6.2 Sol.
+- Confirm each transfer of scoped Files content; later reviews send only eligible changes plus surviving prior analysis. View saved reviews offline. No objective metadata or unrelated files are sent.
+- Show unsupported or skipped sources and keep the previous saved review on failure. Do not change original files or objective fields.
+
 ## 0.30.19
 
 - Add the optional Objectives App View, modeled on the native FJG Objectives app, without replacing Home or Overview.

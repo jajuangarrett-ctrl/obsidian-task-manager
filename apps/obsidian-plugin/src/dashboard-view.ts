@@ -1,5 +1,6 @@
 import {watchLocalDate} from "./dashboard-date";
 import { mountExpandedContent } from "./lazy-details";
+import { renderObjectiveFilesDisclosure } from "./objective-file-review-ui";
 import { isSelectionView, renderSelectionCheckbox, renderSelectionSummary } from "./objective-selection";
 import { isConvertedOriginal } from "@fjg/task-core";
 import { renderConversion } from "./conversion-ui";
@@ -1015,13 +1016,16 @@ export class TaskDashboardView extends ItemView {
 
   private renderObjectiveFiles(parent: HTMLElement, task: IndexedTask): void {
     const files = this.taskPlugin.workspaceService.objectiveFiles(task.record.task_id);
-    if (!files.length) return;
-    const section = parent.createEl("details", { cls: "fjg-objective-files" });
-    section.createEl("summary", {
-      text: `Files · ${files.length}`,
-      attr: { "aria-label": `${files.length} objective ${files.length === 1 ? "file" : "files"} for ${task.record.title}` }
-    });
-    mountExpandedContent(section, () => {
+    const taskId = task.record.task_id;
+    const observedPath = task.taskFile.path;
+    renderObjectiveFilesDisclosure(parent, {
+      count: files.length,
+      openReview: (mode) => this.taskPlugin.openObjectiveFileReview(taskId, observedPath, mode),
+    }, (section) => {
+      if (!files.length) {
+        section.createEl("p", { cls: "fjg-objective-files-empty", text: "No related files yet." });
+        return;
+      }
       const list = section.createDiv({ cls: "fjg-objective-file-list" });
       for (const related of files) {
         const open = list.createEl("button", {

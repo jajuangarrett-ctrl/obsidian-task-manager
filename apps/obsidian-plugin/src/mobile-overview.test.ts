@@ -75,7 +75,7 @@ function setup(mobile: boolean) {
       startHereFile: () => null, objectiveFiles: () => [{ file }], updateSubtask: vi.fn()
     },
     copyTaskFolderPath: vi.fn(), showTaskFileLocationInFileFocus: vi.fn(),
-    openUpdateModal: vi.fn(), openObjectiveActionModal: vi.fn(),
+    openUpdateModal: vi.fn(), openObjectiveActionModal: vi.fn(), openObjectiveFileReview: vi.fn(),
     openTask: vi.fn(), openPeoplePicker: vi.fn(), refreshDashboard: vi.fn()
   };
   const view = Object.assign(Object.create(TaskDashboardView.prototype), {
@@ -108,6 +108,12 @@ it("opens on-mobile actions in a full-pane route and restores list context and f
     panel.findText("Copy path")?.handlers.click();
     panel.findText("Update")?.handlers.click();
     panel.findText("Add action")?.handlers.click();
+    expect(panel.findText("Evidence.pdf")).toBeUndefined();
+    panel.findText("Review Files")?.handlers.click();
+    panel.findText("View Review")?.handlers.click();
+    expect(plugin.openObjectiveFileReview).toHaveBeenNthCalledWith(1, "goal-1", "Vault/Objective/task.md", "review");
+    expect(plugin.openObjectiveFileReview).toHaveBeenNthCalledWith(2, "goal-1", "Vault/Objective/task.md", "view");
+    panel.findText("Files · 1")?.handlers.click();
     panel.findText("Evidence.pdf")?.handlers.click();
     expect(plugin.showTaskFileLocationInFileFocus).toHaveBeenCalledWith("goal-1");
     expect(plugin.copyTaskFolderPath).toHaveBeenCalledWith("goal-1");
