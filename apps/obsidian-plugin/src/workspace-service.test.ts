@@ -204,7 +204,7 @@ class MockVault {
   }
 }
 
-function createService(readableObjectiveFileNames = false) {
+function createService(readableForNewObjectives = false) {
   const vault = new MockVault();
   const app = {
     vault,
@@ -213,7 +213,6 @@ function createService(readableObjectiveFileNames = false) {
     }
   };
   const settings = {
-    readableObjectiveFileNames,
     activeRoot: "08 Tasks/Workspaces",
     inboxRoot: "08 Tasks/Inbox",
     archiveRoot: "08 Tasks/Archive",
@@ -222,7 +221,7 @@ function createService(readableObjectiveFileNames = false) {
   };
   return {
     vault, app, settings,
-    service: new TaskWorkspaceService(app as never, () => settings as never)
+    service: new TaskWorkspaceService(app as never, () => settings as never, readableForNewObjectives)
   };
 }
 
@@ -2315,7 +2314,7 @@ describe("Readable objective filenames and Do First conversion", () => {
   });
 
   it("renames only Do First objective files, preserving IDs, content and update history", async () => {
-    const { service, vault, settings } = createService();
+    const { service, vault } = createService();
     await service.initialize();
     await vault.createFolder("03 Areas/QA");
     const keep = await service.createTask({ title: "Keep generic", status: "waiting" });
@@ -2324,8 +2323,6 @@ describe("Readable objective filenames and Do First conversion", () => {
     const before = await vault.read(inbox.taskFile as never);
     const update = await vault.read(inbox.updatesFile as never);
     expect((await service.previewDoFirstFileNames()).groups).toHaveLength(2);
-    await expect(service.renameDoFirstFiles()).rejects.toThrow("other devices");
-    settings.readableObjectiveFileNames = true;
     const result = await service.renameDoFirstFiles();
     expect(result.renamed).toHaveLength(4);
     expect(result.skipped).toEqual([]);
@@ -2339,15 +2336,40 @@ describe("Readable objective filenames and Do First conversion", () => {
   });
 
   it("rolls back the update log if renaming the objective fails", async () => {
-    const { service, vault, settings } = createService();
+    const { service, vault } = createService();
     await service.initialize();
     const item = await service.createTask({ title: "Keep the pair", status: "do-first" });
     const from = item.updatesFile?.path ?? "";
-    settings.readableObjectiveFileNames = true;
     vault.failNextRenameTarget = "08 Tasks/Inbox/Tasks/Keep the pair/Keep the pair - Objective.md";
     const result = await service.renameDoFirstFiles();
     expect(result.renamed).toEqual([]);
     expect(result.skipped).toHaveLength(1);
     expect(service.getById(item.record.task_id).updatesFile?.path).toBe(from);
   });
+});
+
+it("renames objective files across statuses without changing those statuses or touching project definitions", async () => {
+  const { service, vault } = createService();
+  await service.initialize();
+  await vault.createFolder("03 Areas/All Statuses");
+  const statuses = ["do-first", "waiting", "completed", "inbox", "do-soon"] as const;
+  const prior = await Promise.all(statuses.map(status => service.createTask({ title: "Example " + status, status })));
+  const area = await service.createTask({ title: "Outside Inbox", status: "completed", destination: "03 Areas/All Statuses" });
+  const project = await service.createProject("Leave this Project");
+  const originalProjectPath = project.projectFile.path;
+  const originalProject = await vault.read(project.projectFile as never);
+  const preview = await service.previewObjectiveFileNames("all");
+  expect(preview.groups).toHaveLength(6);
+  const result = await service.renameObjectiveFiles("all");
+  expect(result.renamed).toHaveLength(12);
+  expect(result.skipped).toEqual([]);
+  for (const old of [...prior,area]) {
+    const current = service.getById(old.record.task_id);
+    expect(current.record.status).toBe(old.record.status);
+    expect(current.taskFile.name).toBe(old.record.title + " - Objective.md");
+    expect(current.updatesFile?.name).toBe(old.record.title + " - Updates.md");
+  }
+  expect(project.projectFile.path).toBe(originalProjectPath);
+  expect(await vault.read(project.projectFile as never)).toBe(originalProject);
+  expect((await service.renameObjectiveFiles("all")).renamed).toHaveLength(0);
 });

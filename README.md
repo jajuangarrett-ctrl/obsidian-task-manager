@@ -392,6 +392,6 @@ Starting by typing does not request microphone access. Choose **Turn on micropho
 
 ### Readable objective filenames
 
-Objective Manager reads both legacy names and `Title - Objective.md` / `Title - Updates.md`. **Readable objective filenames** in plugin settings opts new objectives into the named format. Leave it off until every device and app that reads the vault can open both formats.
+New objectives use `Title - Objective.md` and `Title - Updates.md` by default. Objective Manager still reads legacy names. Use **Rename objective files across all statuses** to rename existing objectives, including completed and archived objectives, or use the **Rename Do First objective files to readable titles** command for only Do First.
 
-After that check, the **Rename Do First objective files to readable titles** command migrates only objectives currently marked Do First. It keeps stable IDs, renames the corresponding update log, does not touch action data or project definitions, and skips collisions. It uses Obsidian's rename operation to preserve links where vault link updating is enabled.
+The one-time migration preserves objective IDs, keeps update logs paired, leaves legacy Project records alone, and skips conflicts rather than overwriting files. Back up the vault, update other vault clients to a compatible version, and leave Obsidian open with automatic link updates on while it runs.

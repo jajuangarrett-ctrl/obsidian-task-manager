@@ -20,7 +20,6 @@ export interface TaskManagerSettings {
   projectRoot: string;
   projectArchiveRoot: string;
   dashboardDefault: "do-first";
-  readableObjectiveFileNames: boolean;
   catalogEnabled: boolean;
   catalogPort: number;
   catalogToken: string;
@@ -41,7 +40,6 @@ export const DEFAULT_SETTINGS: TaskManagerSettings = {
   projectRoot: DEFAULT_PROJECT_ROOT,
   projectArchiveRoot: DEFAULT_PROJECT_ARCHIVE_ROOT,
   dashboardDefault: "do-first",
-  readableObjectiveFileNames: false,
   catalogEnabled: true,
   catalogPort: 27124,
   catalogToken: "",
@@ -65,7 +63,6 @@ export function normalizeSettings(value: Partial<TaskManagerSettings>): TaskMana
     projectRoot: normalizeVaultPath(value.projectRoot || DEFAULT_PROJECT_ROOT),
     projectArchiveRoot: normalizeVaultPath(value.projectArchiveRoot || DEFAULT_PROJECT_ARCHIVE_ROOT),
     dashboardDefault: "do-first",
-    readableObjectiveFileNames: value.readableObjectiveFileNames === true,
     catalogEnabled: value.catalogEnabled !== false,
     catalogPort: normalizePort(value.catalogPort),
     catalogToken: value.catalogToken || createCatalogToken(),
@@ -98,14 +95,6 @@ export class TaskManagerSettingTab extends PluginSettingTab {
       .setDesc("Talk to dashboard uses GPT-Live-1 for speech and this model for objective tools. Uses the saved OpenAI key; clear requests apply immediately.")
       .addText((text) => text.setValue(this.taskPlugin.settings.liveBackendModel).onChange(async (value) => {
         this.taskPlugin.settings.liveBackendModel = value.trim() || DEFAULT_SETTINGS.liveBackendModel;
-        await this.taskPlugin.saveSettings();
-      }));
-
-    new Setting(containerEl)
-      .setName("Readable objective filenames")
-      .setDesc("New files use Title - Objective.md and Title - Updates.md. Leave off until all apps that read this vault support these names. Existing files are not changed by this switch.")
-      .addToggle((toggle) => toggle.setValue(this.taskPlugin.settings.readableObjectiveFileNames).onChange(async (enabled) => {
-        this.taskPlugin.settings.readableObjectiveFileNames = enabled;
         await this.taskPlugin.saveSettings();
       }));
 

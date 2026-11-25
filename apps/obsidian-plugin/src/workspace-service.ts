@@ -174,7 +174,8 @@ export class TaskWorkspaceService {
 
   constructor(
     private readonly app: App,
-    private readonly getSettings: () => TaskManagerSettings
+    private readonly getSettings: () => TaskManagerSettings,
+    private readonly useReadableNamesForNewObjectives = true
   ) {}
 
   async initialize(): Promise<void> {
@@ -1596,7 +1597,7 @@ export class TaskWorkspaceService {
       });
     }
 
-    const paths = await this.availableRelocationPaths(destination, taskDocument.record, this.getSettings().readableObjectiveFileNames || !!namedStem(task.taskFile.name, "Task"));
+    const paths = await this.availableRelocationPaths(destination, taskDocument.record, !!namedStem(task.taskFile.name, "Task"));
     const targetFilesRoot = paths.filesPath;
     const relatedMoves: Array<{ file: TFile; from: string; to: string }> = [];
     const relatedPaths = new Map<string, string>();
@@ -2314,7 +2315,7 @@ export class TaskWorkspaceService {
     if (useArtifactLayout) {
       const folderName = await this.availableArtifactFolderName(workspace, record.title, currentTaskPath);
       const named = namedStem(currentTaskPath.split("/").at(-1) || "", "Task");
-      const useReadableNames = this.getSettings().readableObjectiveFileNames || !!named;
+      const useReadableNames = (!currentTaskPath && this.useReadableNamesForNewObjectives) || !!named;
       const stem = named || folderName;
       const taskPath = useReadableNames ? `${taskArtifactFolderPath(workspace, "Tasks", folderName)}/${objectiveFileName(stem, "Task")}` : taskArtifactNotePath(workspace, folderName);
       const updatesPath = useReadableNames ? `${taskArtifactFolderPath(workspace, "Updates", folderName)}/${objectiveFileName(stem, "Updates")}` : taskArtifactUpdatesPath(workspace, folderName);
@@ -2327,7 +2328,7 @@ export class TaskWorkspaceService {
     await this.ensureFolder(tasksFolder);
     await this.ensureFolder(updatesFolder);
     for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
-      const useReadableNames = this.getSettings().readableObjectiveFileNames || !!namedStem(currentTaskPath.split("/").at(-1) || "", "Task");
+      const useReadableNames = !!namedStem(currentTaskPath.split("/").at(-1) || "", "Task");
       const stem = taskArtifactFolderName(record.title, copyNumber);
       const taskPath = useReadableNames ? `${tasksFolder}/${objectiveFileName(stem, "Task")}` : normalizePath(taskNoteFilePath(workspace, record.title, copyNumber));
       const updatesPath = useReadableNames ? `${updatesFolder}/${objectiveFileName(stem, "Updates")}` : normalizePath(taskUpdateFilePath(workspace, record.title, copyNumber));
@@ -2342,7 +2343,7 @@ export class TaskWorkspaceService {
   private async availableRelocationPaths(
     workspace: string,
     record: TaskRecord,
-    useReadableNames = this.getSettings().readableObjectiveFileNames
+    useReadableNames = this.useReadableNamesForNewObjectives
   ): Promise<{ bundlePath: string; taskPath: string; updatesPath: string; filesPath: string }> {
     await this.ensureFolder(workspace);
     const collectionPath = normalizePath(`${workspace}/${taskRelocationCollectionName(workspace)}`);
@@ -2438,7 +2439,9 @@ export class TaskWorkspaceService {
     await this.ensureFolder(taskFilesFolderPath(path));
   }
 
-  async previewDoFirstFileNames(): Promise<{
+  previewDoFirstFileNames() { return this.previewObjectiveFileNames("do-first"); }
+
+  async previewObjectiveFileNames(scope: "all" | "do-first"): Promise<{
     groups: Array<{ id: string; moves: Array<{ from: string; to: string }> }>;
     skipped: Array<{ id: string; reason: string }>;
   }> {
@@ -2464,7 +2467,7 @@ export class TaskWorkspaceService {
       if (moves.length) groups.push({ id, moves });
     };
     for (const task of tasks) {
-      if (task.archived || task.record.status !== "do-first") continue;
+      if (scope === "do-first" && (task.archived || task.record.status !== "do-first")) continue;
       const id = task.record.task_id;
       if (this.duplicatePaths.has(id)) { skipped.push({ id, reason: "Conflicting objective copies." }); continue; }
       const existingStem = namedStem(task.taskFile.name, "Task");
@@ -2477,14 +2480,15 @@ export class TaskWorkspaceService {
 
   private rewritingObjectiveFileNames = false;
 
-  async renameDoFirstFiles() {
-    if (!this.getSettings().readableObjectiveFileNames) throw new Error("Enable Readable objective filenames only after other devices support the names.");
+  renameDoFirstFiles() { return this.renameObjectiveFiles("do-first"); }
+
+  async renameObjectiveFiles(scope: "all" | "do-first") {
     const vault = this.app.vault as typeof this.app.vault & { getConfig?(key: string): unknown };
     if (vault.getConfig?.("alwaysUpdateLinks") === false) throw new Error("Turn on Obsidian’s Automatically update internal links before renaming.");
-    if (this.rewritingObjectiveFileNames) throw new Error("A Do First rename is already running.");
+    if (this.rewritingObjectiveFileNames) throw new Error("An objective filename rename is already running.");
     this.rewritingObjectiveFileNames = true;
     try {
-      const preview = await this.previewDoFirstFileNames();
+      const preview = await this.previewObjectiveFileNames(scope);
       const renamed: Array<{ from: string; to: string }> = [];
       const skipped = [...preview.skipped];
       for (const group of preview.groups) {
@@ -2492,7 +2496,7 @@ export class TaskWorkspaceService {
         try {
           const task = this.getById(group.id);
           const current = parseTaskMarkdown(await this.app.vault.read(task.taskFile)).record;
-          if (current.task_id !== group.id || current.status !== "do-first") throw new Error("Objective status or identity changed.");
+          if (current.task_id !== group.id || (scope === "do-first" && (task.archived || current.status !== "do-first"))) throw new Error("Objective status or identity changed.");
           const sources = [task.taskFile.path, task.updatesFile?.path];
           for (const move of group.moves) {
             const file = this.app.vault.getAbstractFileByPath(move.from);
@@ -2505,7 +2509,7 @@ export class TaskWorkspaceService {
           await this.refresh();
           const updated = this.getById(group.id);
           const owned = [updated.taskFile.path, updated.updatesFile?.path];
-          if (!done.every(move => owned.includes(move.to))) throw new Error("The renamed files did not re-index as the same objective or project.");
+          if (!done.every(move => owned.includes(move.to))) throw new Error("The renamed files did not re-index as the same objective.");
           renamed.push(...done);
         } catch (error) {
           for (const move of done.reverse()) {

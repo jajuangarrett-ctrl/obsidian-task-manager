@@ -206,6 +206,15 @@ export default class FjgTaskManagerPlugin extends Plugin {
         new Notice(error instanceof Error ? error.message : String(error), 10000);
       }
     }});
+    this.addCommand({ id: "rename-all-objective-files", name: "Rename objective files across all statuses", callback: async () => {
+      const working = new Notice("Checking objective filenames. Keep Obsidian open while renaming.", 0);
+      try {
+        const result = await this.workspaceService.renameObjectiveFiles("all");
+        new Notice(`Renamed ${result.renamed.length} files across all statuses. Skipped ${result.skipped.length} objectives with conflicts.`, 8000);
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : String(error), 10000);
+      } finally { working.hide(); }
+    }});
     this.addCommand({ id: "validate-task-workspaces", name: "Validate Objective Workspaces", callback: () => this.validateWorkspaces() });
     this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Objective Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
     this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Objective Artifacts to Objective Folders", callback: () => this.migrateTaskArtifacts() });
