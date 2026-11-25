@@ -1,3 +1,4 @@
+import { isObjectiveFileName, namedStem, objectiveFileName, taskArtifactPathParts, updateNamesForTask } from "./objective-file-names";
 import type { ObjectiveSelection } from "./objective-selection";
 import { isReviewArtifact } from "./objective-file-review";
 import { movedPath, rewriteMovedLinks } from "./move-links";
@@ -21,21 +22,21 @@ import {
   TaskRecord,
   TaskStatus,
   TaskUpdateInput,
-  taskFilePath,
   taskArtifactFilesPath,
   taskArtifactFolderName,
   taskArtifactFolderPath,
   taskArtifactNotePath,
   taskArtifactUpdatesPath,
+  taskFilePath,
+  taskNoteFilePath,
+  taskUpdateFilePath,
+  updatesFilePath,
   taskFilesFolderPath,
   taskFolderPath,
-  taskNoteFilePath,
   taskNotesFolderPath,
-  taskUpdateFilePath,
   taskUpdatesFolderPath,
   transitionTaskRecord,
   updateTaskFields,
-  updatesFilePath,
   validateTaskRecord
 } from "@fjg/task-core";
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
@@ -262,12 +263,7 @@ export class TaskWorkspaceService {
           const folderPath = legacyWorkspace || relocatedBundle
             ? file.parent?.path || ""
             : workspaceRootFromTaskPath(file.path);
-          const updatePath = legacyWorkspace || relocatedBundle
-            ? updatesFilePath(folderPath)
-            : usesTaskArtifactLayout(file)
-              ? taskArtifactUpdatesPath(folderPath, file.parent?.name || document.record.title)
-              : `${taskUpdatesFolderPath(folderPath)}/${file.name}`;
-          const updateFile = this.app.vault.getAbstractFileByPath(updatePath);
+          const updateFile = this.findUpdates(file, folderPath, legacyWorkspace || relocatedBundle);
           const updates = updateFile instanceof TFile
             ? parseTaskUpdatePreviews(await this.app.vault.cachedRead(updateFile))
             : [];
@@ -1600,7 +1596,7 @@ export class TaskWorkspaceService {
       });
     }
 
-    const paths = await this.availableRelocationPaths(destination, taskDocument.record);
+    const paths = await this.availableRelocationPaths(destination, taskDocument.record, this.getSettings().readableObjectiveFileNames || !!namedStem(task.taskFile.name, "Task"));
     const targetFilesRoot = paths.filesPath;
     const relatedMoves: Array<{ file: TFile; from: string; to: string }> = [];
     const relatedPaths = new Map<string, string>();
@@ -2050,22 +2046,28 @@ export class TaskWorkspaceService {
     await this.app.vault.modify(task.taskFile, renderTaskMarkdown(next, document.body));
   }
 
+  private updateDirectory(file: TFile, workspace: string, bundled: boolean): string {
+    if (bundled) return workspace;
+    if (usesTaskArtifactLayout(file)) return taskArtifactFolderPath(workspace, "Updates", artifactFolderFromTaskPath(file.path));
+    return taskUpdatesFolderPath(workspace);
+  }
+
+  private findUpdates(file: TFile, workspace: string, bundled: boolean): TFile | undefined {
+    const folder = this.updateDirectory(file, workspace, bundled);
+    const flat = !bundled && !usesTaskArtifactLayout(file);
+    for (const name of updateNamesForTask(file.name, flat)) {
+      const entry = this.app.vault.getAbstractFileByPath(`${folder}/${name}`);
+      if (entry instanceof TFile) return entry;
+    }
+  }
+
   private async ensureUpdatesFile(task: IndexedTask): Promise<TFile> {
     if (task.updatesFile) return task.updatesFile;
-    if (task.legacyWorkspace || task.relocatedBundle) {
-      return this.app.vault.create(updatesFilePath(task.folderPath), renderUpdatesMarkdown());
-    }
-    if (usesTaskArtifactLayout(task.taskFile)) {
-      const folderName = artifactFolderNameForTask(task);
-      const folder = taskArtifactFolderPath(task.folderPath, "Updates", folderName);
-      await this.ensureFolder(folder);
-      return this.app.vault.create(taskArtifactUpdatesPath(task.folderPath, folderName), renderUpdatesMarkdown());
-    }
-    await this.ensureFolder(taskUpdatesFolderPath(task.folderPath));
-    return this.app.vault.create(
-      `${taskUpdatesFolderPath(task.folderPath)}/${task.taskFile.name}`,
-      renderUpdatesMarkdown()
-    );
+    const bundled = task.legacyWorkspace || task.relocatedBundle;
+    const folder = this.updateDirectory(task.taskFile, task.folderPath, bundled);
+    await this.ensureFolder(folder);
+    const name = updateNamesForTask(task.taskFile.name, !bundled && !usesTaskArtifactLayout(task.taskFile))[0];
+    return this.app.vault.create(`${folder}/${name}`, renderUpdatesMarkdown());
   }
 
   private taskRenameMoves(task: IndexedTask, nextTitle: string): TaskRenameMove[] {
@@ -2311,8 +2313,11 @@ export class TaskWorkspaceService {
     const useArtifactLayout = !currentTaskPath || usesTaskArtifactPath(currentTaskPath);
     if (useArtifactLayout) {
       const folderName = await this.availableArtifactFolderName(workspace, record.title, currentTaskPath);
-      const taskPath = taskArtifactNotePath(workspace, folderName);
-      const updatesPath = taskArtifactUpdatesPath(workspace, folderName);
+      const named = namedStem(currentTaskPath.split("/").at(-1) || "", "Task");
+      const useReadableNames = this.getSettings().readableObjectiveFileNames || !!named;
+      const stem = named || folderName;
+      const taskPath = useReadableNames ? `${taskArtifactFolderPath(workspace, "Tasks", folderName)}/${objectiveFileName(stem, "Task")}` : taskArtifactNotePath(workspace, folderName);
+      const updatesPath = useReadableNames ? `${taskArtifactFolderPath(workspace, "Updates", folderName)}/${objectiveFileName(stem, "Updates")}` : taskArtifactUpdatesPath(workspace, folderName);
       await this.ensureFolder(taskArtifactFolderPath(workspace, "Tasks", folderName));
       await this.ensureFolder(taskArtifactFolderPath(workspace, "Updates", folderName));
       return { taskPath, updatesPath };
@@ -2322,8 +2327,10 @@ export class TaskWorkspaceService {
     await this.ensureFolder(tasksFolder);
     await this.ensureFolder(updatesFolder);
     for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
-      const taskPath = normalizePath(taskNoteFilePath(workspace, record.title, copyNumber));
-      const updatesPath = normalizePath(taskUpdateFilePath(workspace, record.title, copyNumber));
+      const useReadableNames = this.getSettings().readableObjectiveFileNames || !!namedStem(currentTaskPath.split("/").at(-1) || "", "Task");
+      const stem = taskArtifactFolderName(record.title, copyNumber);
+      const taskPath = useReadableNames ? `${tasksFolder}/${objectiveFileName(stem, "Task")}` : normalizePath(taskNoteFilePath(workspace, record.title, copyNumber));
+      const updatesPath = useReadableNames ? `${updatesFolder}/${objectiveFileName(stem, "Updates")}` : normalizePath(taskUpdateFilePath(workspace, record.title, copyNumber));
       if (taskPath === currentTaskPath) return { taskPath, updatesPath };
       const taskEntry = this.app.vault.getAbstractFileByPath(taskPath) || await this.app.vault.adapter.stat(taskPath);
       const updatesEntry = this.app.vault.getAbstractFileByPath(updatesPath) || await this.app.vault.adapter.stat(updatesPath);
@@ -2334,7 +2341,8 @@ export class TaskWorkspaceService {
 
   private async availableRelocationPaths(
     workspace: string,
-    record: TaskRecord
+    record: TaskRecord,
+    useReadableNames = this.getSettings().readableObjectiveFileNames
   ): Promise<{ bundlePath: string; taskPath: string; updatesPath: string; filesPath: string }> {
     await this.ensureFolder(workspace);
     const collectionPath = normalizePath(`${workspace}/${taskRelocationCollectionName(workspace)}`);
@@ -2346,8 +2354,8 @@ export class TaskWorkspaceService {
       const filesPath = normalizePath(`${bundlePath}/Files`);
       return {
         bundlePath,
-        taskPath: taskFilePath(bundlePath),
-        updatesPath: updatesFilePath(bundlePath),
+        taskPath: useReadableNames ? `${bundlePath}/${objectiveFileName(record.title, "Task")}` : taskFilePath(bundlePath),
+        updatesPath: useReadableNames ? `${bundlePath}/${objectiveFileName(record.title, "Updates")}` : updatesFilePath(bundlePath),
         filesPath
       };
     }
@@ -2366,8 +2374,8 @@ export class TaskWorkspaceService {
   private async availableArtifactFolderName(workspace: string, title: string, currentTaskPath = ""): Promise<string> {
     for (let copyNumber = 1; copyNumber <= 999; copyNumber += 1) {
       const folderName = taskArtifactFolderName(title, copyNumber);
-      const candidate = taskArtifactNotePath(workspace, folderName);
-      if (candidate === currentTaskPath) return folderName;
+      const candidate = taskArtifactFolderPath(workspace, "Tasks", folderName);
+      if (currentTaskPath.startsWith(`${candidate}/`) && !currentTaskPath.slice(candidate.length + 1).includes("/")) return folderName;
       const entry = this.app.vault.getAbstractFileByPath(candidate) || await this.app.vault.adapter.stat(candidate);
       if (!entry) return folderName;
     }
@@ -2430,6 +2438,91 @@ export class TaskWorkspaceService {
     await this.ensureFolder(taskFilesFolderPath(path));
   }
 
+  async previewDoFirstFileNames(): Promise<{
+    groups: Array<{ id: string; moves: Array<{ from: string; to: string }> }>;
+    skipped: Array<{ id: string; reason: string }>;
+  }> {
+    await this.refresh();
+    const tasks = this.list({ includeArchived: true });
+    const groups: Array<{ id: string; moves: Array<{ from: string; to: string }> }> = [];
+    const skipped: Array<{ id: string; reason: string }> = [];
+    const claimed = new Set<string>();
+    const references = new Set(tasks.flatMap(task => task.record.related_files.map(p => normalizePath(p).toLowerCase())));
+    const plan = async (id: string, files: Array<[TFile | null, string]>) => {
+      const moves = files.flatMap(([file, name]) => file && file.name !== name
+        ? [{ from: file.path, to: normalizePath(`${parentFolderPath(file.path)}/${name}`) }] : []);
+      for (const { from, to } of moves) {
+        const key = to.toLowerCase();
+        if (references.has(from.toLowerCase())) {
+          skipped.push({ id, reason: "A stored attachment reference points to this note." }); return;
+        }
+        if (claimed.has(key) || this.app.vault.getAbstractFileByPath(to) || await this.app.vault.adapter.stat(to)) {
+          skipped.push({ id, reason: "Destination already exists or is ambiguous." }); return;
+        }
+      }
+      for (const { to } of moves) claimed.add(to.toLowerCase());
+      if (moves.length) groups.push({ id, moves });
+    };
+    for (const task of tasks) {
+      if (task.archived || task.record.status !== "do-first") continue;
+      const id = task.record.task_id;
+      if (this.duplicatePaths.has(id)) { skipped.push({ id, reason: "Conflicting objective copies." }); continue; }
+      const existingStem = namedStem(task.taskFile.name, "Task");
+      const title = existingStem || task.record.title;
+      // Update first, then task. The pair is revalidated after applying both renames.
+      await plan(id, [[task.updatesFile, objectiveFileName(title, "Updates")], [task.taskFile, objectiveFileName(title, "Task")]]);
+    }
+    return { groups, skipped };
+  }
+
+  private rewritingObjectiveFileNames = false;
+
+  async renameDoFirstFiles() {
+    if (!this.getSettings().readableObjectiveFileNames) throw new Error("Enable Readable objective filenames only after other devices support the names.");
+    const vault = this.app.vault as typeof this.app.vault & { getConfig?(key: string): unknown };
+    if (vault.getConfig?.("alwaysUpdateLinks") === false) throw new Error("Turn on Obsidian’s Automatically update internal links before renaming.");
+    if (this.rewritingObjectiveFileNames) throw new Error("A Do First rename is already running.");
+    this.rewritingObjectiveFileNames = true;
+    try {
+      const preview = await this.previewDoFirstFileNames();
+      const renamed: Array<{ from: string; to: string }> = [];
+      const skipped = [...preview.skipped];
+      for (const group of preview.groups) {
+        const done: typeof renamed = [];
+        try {
+          const task = this.getById(group.id);
+          const current = parseTaskMarkdown(await this.app.vault.read(task.taskFile)).record;
+          if (current.task_id !== group.id || current.status !== "do-first") throw new Error("Objective status or identity changed.");
+          const sources = [task.taskFile.path, task.updatesFile?.path];
+          for (const move of group.moves) {
+            const file = this.app.vault.getAbstractFileByPath(move.from);
+            if (!sources.includes(move.from) || !(file instanceof TFile) || this.app.vault.getAbstractFileByPath(move.to) || await this.app.vault.adapter.stat(move.to)) {
+              throw new Error("Source or destination changed after preview.");
+            }
+            await this.app.fileManager.renameFile(file, move.to);
+            done.push(move);
+          }
+          await this.refresh();
+          const updated = this.getById(group.id);
+          const owned = [updated.taskFile.path, updated.updatesFile?.path];
+          if (!done.every(move => owned.includes(move.to))) throw new Error("The renamed files did not re-index as the same objective or project.");
+          renamed.push(...done);
+        } catch (error) {
+          for (const move of done.reverse()) {
+            const file = this.app.vault.getAbstractFileByPath(move.to);
+            if (!(file instanceof TFile) || this.app.vault.getAbstractFileByPath(move.from)) {
+              throw new Error("Could not safely roll back a renamed file; stop and inspect the vault.");
+            }
+            await this.app.fileManager.renameFile(file, move.from);
+          }
+          skipped.push({ id: group.id, reason: error instanceof Error ? error.message : String(error) });
+          await this.refresh();
+        }
+      }
+      return { renamed, skipped };
+    } finally { this.rewritingObjectiveFileNames = false; }
+  }
+
   /** Read-only preview. Existing task files are never migrated automatically. */
   previewTaskArtifactMigration(): TaskArtifactMigrationPreview[] {
     return this.list({ includeArchived: true }).map((task) => {
@@ -2477,7 +2570,7 @@ export class TaskWorkspaceService {
       const current = artifactFolderNameForTask(task);
       let copy = 1;
       let next = taskArtifactFolderName(task.record.title, copy);
-      while (reserved.has(`${task.folderPath}/${next}`) || (next !== current && this.app.vault.getAbstractFileByPath(taskArtifactNotePath(task.folderPath, next)))) {
+      while (reserved.has(`${task.folderPath}/${next}`) || (next !== current && this.app.vault.getAbstractFileByPath(taskArtifactFolderPath(task.folderPath, "Tasks", next)))) {
         next = taskArtifactFolderName(task.record.title, ++copy);
       }
       reserved.add(`${task.folderPath}/${next}`);
@@ -2529,7 +2622,7 @@ export class TaskWorkspaceService {
         await this.app.vault.rename(folder, move.to);
         completed.push(move);
       }
-      const currentTask = this.app.vault.getAbstractFileByPath(taskArtifactNotePath(task.folderPath, targetName));
+      const currentTask = this.app.vault.getAbstractFileByPath(`${taskArtifactFolderPath(task.folderPath, "Tasks", targetName)}/${task.taskFile.name}`);
       if (!(currentTask instanceof TFile)) throw new Error("Renamed task record was not found.");
       const document = parseTaskMarkdown(oldContent);
       const relatedFiles = document.record.related_files.map((path) => path.replace(`/Files/${currentName}/`, `/Files/${targetName}/`));
@@ -2618,7 +2711,7 @@ export class TaskWorkspaceService {
     const files: TFile[] = [];
     const cleanupRoots = new Set<string>();
     for (const file of this.app.vault.getMarkdownFiles()) {
-      const inLegacyRoot = file.name === "task.md" && roots.some((root) => file.path.startsWith(root));
+      const inLegacyRoot = isObjectiveFileName(file.name, "Task") && roots.some((root) => file.path.startsWith(root));
       const inManagedTasks = file.path.includes("/Tasks/");
       const relocatedBundle = isTaskRelocationBundlePath(file.path);
       if (!inLegacyRoot && !inManagedTasks && !relocatedBundle) continue;
@@ -2627,11 +2720,7 @@ export class TaskWorkspaceService {
         if (taskIds.has(document.record.task_id)) {
           files.push(file);
           const workspace = inLegacyRoot || relocatedBundle ? file.parent?.path || "" : workspaceRootFromTaskPath(file.path);
-          const update = this.app.vault.getAbstractFileByPath(
-            inLegacyRoot || relocatedBundle ? updatesFilePath(workspace)
-              : usesTaskArtifactLayout(file) ? taskArtifactUpdatesPath(workspace, artifactFolderFromTaskPath(file.path))
-              : `${taskUpdatesFolderPath(workspace)}/${file.name}`
-          );
+          const update = this.findUpdates(file, workspace, inLegacyRoot || relocatedBundle);
           if (update instanceof TFile) files.push(update);
           if (relocatedBundle) cleanupRoots.add(workspace);
         }
@@ -2706,9 +2795,9 @@ function relocationObjectivePaths(settings: TaskManagerSettings) {
     classify(path: string, name: string): { legacyWorkspace: boolean; relocatedBundle: boolean } | undefined {
       if (path.includes("/Subtasks/")) return;
       const inTasks = path.includes("/Tasks/");
-      const legacyWorkspace = name === "task.md" && !inTasks && (path.startsWith(activePrefix) || path.startsWith(archivePrefix));
+      const legacyWorkspace = isObjectiveFileName(name, "Task") && !inTasks && (path.startsWith(activePrefix) || path.startsWith(archivePrefix));
       const splitTask = inTasks && [projectPrefix, inboxPrefix, archivePrefix].some(prefix => path.startsWith(prefix));
-      const inboxBundle = name === "task.md" && path.startsWith(`${inboxPrefix}Files/`)
+      const inboxBundle = isObjectiveFileName(name, "Task") && path.startsWith(`${inboxPrefix}Files/`)
         && !path.slice(`${inboxPrefix}Files/`.length).includes("/Tasks/");
       const relocatedTask = isTaskRelocationPath(path);
       if (legacyWorkspace || splitTask || inboxBundle || relocatedTask) {
@@ -2755,7 +2844,7 @@ function usesTaskArtifactLayout(file: TFile): boolean {
 }
 
 function usesTaskArtifactPath(path: string): boolean {
-  return /\/Tasks\/[^/]+\/task\.md$/i.test(normalizePath(path));
+  return !!taskArtifactPathParts(normalizePath(path));
 }
 
 function artifactFolderNameForTask(task: IndexedTask): string {

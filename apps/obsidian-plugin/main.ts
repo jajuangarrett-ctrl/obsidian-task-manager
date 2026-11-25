@@ -198,6 +198,14 @@ export default class FjgTaskManagerPlugin extends Plugin {
       if (!checking) navigator.clipboard.writeText(task.record.task_id).then(() => new Notice("Objective ID copied."));
       return true;
     }});
+    this.addCommand({ id: "rename-do-first-files", name: "Rename Do First objective files to readable titles", callback: async () => {
+      try {
+        const result = await this.workspaceService.renameDoFirstFiles();
+        new Notice(`Renamed ${result.renamed.length} files. Skipped ${result.skipped.length} objectives or projects.`, 7000);
+      } catch (error) {
+        new Notice(error instanceof Error ? error.message : String(error), 10000);
+      }
+    }});
     this.addCommand({ id: "validate-task-workspaces", name: "Validate Objective Workspaces", callback: () => this.validateWorkspaces() });
     this.addCommand({ id: "preview-task-artifact-migration", name: "Preview Objective Artifact Migration", callback: () => this.previewTaskArtifactMigration() });
     this.addCommand({ id: "migrate-task-artifacts", name: "Migrate Objective Artifacts to Objective Folders", callback: () => this.migrateTaskArtifacts() });

@@ -204,7 +204,7 @@ class MockVault {
   }
 }
 
-function createService() {
+function createService(readableObjectiveFileNames = false) {
   const vault = new MockVault();
   const app = {
     vault,
@@ -213,6 +213,7 @@ function createService() {
     }
   };
   const settings = {
+    readableObjectiveFileNames,
     activeRoot: "08 Tasks/Workspaces",
     inboxRoot: "08 Tasks/Inbox",
     archiveRoot: "08 Tasks/Archive",
@@ -220,7 +221,7 @@ function createService() {
     projectArchiveRoot: "08 Tasks/Project Archive"
   };
   return {
-    vault, app,
+    vault, app, settings,
     service: new TaskWorkspaceService(app as never, () => settings as never)
   };
 }
@@ -2294,5 +2295,59 @@ describe("Move final validation and cache-independent links", () => {
     expect(lines[8]).toBe("[[task]]");
     expect(lines[9]).toBe(`[[${oldPath}/Missing]]`);
     expect(await vault.read(out)).toBe(link);
+  });
+});
+
+describe("Readable objective filenames and Do First conversion", () => {
+  it("pairs new Inbox and relocated files without changing legacy projects", async () => {
+    const { service, vault } = createService(true);
+    await service.initialize();
+    await vault.createFolder("02 Programs/QA");
+    const inbox = await service.createTask({ title: "Readable note" });
+    const external = await service.createTask({ title: "Readable external", destination: "02 Programs/QA" });
+    for (const [item, title] of [[inbox, "Readable note"], [external, "Readable external"]] as const) {
+      expect(item.taskFile.name).toBe(title + " - Objective.md");
+      expect(item.updatesFile?.name).toBe(title + " - Updates.md");
+      expect((await service.appendUpdate(item.record.task_id, { actor: "Fixture", text: "History remains attached" })).updates[0].text)
+        .toContain("History remains attached");
+    }
+    expect((await service.createProject("Legacy grouping")).projectFile.name).toBe("project.md");
+  });
+
+  it("renames only Do First objective files, preserving IDs, content and update history", async () => {
+    const { service, vault, settings } = createService();
+    await service.initialize();
+    await vault.createFolder("03 Areas/QA");
+    const keep = await service.createTask({ title: "Keep generic", status: "waiting" });
+    const inbox = await service.createTask({ title: "First inbox", status: "do-first" });
+    const area = await service.createTask({ title: "First area", status: "do-first", destination: "03 Areas/QA" });
+    const before = await vault.read(inbox.taskFile as never);
+    const update = await vault.read(inbox.updatesFile as never);
+    expect((await service.previewDoFirstFileNames()).groups).toHaveLength(2);
+    await expect(service.renameDoFirstFiles()).rejects.toThrow("other devices");
+    settings.readableObjectiveFileNames = true;
+    const result = await service.renameDoFirstFiles();
+    expect(result.renamed).toHaveLength(4);
+    expect(result.skipped).toEqual([]);
+    expect(service.getById(keep.record.task_id).taskFile.name).toBe("task.md");
+    expect(service.getById(area.record.task_id).taskFile.name).toBe("First area - Objective.md");
+    const saved = service.getById(inbox.record.task_id);
+    expect(saved.taskFile.name).toBe("First inbox - Objective.md");
+    expect(await vault.read(saved.taskFile as never)).toBe(before);
+    expect(await vault.read(saved.updatesFile as never)).toBe(update);
+    expect((await service.renameDoFirstFiles()).renamed).toEqual([]);
+  });
+
+  it("rolls back the update log if renaming the objective fails", async () => {
+    const { service, vault, settings } = createService();
+    await service.initialize();
+    const item = await service.createTask({ title: "Keep the pair", status: "do-first" });
+    const from = item.updatesFile?.path ?? "";
+    settings.readableObjectiveFileNames = true;
+    vault.failNextRenameTarget = "08 Tasks/Inbox/Tasks/Keep the pair/Keep the pair - Objective.md";
+    const result = await service.renameDoFirstFiles();
+    expect(result.renamed).toEqual([]);
+    expect(result.skipped).toHaveLength(1);
+    expect(service.getById(item.record.task_id).updatesFile?.path).toBe(from);
   });
 });

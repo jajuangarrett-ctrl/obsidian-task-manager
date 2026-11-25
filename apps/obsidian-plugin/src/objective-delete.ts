@@ -1,3 +1,4 @@
+import { isObjectiveFileName } from "./objective-file-names";
 import type { App } from "obsidian";
 import type { IndexedTask } from "./workspace-service";
 
@@ -29,7 +30,7 @@ export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:st
     for(const file of entries.files.sort()) {
       if(!owned(file,result.roots)) throw Error("Folder inventory escaped its ownership root.");
       result.files.push({path:file,hash:await digest(await adapter.readBinary(file))});
-      if(file.endsWith("/task.md") && file!==task.taskFile.path) result.blockers.push(`Nested objective record: ${file}`);
+      if(isObjectiveFileName(file.split("/").at(-1) || "", "Task") && file!==task.taskFile.path) result.blockers.push(`Nested objective record: ${file}`);
     }
     for(const folder of entries.folders.sort()) {if(!within(folder,path)||folder===path)throw Error("Unsafe folder inventory.");await visit(folder);}
   };

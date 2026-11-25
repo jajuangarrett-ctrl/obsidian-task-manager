@@ -1,3 +1,4 @@
+import { isObjectiveFileName, taskArtifactPathParts } from "./objective-file-names";
 import { normalizeVaultPath } from "@fjg/task-core";
 
 export const TASK_RELOCATION_ROOTS = ["02 Programs", "03 Areas"] as const;
@@ -23,7 +24,7 @@ export function isTaskRelocationPath(value: string): boolean {
   try {
     const path = normalizeVaultPath(value);
     return TASK_RELOCATION_ROOTS.some((root) => path.startsWith(`${root}/`))
-      && path.toLocaleLowerCase().endsWith("/task.md");
+      && isObjectiveFileName(path.split("/").at(-1) || "", "Task");
   } catch {
     return false;
   }
@@ -31,7 +32,7 @@ export function isTaskRelocationPath(value: string): boolean {
 
 export function isTaskRelocationBundlePath(value: string): boolean {
   if (!isTaskRelocationPath(value)) return false;
-  return !/\/Tasks\/[^/]+\/task\.md$/i.test(normalizeVaultPath(value));
+  return !taskArtifactPathParts(normalizeVaultPath(value));
 }
 
 export function taskRelocationCollectionName(destination: string): string {

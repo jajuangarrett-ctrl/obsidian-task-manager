@@ -389,3 +389,9 @@ Upcoming shows eligible open objectives due after the current local date. Due or
 Open **Talk to Dashboard**, choose **Type a message**, then send your question or request with Enter or **Send message**. The same AI conversation and configured backend used by voice searches/reads objectives and handles explicit changes with the existing safeguards. Replies play aloud and appear in the transcript, with buttons to open referenced objective notes.
 
 Starting by typing does not request microphone access. Choose **Turn on microphone** if you later want to speak, or type during an existing voice conversation. **End conversation** ends either mode. Typed messages, requested task context and replies use your OpenAI API key and incur API charges. This replaces the temporary local-only search introduced in 0.30.8.
+
+### Readable objective filenames
+
+Objective Manager reads both legacy names and `Title - Objective.md` / `Title - Updates.md`. **Readable objective filenames** in plugin settings opts new objectives into the named format. Leave it off until every device and app that reads the vault can open both formats.
+
+After that check, the **Rename Do First objective files to readable titles** command migrates only objectives currently marked Do First. It keeps stable IDs, renames the corresponding update log, does not touch action data or project definitions, and skips collisions. It uses Obsidian's rename operation to preserve links where vault link updating is enabled.

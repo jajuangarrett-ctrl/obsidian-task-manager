@@ -1,5 +1,6 @@
+import { taskArtifactPathParts, updateNamesForTask } from "./objective-file-names";
 import { searchScore } from "./search-ranking";
-import { TASK_STATUSES, taskArtifactUpdatesPath, type TaskStatus } from "@fjg/task-core";
+import { TASK_STATUSES, type TaskStatus } from "@fjg/task-core";
 import { isTaskRelocationBundlePath, isTaskRelocationPath } from "./task-relocation";
 import type { IndexedTask, TaskWorkspaceService } from "./workspace-service";
 import type { TaskManagerSettings } from "./settings";
@@ -106,11 +107,11 @@ function taskWriteInScope(task: IndexedTask, config: TaskManagerSettings): boole
   if (!isTaskRelocationPath(path) || path.includes("/Subtasks/")) return false;
   if (isTaskRelocationBundlePath(path)) {
     return task.relocatedBundle && path.slice(0, path.lastIndexOf("/")) === task.folderPath
-      && (!updates || updates === `${task.folderPath}/updates.md`);
+      && (!updates || updateNamesForTask(path.split("/").at(-1) || "", false).some(name => updates === `${task.folderPath}/${name}`));
   }
-  const artifact = path.match(/^(.*)\/Tasks\/([^/]+)\/task\.md$/i);
+  const artifact = taskArtifactPathParts(path);
   return !!artifact && !task.relocatedBundle && artifact[1] === task.folderPath
-    && (!updates || updates === taskArtifactUpdatesPath(task.folderPath, artifact[2]));
+    && (!updates || updateNamesForTask(artifact[3], false).some(name => updates === `${task.folderPath}/Updates/${artifact[2]}/${name}`));
 }
 
 /** All writes use the existing workspace service; model-supplied paths are never accepted. */

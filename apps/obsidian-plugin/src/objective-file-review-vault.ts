@@ -1,3 +1,4 @@
+import { isObjectiveFileName } from "./objective-file-names";
 import { App, FileSystemAdapter, Platform, TFile, TFolder } from "obsidian";
 import { parseTaskMarkdown, taskArtifactFilesPath } from "@fjg/task-core";
 import type { Stats } from "node:fs";
@@ -145,7 +146,7 @@ export class VaultObjectiveReviewWorkspace implements ReviewWorkspace {
     let scanned = 0;
     const visit = async (current: TFolder, depth: number) => {
       if (depth > 32) throw new ObjectiveFileReviewError("The Files folder is too deeply nested for a safe review. No file was sent.");
-      if (current.children.some((entry) => entry instanceof TFile && entry.name.toLowerCase() === "task.md")) {
+      if (current.children.some((entry) => entry instanceof TFile && isObjectiveFileName(entry.name, "Task"))) {
         // A nested bundle can be unindexed, conflicting or awaiting Sync. It
         // does not authorize any surrounding attachment for this objective.
         throw invalidScope();
