@@ -41,10 +41,14 @@ import { taskFolderClipboardPath } from "./task-folder-path";
 import { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
 export { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
 
+let nextDashboardTabsId = 0;
+
 export class TaskDashboardView extends ItemView {
   private mode: DashboardMode = "home";
   private readonly focusHome: FocusHome;
   private tabPosition = 0;
+  private homeToolbarVisible = false;
+  private readonly tabsId = `fjg-dashboard-sections-${++nextDashboardTabsId}`;
   private homeScope: HomeScope = "open";
   private homeQuery = "";
   private overviewQuery = "";
@@ -178,7 +182,8 @@ export class TaskDashboardView extends ItemView {
     const root = this.containerEl.children[1] as HTMLElement;
     const top = root.scrollTop;
     const panelTop = root.querySelector<HTMLElement>(".fjg-overview-details")?.scrollTop ?? 0;
-    this.tabPosition = root.querySelector<HTMLElement>(".fjg-dashboard-tabs")?.scrollLeft ?? this.tabPosition;
+    const oldNavigation = root.querySelector<HTMLElement>(".fjg-dashboard-tabs");
+    if (oldNavigation && !oldNavigation.hidden) this.tabPosition = oldNavigation.scrollLeft;
     root.querySelectorAll<HTMLElement>("[data-home-row]").forEach(row => this.rowPositions.set(row.dataset.homeRow!, row.scrollLeft));
     this.focusHome.snapshot(root);
     const focused = root.querySelector<HTMLInputElement | HTMLTextAreaElement>("input:focus, textarea:focus");
@@ -205,9 +210,21 @@ export class TaskDashboardView extends ItemView {
       tasks.map((task) => task.record),
       this.taskPlugin.workspaceService.projectNames()
     );
-    this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.filter(task => !task.archived).length);
+    const navigation = this.renderSectionTabs(root, allTasks.filter(task => !task.archived).length);
     if (this.mode === "home") {
-      this.focusHome.render(root, allTasks);
+      navigation.hidden = !this.homeToolbarVisible;
+      this.focusHome.render(root, allTasks, {
+        expanded: this.homeToolbarVisible,
+        controls: this.tabsId,
+        toggle: () => {
+          this.homeToolbarVisible = !this.homeToolbarVisible;
+          if (!this.homeToolbarVisible) this.tabPosition = navigation.scrollLeft;
+          navigation.hidden = !this.homeToolbarVisible;
+          this.restoreSectionTabs(navigation);
+          this.fitFocusViewport();
+          return this.homeToolbarVisible;
+        },
+      });
       this.fitFocusViewport();
     } else if (this.mode === "all") {
       this.renderAll(root, allTasks);
@@ -224,15 +241,7 @@ export class TaskDashboardView extends ItemView {
     } else {
       this.renderTasks(root, allTasks, projects);
     }
-    const navigation = root.querySelector<HTMLElement>(".fjg-dashboard-tabs");
-    const selectedTab = navigation?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (navigation && selectedTab) {
-      navigation.scrollLeft = this.tabPosition;
-      const selected = selectedTab.getBoundingClientRect(), bounds = navigation.getBoundingClientRect();
-      if (selected.right > bounds.right) navigation.scrollLeft += selected.right - bounds.right + 6;
-      else if (selected.left < bounds.left) navigation.scrollLeft -= bounds.left - selected.left + 6;
-      this.tabPosition = navigation.scrollLeft;
-    }
+    this.restoreSectionTabs(navigation);
     root.scrollTop = top;
     const details = root.querySelector<HTMLElement>(".fjg-overview-details");
     if (details) details.scrollTop = panelTop;
@@ -287,10 +296,10 @@ export class TaskDashboardView extends ItemView {
     for (const button of [captureAction, convert, briefingButton, refreshButton]) menu.appendChild(button);
   }
 
-  private renderSectionTabs(root: HTMLElement, projectCount: number, taskCount: number): void {
+  private renderSectionTabs(root: HTMLElement, taskCount: number): HTMLElement {
     const tabs = root.createDiv({
       cls: "fjg-dashboard-tabs",
-      attr: { role: "tablist", "aria-label": "Objective Manager sections" }
+      attr: { id: this.tabsId, role: "tablist", "aria-label": "Objective Manager sections" }
     });
     this.sectionTab(tabs, "home", "Home", "house");
     this.sectionTab(tabs, "all", "All", "layout-list");
@@ -300,6 +309,18 @@ export class TaskDashboardView extends ItemView {
     this.sectionTab(tabs, "kanban", "Kanban", "columns-3", taskCount);
     this.sectionTab(tabs, "people", "People", "users");
     this.sectionTab(tabs, "move", "Move", "folder-input");
+    return tabs;
+  }
+
+  private restoreSectionTabs(navigation: HTMLElement): void {
+    if (navigation.hidden) return;
+    const selectedTab = navigation.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!selectedTab) return;
+    navigation.scrollLeft = this.tabPosition;
+    const selected = selectedTab.getBoundingClientRect(), bounds = navigation.getBoundingClientRect();
+    if (selected.right > bounds.right) navigation.scrollLeft += selected.right - bounds.right + 6;
+    else if (selected.left < bounds.left) navigation.scrollLeft -= bounds.left - selected.left + 6;
+    this.tabPosition = navigation.scrollLeft;
   }
 
   private sectionTab(
@@ -321,8 +342,13 @@ export class TaskDashboardView extends ItemView {
     button.createSpan({ text: label });
     if (count !== undefined) button.createSpan({ text: String(count), cls: "fjg-tab-count" });
     button.addEventListener("click", () => {
+      if (this.mode !== mode) this.homeToolbarVisible = false;
       this.mode = mode;
       this.render();
+      const root = this.contentEl;
+      root.querySelector<HTMLElement>(
+        mode === "home" ? ".fjg-focus-sections-toggle" : '.fjg-dashboard-tab[aria-selected="true"]'
+      )?.focus({ preventScroll: true });
     });
   }
 

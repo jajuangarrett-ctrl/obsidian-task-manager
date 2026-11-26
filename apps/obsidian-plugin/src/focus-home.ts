@@ -8,6 +8,7 @@ import { OBJECTIVE_STATUS_CHOICES } from "./dashboard-model";
 import { canScheduleFocusObjective, canUseFocusObjective, FOCUS_LISTS, focusGroups, type FocusList } from "./focus-home-model";
 
 type Pane = 0 | 1;
+type SectionToolbar = { expanded: boolean; controls: string; toggle: () => boolean };
 type Draft = { title: string; notes: string; when: string; checklist: string; tags: string; destination: string };
 type Undo = { text: string; apply: () => Promise<unknown> };
 type Drag = { type: "objective"; id: string; path: string; prior: string } | {type:"capture"};
@@ -48,7 +49,7 @@ export class FocusHome {
     });
   }
 
-  render(root: HTMLElement, tasks: IndexedTask[]): void {
+  render(root: HTMLElement, tasks: IndexedTask[], sections: SectionToolbar): void {
     const areas = objectiveAreas(this.plugin.app.vault.getAllLoadedFiles().filter(f=>f instanceof TFolder).map(f=>f.path),tasks);
     const picks = [...FOCUS_LISTS, ...areas.map(a=>({key:`area:${a.path}` as const,label:a.label,icon:"folder",tone:"blue"}))];
     const label = (key:FocusList)=>picks.find(p=>p.key===key)?.label || "Today";
@@ -100,10 +101,22 @@ export class FocusHome {
     for(const [key,text] of [["split","Book Split"],["sidebar","Sidebar"],["single","Single Pane"]])layout.createEl("option",{value:key,text});
     layout.value=this.layout;layout.addEventListener("change",()=>{this.layout=layout.value as typeof this.layout;if(this.layout!=="split")this.activePane=0;this.picker=null;jump("focus-layout");});
     button(toolbar,"",()=>this.plugin.openLiveVoice(()=>JSON.stringify({mode:"home",focusList:this.lists[0],secondaryList:this.layout==="split"?this.lists[1]:undefined})),{label:"Talk to Vault",icon:"mic"});
-    const add=button(toolbar,"",()=>capture("",this.layout==="split"?this.activePane:0),{cls:"fjg-focus-plus",label:"Quick Entry",icon:"plus",key:"focus-add-0"});
+    const trailing=toolbar.createDiv({cls:"fjg-focus-toolbar-end"});
+    const add=button(trailing,"",()=>capture("",this.layout==="split"?this.activePane:0),{cls:"fjg-focus-plus",label:"Quick Entry",icon:"plus",key:"focus-add-0"});
     add.draggable=true;
     add.addEventListener("dragstart",ev=>{this.drag={type:"capture"};ev.dataTransfer?.setData("text/plain","New objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="copy";});
     add.addEventListener("dragend",()=>{this.drag=undefined;});
+    let sectionsExpanded=sections.expanded;
+    const updateSectionsButton=()=>{
+      const label=sectionsExpanded ? "Hide section toolbar" : "Show section toolbar";
+      sectionsButton.setAttribute("aria-expanded",String(sectionsExpanded));
+      sectionsButton.setAttribute("aria-label",label);
+      sectionsButton.title=label;
+    };
+    const sectionsButton=button(trailing,"",()=>{sectionsExpanded=sections.toggle();updateSectionsButton();},
+      {cls:"fjg-focus-sections-toggle",icon:"panel-top"});
+    sectionsButton.setAttribute("aria-controls",sections.controls);
+    updateSectionsButton();
     if(this.undo){
       const undo=this.undo, notice=shell.createDiv({cls:"fjg-focus-undo",attr:{role:"status"}});
       notice.createSpan({text:undo.text});

@@ -82,7 +82,7 @@ function setup(mobile: boolean) {
   const view = Object.assign(Object.create(TaskDashboardView.prototype), {
     containerEl: container, mode: "overview", overviewSelected: "", overviewQuery: "Long", overviewWorkspaceId: "",
     focusHome: {snapshot: vi.fn()}, rowPositions: new Map(), collapsedOverviewStatuses: new Set(["delegate"]), app, taskPlugin: plugin,
-    renderHeader: (node: Element) => node.createDiv({ cls: "test-dashboard-header" }), renderSectionTabs: vi.fn(),
+    renderHeader: (node: Element) => node.createDiv({ cls: "test-dashboard-header" }), renderSectionTabs: (node: Element) => node.createDiv({ cls: "fjg-dashboard-tabs" }),
     cancelSearchRender: vi.fn()
   }) as TaskDashboardView;
   root.scrollTop = 128;

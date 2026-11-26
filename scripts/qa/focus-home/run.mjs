@@ -70,7 +70,21 @@ async function runScenarios(page, out) {
   const width=async loc=>(await loc.boundingBox()).width;
   const layout=page.getByRole("combobox",{name:"Home layout"});
   const row=()=>pane1.getByRole("button",{name:/^Confirm advisor coverage/});
+  const sectionBar=page.getByRole("tablist",{name:"Objective Manager sections",includeHidden:true});
+  const reveal=page.getByRole("button",{name:"Show section toolbar"});
+  const hide=page.getByRole("button",{name:"Hide section toolbar"});
+  assert.equal(await sectionBar.isVisible(),false,"Home starts without the section toolbar");
+  assert.equal(await reveal.getAttribute("aria-expanded"),"false");
+  assert.equal(await reveal.getAttribute("aria-controls"),await sectionBar.getAttribute("id"));
+  const toggleBox=await reveal.boundingBox();
+  assert.ok(toggleBox.width>=44 && toggleBox.height>=44);
+  const hiddenY=(await pane1.boundingBox()).y;
+  await reveal.tap();
   assert.equal(await home.getAttribute("aria-selected"),"true");
+  assert.equal(await hide.getAttribute("aria-expanded"),"true");
+  assert.ok((await pane1.boundingBox()).y-hiddenY>=44,"Hiding tabs gives their space back to the list");
+  await hide.tap();
+  assert.equal((await pane1.boundingBox()).y,hiddenY);
   await pane1.getByRole("heading",{name:"Today",exact:true,level:2}).waitFor();
   assert.equal(await pane2.isVisible(),false);
   assert.equal(await layout.isVisible(),false);
@@ -130,6 +144,16 @@ async function runScenarios(page, out) {
   assert.equal(await pane2.isVisible(),false);
   assert.ok((await pane1.boundingBox()).x<(await reading.boundingBox()).x);
   assert.ok(await width(reading)>415 && await width(reading)<450);
+  const readingScroll=reading.locator(".fjg-focus-scroll");
+  await readingScroll.evaluate(e=>e.dataset.toolbarTestNode="same");
+  await reveal.tap();
+  await readingHeading.waitFor();
+  await page.setViewportSize({width:669,height:871});
+  await hide.waitFor();
+  await hide.tap();
+  assert.equal(await sectionBar.isVisible(),false);
+  assert.equal(await readingScroll.getAttribute("data-toolbar-test-node"),"same","Toggle from open detail does not remount the scroller");
+  await page.setViewportSize({width:871,height:669});
   await screen("02b-book-split-objective");
   await reading.getByRole("button",{name:"Full Width",exact:true}).click();
   assert.equal(await pane1.isVisible(),false);assert.ok(await width(reading)>850);
@@ -232,11 +256,15 @@ async function runScenarios(page, out) {
   await pane1.getByRole("button",{name:"Choose primary list"}).click();
   await page.getByRole("button",{name:"Today",exact:true}).click();
 
+  await reveal.tap();
   await all.click();
+  assert.equal(await sectionBar.isVisible(),true,"Other sections keep the toolbar");
   await page.getByRole("heading",{name:"All",exact:true}).waitFor();
   await page.getByRole("searchbox",{name:"Search All objectives"}).waitFor();
   await page.getByRole("button",{name:/^All Open/}).waitFor();
   await page.getByRole("button",{name:/^All objectives/}).waitFor();
   await home.click();await pane1.getByRole("heading",{name:"Today",exact:true,level:2}).waitFor();
-  console.log("PASS folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize and All");
+  assert.equal(await sectionBar.isVisible(),false,"Returning to Home restores the space-saving default");
+  assert.equal(await reveal.evaluate(el=>el===document.activeElement),true);
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize and All");
 }

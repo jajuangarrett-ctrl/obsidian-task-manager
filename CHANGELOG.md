@@ -1,3 +1,7 @@
+## 0.30.29
+
+- Hide the section toolbar by default in Home. Use the panel icon beside Quick Entry to show or hide it without leaving the current objective or list. Other views keep their section tabs visible.
+
 ## 0.30.28
 
 - Put the Home checklist directly beneath the objective header and before notes in the reading pane, and above the preview in inline details.
