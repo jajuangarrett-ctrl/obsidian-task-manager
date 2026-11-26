@@ -1,3 +1,7 @@
+## 0.30.38
+
+- Create a folder immediately for each new action, including actions entered with a new objective. Older actions without a folder show an empty Files list and receive a unique folder on the first explicit attachment or Copy path operation. Existing folders are not reassigned.
+
 ## 0.30.37
 
 - Give Review Files more room for reasoning and a complete response. Explain whether OpenAI ran out of tokens, declined the request, or produced an unusable review, while preserving saved reviews. No background retries and no change to which files are sent.

@@ -593,6 +593,29 @@ describe("TaskWorkspaceService project-centered moves", () => {
     expect(vault.getAbstractFileByPath(original)).not.toBeNull();
   });
 
+  it("shows blank legacy action folders as empty and safely provisions a unique folder on demand", async () => {
+    const { service, vault } = createService();
+    await service.initialize();
+    const parent = await service.createTask({ title: "Legacy checklist" });
+    const id = parent.record.task_id;
+    const legacy = await service.addSubtask(id, "Existing title", { status: "waiting", notes: "Keep these notes" });
+    const oldFolder = service.subtaskFolder(id, legacy.id);
+    await vault.create(`${oldFolder}/Unassigned.md`, "Leave this untouched");
+    const text = (await vault.read(parent.taskFile as never))
+      .replace(/attachment_folder: Subtasks\/Existing title/, 'attachment_folder: ""');
+    await vault.modify(parent.taskFile as never, text);
+    await service.refresh();
+    expect(service.subtaskFiles(id, legacy.id)).toEqual([]);
+    expect(await vault.read(parent.taskFile as never)).toBe(text);
+    const [path, same] = await Promise.all([service.ensureSubtaskFolder(id, legacy.id), service.ensureSubtaskFolder(id, legacy.id)]);
+    expect(same).toBe(path);
+    expect(path).toBe(oldFolder + " (2)");
+    const file = await service.addSubtaskNote(id, legacy.id, "Evidence", "Attached successfully");
+    expect(service.subtaskFiles(id, legacy.id).map((f) => f.path)).toEqual([file.path]);
+    expect(await vault.read(vault.getAbstractFileByPath(`${oldFolder}/Unassigned.md`) as never)).toBe("Leave this untouched");
+    expect(service.getById(id).record.subtasks[0]).toMatchObject({ id: legacy.id, status: "waiting", notes: "Keep these notes" });
+  });
+
   it("rejects self-conversion and unsafe paths, and gives duplicate subtask titles separate destinations", async () => {
     const { service } = createService();
     await service.initialize();
@@ -2380,6 +2403,9 @@ it("plans an objective independently of its deadline and refuses stale undo or a
   const item=await service.createTask({title:"Plan a workshop",due:"2026-12-06",initialActions:["Draft","Draft"]});
   const id=item.record.task_id;
   expect(item.record.subtasks.map(s=>s.attachment_folder)).toEqual(["Subtasks/Draft","Subtasks/Draft (2)"]);
+  for (const action of item.record.subtasks) {
+    expect(await vault.adapter.stat(service.subtaskFolder(id, action.id))).toEqual({type:"folder"});
+  }
   const initial=await vault.read(item.taskFile as never);
   await vault.modify(item.taskFile as never,initial.replace("---\n","---\ncustom_note: keep me\n"));
   const planned=await service.changePlanningDay(id,"2026-11-27",item.taskFile.path,"");

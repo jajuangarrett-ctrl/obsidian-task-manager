@@ -982,6 +982,7 @@ export class TaskWorkspaceService {
     let taskFile: TFile | null = null;
     try {
       await this.ensureFolder(filesPath);
+      for (const action of record.subtasks) await this.ensureFolder(`${filesPath}/${action.attachment_folder}`);
       taskFile = await this.app.vault.create(taskPath, renderTaskMarkdown(record, body));
       const updates = appendUpdateMarkdown(renderUpdatesMarkdown(), {
         actor: audit.actor || "Franklin",
@@ -1062,11 +1063,15 @@ export class TaskWorkspaceService {
     return this.getById(taskId);
   }
 
-  subtaskFolder(taskId: string, subtaskId: string): string {
-    const task = this.getById(taskId);
+  private subtaskById(task: IndexedTask, subtaskId: string): TaskSubtask {
     const sub = task.record.subtasks.find((item) => item.id === subtaskId);
     if (!sub) throw new Error("Subtask no longer exists. Refresh the dashboard.");
-    const relative = sub.attachment_folder;
+    return sub;
+  }
+
+  subtaskFolder(taskId: string, subtaskId: string): string {
+    const task = this.getById(taskId);
+    const relative = this.subtaskById(task, subtaskId).attachment_folder;
     if (!/^Subtasks\/[^/\\]+$/.test(relative) || relative.split("/").some((part) => part === "." || part === "..")) {
       throw new Error("Invalid subtask attachment directory.");
     }
@@ -1074,6 +1079,7 @@ export class TaskWorkspaceService {
   }
 
   subtaskFiles(taskId: string, subtaskId: string): TFile[] {
+    if (!this.subtaskById(this.getById(taskId), subtaskId).attachment_folder) return [];
     const prefix = `${this.subtaskFolder(taskId, subtaskId)}/`;
     return this.app.vault.getFiles().filter((file) => file.path.startsWith(prefix));
   }
@@ -1084,10 +1090,64 @@ export class TaskWorkspaceService {
     return task.relatedFiles.filter((related) => !normalizePath(related.file.path).startsWith(actionRoot));
   }
 
+  private readonly actionFolderWrites = new Map<string, Promise<string>>();
+
   async ensureSubtaskFolder(taskId: string, subtaskId: string): Promise<string> {
-    const path = this.subtaskFolder(taskId, subtaskId);
-    await this.ensureFolder(path);
-    return path;
+    const key = JSON.stringify([taskId, subtaskId]);
+    const pending = this.actionFolderWrites.get(key);
+    if (pending) return pending;
+    const write = this.prepareSubtaskFolder(taskId, subtaskId);
+    this.actionFolderWrites.set(key, write);
+    try { return await write; }
+    finally { this.actionFolderWrites.delete(key); }
+  }
+
+  private async prepareSubtaskFolder(taskId: string, subtaskId: string): Promise<string> {
+    const task = this.getById(taskId);
+    const sub = this.subtaskById(task, subtaskId);
+    if (sub.attachment_folder) {
+      const path = this.subtaskFolder(taskId, subtaskId);
+      await this.ensureFolder(path);
+      return path;
+    }
+    // Old/imported actions can legitimately have no folder. Only create on an
+    // explicit file operation; never claim an existing unassigned directory.
+    const root = this.relatedFilesPath(task);
+    const notePath = task.taskFile.path;
+    const title = sanitizeTitleForPath(sub.title);
+    const base = ["", ".", ".."].includes(title) ? "Action" : title;
+    await this.ensureFolder(`${root}/Subtasks`);
+    for (let suffix = 1; suffix <= 999; suffix++) {
+      const relative = `Subtasks/${base}${suffix === 1 ? "" : ` (${suffix})`}`;
+      const path = normalizePath(`${root}/${relative}`);
+      if (task.record.subtasks.some((item) => item.attachment_folder.toLowerCase() === relative.toLowerCase())
+        || this.app.vault.getAbstractFileByPath(path) || await this.app.vault.adapter.stat(path)) continue;
+      try { await this.app.vault.createFolder(path); }
+      catch (error) { if (await this.app.vault.adapter.stat(path)) continue; throw error; }
+      try {
+        await this.app.vault.process(task.taskFile, (content) => {
+          if (task.taskFile.path !== notePath) throw new Error("The objective moved. Reopen the action and try again.");
+          const { record } = parseTaskMarkdown(content);
+          const latest = record.subtasks.find((item) => item.id === subtaskId);
+          if (record.task_id !== taskId || !latest || latest.attachment_folder ||
+            record.subtasks.some((item) => item.attachment_folder.toLowerCase() === relative.toLowerCase())) {
+            throw new Error("Action folders changed. Reopen the action and try again.");
+          }
+          return patchConversionMetadata(content, {
+            subtasks: record.subtasks.map((item) => item.id === subtaskId ? { ...item, attachment_folder: relative } : item)
+          });
+        });
+      } catch (error) {
+        const created = this.app.vault.getAbstractFileByPath(path);
+        if (created instanceof TFolder && this.folderIsEmpty(path)) {
+          try { await this.app.vault.trash(created, true); } catch { /* leave an empty folder rather than mask the error */ }
+        }
+        throw error;
+      }
+      await this.refresh();
+      return this.subtaskFolder(taskId, subtaskId);
+    }
+    throw new Error("Could not choose a unique action folder.");
   }
 
   private async writeSubtasks(taskId: string, change: (items: TaskSubtask[]) => TaskSubtask[]): Promise<void> {
