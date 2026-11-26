@@ -1,3 +1,7 @@
+## 0.30.26
+
+- Move the Home status picker into the expanded actions beside When and Deadline, leaving collapsed rows with just the title and any dates.
+
 ## 0.30.25
 
 - Tap the status below an objective’s title in Home to open the same native status picker as All. Status changes use the existing objective history and can be undone in Home; the title still opens inline details.

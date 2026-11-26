@@ -2536,10 +2536,8 @@ body:has(> .menu:not([hidden]):not(.is-hidden)) .fjg-live-workspace-switch { vis
 .fjg-focus-home .fjg-focus-date .fjg-focus-past-due-link { padding-inline:8px; box-shadow:none; background:var(--focus-tint); color:var(--text-normal); min-height:44px; }
 .fjg-focus-home .fjg-focus-count { flex:none; padding:4px 7px; border-radius:9px; background:var(--focus-tint); font-size:.85rem; }
 
-/* Match the native status menu in All without nesting controls in the title. */
-.fjg-focus-home .fjg-focus-entry { min-width:0; }
-.fjg-focus-home .fjg-focus-entry button.fjg-focus-title { padding-block:7px 3px; }
-.fjg-focus-home .fjg-focus-meta { align-items:center; color:var(--text-muted); font-size:12px; padding:0 8px 3px 0; }
+/* Keep the native status picker in the expanded actions, not in every list row. */
+.fjg-focus-home .fjg-focus-meta { align-items:center; color:var(--text-muted); font-size:12px; padding:0; }
 .fjg-focus-home .fjg-focus-status {
   width:auto; max-width:100%; min-width:105px; min-height:44px; flex:0 1 auto;
   border-radius:999px; border:1px solid var(--focus-rule);

@@ -77,17 +77,20 @@ async function runScenarios(page, out) {
   assert.ok(await width(pane1)>370);
   assert.ok((await pane1.getByRole("button",{name:"Complete Confirm advisor coverage"}).boundingBox()).height>=44);
   const status=pane1.getByRole("combobox",{name:"Status for Confirm advisor coverage"});
+  assert.equal(await status.count(),0,"Collapsed rows do not reserve space for a picker");
+  assert.ok((await row().locator("..").boundingBox()).height < 72,"Collapsed single-line row is compact");
+  await row().click();
   assert.deepEqual(await status.locator("option").allTextContents(),["Inbox","Do First","Do Soon","Ongoing","Delegate","Waiting","On Hold","Completed"]);
   assert.equal(await status.inputValue(),"do-first");
   assert.ok((await status.boundingBox()).height>=44);
   await status.selectOption("waiting");
   assert.equal(await status.inputValue(),"waiting");
-  assert.equal(await row().getAttribute("aria-expanded"),"false");
+  assert.equal(await row().getAttribute("aria-expanded"),"true");
+  assert.equal(await status.evaluate(el=>!!el.closest(".fjg-focus-tools")),true);
   await page.getByRole("button",{name:"Undo",exact:true}).click();
   assert.equal(await status.inputValue(),"do-first");
   await screen("01-folded-today");
 
-  await row().click();
   await pane1.getByRole("button",{name:"Check draft schedule"}).click();
   assert.equal(await pane1.getByRole("button",{name:"Check draft schedule"}).getAttribute("aria-pressed"),"true");
   await pane1.getByRole("button",{name:"When",exact:true}).click();
@@ -105,6 +108,8 @@ async function runScenarios(page, out) {
   assert.ok((await pane1.boundingBox()).x < (await pane2.boundingBox()).x);
   await screen("02-unfolded-book-split");
   const upcomingStatus=pane2.getByRole("combobox",{name:"Status for Prepare workshop agenda"});
+  assert.equal(await upcomingStatus.count(),0);
+  await pane2.getByRole("button",{name:/^Prepare workshop agenda/}).click();
   await upcomingStatus.selectOption("completed");
   await upcomingStatus.waitFor({state:"hidden"});
   await page.getByRole("button",{name:"Undo",exact:true}).click();
@@ -168,7 +173,7 @@ async function runScenarios(page, out) {
     const a=await overdue.boundingBox(), b=await next.boundingBox();
     assert.ok(a.height>44, "Wrapped title must grow despite a fixed theme button height");
     assert.ok(a.y+a.height+2<=b.y, "Wrapped title and next row must not overlap");
-    const inner=await overdue.evaluate(el=>{const entry=el.parentElement,t=el.getBoundingClientRect(),m=entry.querySelector(".fjg-focus-meta").getBoundingClientRect();return {titleBottom:t.bottom,metaTop:m.top,metaBottom:m.bottom,rowBottom:entry.closest(".fjg-focus-row").getBoundingClientRect().bottom};});
+    const inner=await overdue.evaluate(el=>{const t=el.firstElementChild.getBoundingClientRect(),m=el.querySelector(".fjg-focus-meta").getBoundingClientRect();return {titleBottom:t.bottom,metaTop:m.top,metaBottom:m.bottom,rowBottom:el.closest(".fjg-focus-row").getBoundingClientRect().bottom};});
     assert.ok(inner.titleBottom<=inner.metaTop && inner.metaBottom<=inner.rowBottom,"Metadata has space inside its own row");
     await screen("05-theme-long-title-"+width);
   }

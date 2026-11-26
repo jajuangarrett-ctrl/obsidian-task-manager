@@ -212,22 +212,14 @@ export class FocusHome {
             this.plugin.refreshDashboard();
           };
           const check=button(row,"",()=>run(()=>setStatus(done?"restore":"completed"),check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
-          const entry=row.createDiv({cls:"fjg-focus-entry"});
-          const name=button(entry,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
+          const name=button(row,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
           name.setAttribute("aria-expanded",String(opened));name.createSpan({text:r.title});
           const due=planningDay(r.due), past=!!due && due<today && !done;
-          const sub=entry.createDiv({cls:"fjg-focus-meta"});
-          // A native select, outside the title button, matches All and opens the iOS picker.
-          const status=sub.createEl("select",{cls:"fjg-focus-status",attr:{"aria-label":`Status for ${r.title}`}});
-          for(const value of OBJECTIVE_STATUS_CHOICES) if(canTransition(r.status,value)) status.createEl("option",{text:statusLabel(value),value});
-          status.value=r.status;
-          status.addEventListener("change",()=>{
-            const target=status.value as TaskStatus;
-            status.value=r.status;
-            run(()=>setStatus(target),status);
-          });
-          if(r.scheduled_for)sub.createSpan({text:`Planned ${r.scheduled_for}`});
-          if(r.due)sub.createSpan({text:`${past?"Past due":"Due"} ${r.due}`,cls:past?"fjg-focus-overdue":undefined});
+          if(r.scheduled_for || r.due){
+            const sub=name.createEl("small",{cls:"fjg-focus-meta"});
+            if(r.scheduled_for)sub.createSpan({text:`Planned ${r.scheduled_for}`});
+            if(r.due)sub.createSpan({text:`${past?"Past due":"Due"} ${r.due}`,cls:past?"fjg-focus-overdue":undefined});
+          }
           if(canScheduleFocusObjective(task)){
             name.draggable=true;
             name.addEventListener("dragstart",ev=>{this.drag={type:"objective",id,path:task.taskFile.path,prior:r.scheduled_for||""};ev.dataTransfer?.setData("text/plain","Objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="move";});
@@ -251,6 +243,15 @@ export class FocusHome {
               }
             }
             const tools=detail.createDiv({cls:"fjg-focus-tools"});
+            // A native select, outside the title button, sits with the other expanded actions.
+            const status=tools.createEl("select",{cls:"fjg-focus-status",attr:{"aria-label":`Status for ${r.title}`}});
+            for(const value of OBJECTIVE_STATUS_CHOICES) if(canTransition(r.status,value)) status.createEl("option",{text:statusLabel(value),value});
+            status.value=r.status;
+            status.addEventListener("change",()=>{
+              const target=status.value as TaskStatus;
+              status.value=r.status;
+              run(()=>setStatus(target),status);
+            });
             if(!done){
               button(tools,"When",()=>{this.scheduleId=this.scheduleId===id?"":id;this.postpone=r.scheduled_for||"";jump(this.scheduleId?`focus-when-${pane}-${id}`:`focus-row-${pane}-${id}`);},{icon:"calendar-days"});
               button(tools,"Deadline",()=>this.plugin.openTaskDueDateModal(id));
