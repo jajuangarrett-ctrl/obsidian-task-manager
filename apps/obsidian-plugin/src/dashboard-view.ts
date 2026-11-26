@@ -55,7 +55,7 @@ export class TaskDashboardView extends ItemView {
   private overviewWorkspaceId = "";
   private overviewPanelTitle?: HTMLElement;
 
-  async onClose(): Promise<void> { this.cancelSearchRender(); this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
+  async onClose(): Promise<void> { this.focusHome.dispose(); this.cancelSearchRender(); this.overviewWorkspace?.dispose(); this.stopDateWatch?.();this.stopDateWatch=undefined; }
 
   private toggleOverviewObjective(id: string): void {
     const closing = this.overviewSelected === id;

@@ -1,3 +1,8 @@
+## 0.30.27
+
+- In landscape Book Split, selecting an objective on the left opens notes, checklist and controls on the right. Back restores the second list and its scroll.
+- Sidebar layout opens the objective in its large main pane. Full Width expands the objective across the available Obsidian view. Folded list rows stay compact; an open landscape detail remains readable when folded.
+
 ## 0.30.26
 
 - Move the Home status picker into the expanded actions beside When and Deadline, leaving collapsed rows with just the title and any dates.

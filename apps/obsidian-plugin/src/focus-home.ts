@@ -1,4 +1,4 @@
-import { Notice, setIcon, TFolder } from "obsidian";
+import { Component, MarkdownRenderer, Notice, setIcon, TFolder } from "obsidian";
 import { canTransition, planningDay, statusLabel, validatePlanningDay, type TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import type { IndexedTask } from "./workspace-service";
@@ -33,9 +33,16 @@ export class FocusHome {
   private promiseError = "";
   private scheduleId = "";
   private postpone = "";
+  private detailId = "";
+  private detailPath = "";
+  private readingWide = false;
+  private markdown?: Component;
   constructor(private plugin: FjgTaskManagerPlugin, private redraw: () => void) {}
 
+  dispose(): void { this.markdown?.unload(); this.markdown=undefined; }
+
   snapshot(root: HTMLElement): void {
+    this.dispose();
     root.querySelectorAll<HTMLElement>("[data-focus-scroll]").forEach(el => {
       if (el.getClientRects().length) this.positions.set(el.dataset.focusScroll!,el.scrollTop);
     });
@@ -49,6 +56,12 @@ export class FocusHome {
     const shell = root.createEl("section",{cls:"fjg-focus-home",attr:{"aria-label":"Focus Lists"}});
     shell.dataset.layout=this.layout;
     shell.dataset.activePane=String(this.activePane);
+    const landscape=()=>!!shell.ownerDocument.defaultView?.matchMedia("(orientation: landscape)").matches && shell.clientWidth>=690;
+    const closeDetail=()=>{
+      const id=this.detailId;
+      this.detailId="";this.detailPath="";this.readingWide=false;this.scheduleId="";
+      jump(`focus-row-0-${id}`);
+    };
     const button=(parent:HTMLElement,text:string,act:()=>void,opts:{cls?:string,icon?:string,key?:string,label?:string,pressed?:boolean}={})=>{
       const el=parent.createEl("button",{type:"button",cls:opts.cls,attr:{
         ...(opts.key?{"data-focus-key":opts.key}:{}),...(opts.label?{"aria-label":opts.label}:{}),...(opts.pressed===undefined?{}:{"aria-pressed":String(opts.pressed)})}});
@@ -77,13 +90,14 @@ export class FocusHome {
       this.promiseError="";jump("focus-capture-title");
     };
     const setList=(pane:Pane,key:FocusList)=>{
+      if(pane===0){this.detailId="";this.detailPath="";this.readingWide=false;}
       this.lists[pane]=key;this.selected[pane]="";this.picker=null;this.search="";this.scheduleId="";
       jump(pane===0?"focus-primary-pick":"focus-secondary-pick");
     };
     const toolbar=shell.createDiv({cls:"fjg-focus-toolbar"});
-    button(toolbar,"Lists",()=>{this.picker=this.picker!==null?null:this.activePane; this.search="";jump(this.picker!==null?"focus-jump":"focus-lists");},{icon:"panel-left",key:"focus-lists"});
+    button(toolbar,"Lists",()=>{this.picker=this.picker!==null?null:(this.detailId?0:this.activePane); this.search="";jump(this.picker!==null?"focus-jump":"focus-lists");},{icon:"panel-left",key:"focus-lists"});
     const layout=toolbar.createEl("select",{cls:"fjg-focus-layout",attr:{"aria-label":"Home layout","data-focus-key":"focus-layout"}});
-    for(const [key,text] of [["split","Book Split"],["sidebar","Sidebar"],["single","Single List"]])layout.createEl("option",{value:key,text});
+    for(const [key,text] of [["split","Book Split"],["sidebar","Sidebar"],["single","Single Pane"]])layout.createEl("option",{value:key,text});
     layout.value=this.layout;layout.addEventListener("change",()=>{this.layout=layout.value as typeof this.layout;if(this.layout!=="split")this.activePane=0;this.picker=null;jump("focus-layout");});
     button(toolbar,"",()=>this.plugin.openLiveVoice(()=>JSON.stringify({mode:"home",focusList:this.lists[0],secondaryList:this.layout==="split"?this.lists[1]:undefined})),{label:"Talk to Vault",icon:"mic"});
     if(this.undo){
@@ -156,9 +170,81 @@ export class FocusHome {
     const today=localDateKey();
     const pastDueCount=focusGroups(tasks,"past-due",today,areas)[0]?.tasks.length || 0;
     const body=shell.createDiv({cls:"fjg-focus-body"});
+    const focusedTask=tasks.find(t=>t.record.task_id===this.detailId && t.taskFile.path===this.detailPath && canUseFocusObjective(t));
+    if(this.detailId && !focusedTask){this.detailId="";this.detailPath="";this.readingWide=false;}
+    if(focusedTask){shell.addClass("has-objective-detail");shell.toggleClass("is-reading-wide",this.readingWide);}
     const sidebar=body.createDiv({cls:"fjg-focus-sidebar"}); if(this.layout==="sidebar") listNav(sidebar,0,false);
+    const updateStatus=async(task:IndexedTask,target:TaskStatus|"restore")=>{
+      const r=task.record,id=r.task_id;
+      const current=taskNow(task);
+      if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before changing its status.");
+      if(target!=="restore" && (target===r.status || !OBJECTIVE_STATUS_CHOICES.some(option=>option===target) || !canTransition(r.status,target))) return;
+      const saved=await this.plugin.workspaceService.changeStatus(id,target);
+      this.undo={text:`Status changed to ${statusLabel(saved.record.status)}`,apply:async()=>{
+        const now=taskNow(saved);
+        if(now.record.status!==saved.record.status || now.record.updated_at!==saved.record.updated_at)throw new Error("This objective has changed since that action.");
+        await this.plugin.workspaceService.changeStatus(id,r.status);
+      }};
+      this.plugin.refreshDashboard();
+    };
+    const renderDetails=(detail:HTMLElement,task:IndexedTask,pane:Pane,full=false)=>{
+      const r=task.record,id=r.task_id,done=r.status==="completed";
+      if(full && task.notes.trim()){
+        detail.createEl("h3",{text:"Objective notes"});
+        const target=detail.createDiv({cls:"fjg-focus-notes markdown-rendered"});
+        this.markdown=new Component();this.markdown.load();
+        const component=this.markdown;
+        void MarkdownRenderer.render(this.plugin.app,task.notes,target,task.taskFile.path,component)
+          .catch(()=>{if(target.isConnected)target.textContent=task.notes;});
+      }else {
+        const preview=description(task.notes);
+        if(preview)detail.createEl("p",{text:preview});
+      }
+      if(r.subtasks.length){
+        detail.createEl("h4",{text:"Checklist"});
+        for(const action of r.subtasks.filter(x=>x.status!=="archived")){
+          const toggle=button(detail,action.title,()=>run(async()=>{
+            const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
+            if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
+            await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
+            this.plugin.refreshDashboard();
+          }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
+          toggle.disabled=done;
+        }
+      }
+      const tools=detail.createDiv({cls:"fjg-focus-tools"});
+      // A native select, outside the title button, sits with the other expanded actions.
+      const status=tools.createEl("select",{cls:"fjg-focus-status",attr:{"aria-label":`Status for ${r.title}`}});
+      for(const value of OBJECTIVE_STATUS_CHOICES) if(canTransition(r.status,value)) status.createEl("option",{text:statusLabel(value),value});
+      status.value=r.status;
+      status.addEventListener("change",()=>{
+        const target=status.value as TaskStatus;
+        status.value=r.status;
+        run(()=>updateStatus(task,target),status);
+      });
+      if(!done){
+        button(tools,"When",()=>{this.scheduleId=this.scheduleId===id?"":id;this.postpone=r.scheduled_for||"";jump(this.scheduleId?`focus-when-${pane}-${id}`:full?"focus-objective-detail":`focus-row-${pane}-${id}`);},{icon:"calendar-days"});
+        button(tools,"Deadline",()=>this.plugin.openTaskDueDateModal(id));
+        button(tools,"Add action",()=>this.plugin.openObjectiveActionModal(id));
+      }
+      button(tools,"Files",()=>this.plugin.openObjectiveWorkspace(id,true));
+      button(tools,"Updates",()=>run(()=>this.plugin.openTaskUpdates(id)));
+      const more=tools.createEl("details");more.createEl("summary",{text:"More"});
+      const other=more.createDiv({cls:"fjg-focus-more"});
+      button(other,"Rename",()=>this.plugin.openRenameTaskModal(id));
+      if(!done)button(other,"Move",()=>this.plugin.openTaskRelocationModal(id));
+      button(other,"Open note",()=>run(()=>this.plugin.openTask(id)));
+      if(this.scheduleId===id && !done){
+        const date=detail.createDiv({cls:"fjg-focus-schedule"});
+        const input=date.createEl("input",{type:"date",attr:{"aria-label":`Planning day for ${r.title}`,"data-focus-key":`focus-when-${pane}-${id}`}});input.value=this.postpone;
+        input.addEventListener("input",()=>{this.postpone=input.value;});
+        button(date,"Save",()=>changeDay(task,input.value));
+        button(date,"Today",()=>changeDay(task,today));
+        button(date,"Clear",()=>changeDay(task,""));
+      }
+    };
     for(const pane of [0,1] as const){
-      if(pane===1 && this.layout!=="split") continue;
+      if(pane===1 && (this.layout!=="split" || focusedTask)) continue;
       const list=this.lists[pane], scrollerKey=pane+":"+list;
       const part=body.createEl("section",{cls:`fjg-focus-pane is-pane-${pane}`,attr:{"aria-label":pane===0?"Primary focus list":"Secondary focus list"}});
       const activate=()=>{this.activePane=pane;shell.dataset.activePane=String(pane);};
@@ -197,23 +283,19 @@ export class FocusHome {
           if(group.scheduleDay)drop(caption,group.scheduleDay);
         }
         for(const task of group.tasks){
-          const r=task.record,id=r.task_id,done=r.status==="completed", opened=this.selected[pane]===id;
-          const row=section.createDiv({cls:`fjg-focus-row${opened?" is-open":""}`});
-          const setStatus=async(target:TaskStatus|"restore")=>{
-            const current=taskNow(task);
-            if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before changing its status.");
-            if(target!=="restore" && (target===r.status || !OBJECTIVE_STATUS_CHOICES.some(option=>option===target) || !canTransition(r.status,target))) return;
-            const saved=await this.plugin.workspaceService.changeStatus(id,target);
-            this.undo={text:`Status changed to ${statusLabel(saved.record.status)}`,apply:async()=>{
-              const now=taskNow(saved);
-              if(now.record.status!==saved.record.status || now.record.updated_at!==saved.record.updated_at)throw new Error("This objective has changed since that action.");
-              await this.plugin.workspaceService.changeStatus(id,r.status);
-            }};
-            this.plugin.refreshDashboard();
-          };
-          const check=button(row,"",()=>run(()=>setStatus(done?"restore":"completed"),check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
-          const name=button(row,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
-          name.setAttribute("aria-expanded",String(opened));name.createSpan({text:r.title});
+          const r=task.record,id=r.task_id,done=r.status==="completed", opened=this.selected[pane]===id, activeDetail=pane===0&&focusedTask?.record.task_id===id;
+          const row=section.createDiv({cls:`fjg-focus-row${opened||activeDetail?" is-open":""}`});
+          const check=button(row,"",()=>run(()=>updateStatus(task,done?"restore":"completed"),check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
+          const name=button(row,"",()=>{
+            this.scheduleId="";
+            if(pane===0 && landscape()){
+              this.activePane=0;this.selected[0]="";this.detailId=id;this.detailPath=task.taskFile.path;
+              this.positions.delete("detail:"+id);jump("focus-objective-detail");
+            }else{
+              this.selected[pane]=opened?"":id;jump(`focus-row-${pane}-${id}`);
+            }
+          },{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
+          name.setAttribute("aria-expanded",String(opened||activeDetail));name.createSpan({text:r.title});
           const due=planningDay(r.due), past=!!due && due<today && !done;
           if(r.scheduled_for || r.due){
             const sub=name.createEl("small",{cls:"fjg-focus-meta"});
@@ -226,53 +308,7 @@ export class FocusHome {
             name.addEventListener("dragend",()=>{this.drag=undefined;});
           }
 
-          if(opened){
-            const detail=section.createDiv({cls:"fjg-focus-detail"});
-            const preview=description(task.notes);
-            if(preview)detail.createEl("p",{text:preview});
-            if(r.subtasks.length){
-              detail.createEl("h4",{text:"Checklist"});
-              for(const action of r.subtasks.filter(x=>x.status!=="archived")){
-                const toggle=button(detail,action.title,()=>run(async()=>{
-                  const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
-                  if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
-                  await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
-                  this.plugin.refreshDashboard();
-                }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
-                toggle.disabled=done;
-              }
-            }
-            const tools=detail.createDiv({cls:"fjg-focus-tools"});
-            // A native select, outside the title button, sits with the other expanded actions.
-            const status=tools.createEl("select",{cls:"fjg-focus-status",attr:{"aria-label":`Status for ${r.title}`}});
-            for(const value of OBJECTIVE_STATUS_CHOICES) if(canTransition(r.status,value)) status.createEl("option",{text:statusLabel(value),value});
-            status.value=r.status;
-            status.addEventListener("change",()=>{
-              const target=status.value as TaskStatus;
-              status.value=r.status;
-              run(()=>setStatus(target),status);
-            });
-            if(!done){
-              button(tools,"When",()=>{this.scheduleId=this.scheduleId===id?"":id;this.postpone=r.scheduled_for||"";jump(this.scheduleId?`focus-when-${pane}-${id}`:`focus-row-${pane}-${id}`);},{icon:"calendar-days"});
-              button(tools,"Deadline",()=>this.plugin.openTaskDueDateModal(id));
-              button(tools,"Add action",()=>this.plugin.openObjectiveActionModal(id));
-            }
-            button(tools,"Files",()=>this.plugin.openObjectiveWorkspace(id,true));
-            button(tools,"Updates",()=>run(()=>this.plugin.openTaskUpdates(id)));
-            const more=tools.createEl("details");more.createEl("summary",{text:"More"});
-            const other=more.createDiv({cls:"fjg-focus-more"});
-            button(other,"Rename",()=>this.plugin.openRenameTaskModal(id));
-            if(!done)button(other,"Move",()=>this.plugin.openTaskRelocationModal(id));
-            button(other,"Open note",()=>run(()=>this.plugin.openTask(id)));
-            if(this.scheduleId===id && !done){
-              const date=detail.createDiv({cls:"fjg-focus-schedule"});
-              const input=date.createEl("input",{type:"date",attr:{"aria-label":`Planning day for ${r.title}`,"data-focus-key":`focus-when-${pane}-${id}`}});input.value=this.postpone;
-              input.addEventListener("input",()=>{this.postpone=input.value;});
-              button(date,"Save",()=>changeDay(task,input.value));
-              button(date,"Today",()=>changeDay(task,today));
-              button(date,"Clear",()=>changeDay(task,""));
-            }
-          }
+          if(opened && !(pane===0 && focusedTask?.record.task_id===id))renderDetails(section.createDiv({cls:"fjg-focus-detail"}),task,pane);
         }
       }
       scroller.scrollTop=this.positions.get(scrollerKey)||0;
@@ -282,8 +318,26 @@ export class FocusHome {
       add.addEventListener("dragstart",ev=>{this.drag={type:"capture"};ev.dataTransfer?.setData("text/plain","New objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="copy";});
       add.addEventListener("dragend",()=>{this.drag=undefined;});
     }
+    if(focusedTask){
+      const r=focusedTask.record,id=r.task_id;
+      const detail=body.createEl("section",{cls:"fjg-focus-reading",attr:{"aria-label":"Selected objective"}});
+      const bar=detail.createDiv({cls:"fjg-focus-reading-header"});
+      button(bar,"Back",closeDetail,{icon:"chevron-left",label:"Back to lists"});
+      button(bar,this.readingWide?"Restore layout":"Full Width",()=>{
+        this.readingWide=!this.readingWide;jump("focus-reading-width");
+      },{cls:"fjg-focus-reading-width",icon:this.readingWide?"minimize-2":"maximize-2",key:"focus-reading-width"});
+      const key="detail:"+id;
+      const scroll=detail.createDiv({cls:"fjg-focus-scroll",attr:{"data-focus-scroll":key}});
+      scroll.createEl("h2",{text:r.title,attr:{tabindex:"-1","data-focus-key":"focus-objective-detail"}});
+      const meta=[statusLabel(r.status),r.scheduled_for&&`Planned ${r.scheduled_for}`,r.due&&`Due ${r.due}`].filter(Boolean);
+      scroll.createEl("p",{text:meta.join(" · "),cls:"fjg-focus-reading-meta"});
+      renderDetails(scroll.createDiv({cls:"fjg-focus-detail"}),focusedTask,0,true);
+      scroll.scrollTop=this.positions.get(key)||0;
+    }
     shell.addEventListener("keydown",event=>{
       if(event.key==="Escape" && this.scheduleId){this.scheduleId="";this.redraw();}
+      else if(event.key==="Escape" && focusedTask && !isTextInput(shell.ownerDocument.activeElement) && shell.ownerDocument.activeElement?.tagName!=="SELECT"){closeDetail();}
+      if(shell.ownerDocument.activeElement?.tagName==="SELECT")return;
       if((event.key==="/" || (event.key==="k"&&(event.metaKey||event.ctrlKey)))&&!isTextInput(shell.ownerDocument.activeElement)){
         event.preventDefault();event.stopPropagation();this.picker=0;this.search="";jump("focus-jump");
       }

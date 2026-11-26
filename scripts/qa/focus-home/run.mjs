@@ -107,6 +107,32 @@ async function runScenarios(page, out) {
   await pane2.waitFor();assert.ok(await width(pane2)>415&&await width(pane2)<450);
   assert.ok((await pane1.boundingBox()).x < (await pane2.boundingBox()).x);
   await screen("02-unfolded-book-split");
+  const reading=page.getByRole("region",{name:"Selected objective"});
+  const rightScroller=pane2.locator(".fjg-focus-scroll");
+  const rightTop=await rightScroller.evaluate(el=>{el.scrollTop=220;return el.scrollTop;});
+  const readingHeading=reading.getByRole("heading",{name:"Confirm advisor coverage",level:2});
+  await row().click();
+  await readingHeading.waitFor();
+  await reading.getByText(/Synthetic objective summary/).waitFor();
+  await reading.getByRole("button",{name:"Check draft schedule"}).waitFor();
+  await reading.getByRole("combobox",{name:"Status for Confirm advisor coverage"}).waitFor();
+  assert.equal(await pane2.isVisible(),false);
+  assert.ok((await pane1.boundingBox()).x<(await reading.boundingBox()).x);
+  assert.ok(await width(reading)>415 && await width(reading)<450);
+  await screen("02b-book-split-objective");
+  await reading.getByRole("button",{name:"Full Width",exact:true}).click();
+  assert.equal(await pane1.isVisible(),false);assert.ok(await width(reading)>850);
+  await screen("02c-full-width-landscape");
+  await reading.getByRole("button",{name:"Restore layout",exact:true}).click();
+  assert.equal(await pane1.isVisible(),true);
+  await page.setViewportSize({width:386,height:678});
+  assert.equal(await pane1.isVisible(),false); assert.ok(await width(reading)>370);
+  await page.setViewportSize({width:871,height:669});
+  await reading.getByRole("button",{name:"Back to lists",exact:true}).click();
+  assert.equal(await reading.isVisible(),false);await pane2.waitFor();
+  assert.equal(await rightScroller.evaluate(el=>el.scrollTop),rightTop);
+  assert.equal(await row().evaluate(el=>el===document.activeElement),true);
+
   const upcomingStatus=pane2.getByRole("combobox",{name:"Status for Prepare workshop agenda"});
   assert.equal(await upcomingStatus.count(),0);
   await pane2.getByRole("button",{name:/^Prepare workshop agenda/}).click();
@@ -136,6 +162,15 @@ async function runScenarios(page, out) {
   await page.setViewportSize({width:871,height:669});
   await layout.selectOption("sidebar");
   await page.getByRole("navigation",{name:"Focus lists sidebar"}).waitFor();
+  await row().click(); await readingHeading.waitFor();
+  assert.ok(await width(reading)>630);
+  await page.getByRole("navigation",{name:"Focus lists sidebar"}).waitFor();
+  await screen("03b-sidebar-and-objective");
+  await reading.getByRole("button",{name:"Full Width",exact:true}).click();
+  assert.equal(await page.getByRole("navigation",{name:"Focus lists sidebar"}).isVisible(),false);
+  await reading.getByRole("button",{name:"Restore layout",exact:true}).click();
+  await reading.getByRole("button",{name:"Back to lists",exact:true}).click();
+
   assert.equal(await pane2.isVisible(),false);
   await layout.selectOption("single");
   assert.equal(await page.getByRole("navigation",{name:"Focus lists sidebar"}).isVisible(),false);
