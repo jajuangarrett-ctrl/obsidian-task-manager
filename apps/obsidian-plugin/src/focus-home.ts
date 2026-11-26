@@ -1,5 +1,5 @@
 import { Notice, setIcon, TFolder } from "obsidian";
-import { statusLabel, validatePlanningDay } from "@fjg/task-core";
+import { planningDay, statusLabel, validatePlanningDay } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import type { IndexedTask } from "./workspace-service";
 import { objectiveAreas } from "./area-model";
@@ -153,6 +153,7 @@ export class FocusHome {
     }
 
     const today=localDateKey();
+    const pastDueCount=focusGroups(tasks,"past-due",today,areas)[0]?.tasks.length || 0;
     const body=shell.createDiv({cls:"fjg-focus-body"});
     const sidebar=body.createDiv({cls:"fjg-focus-sidebar"}); if(this.layout==="sidebar") listNav(sidebar,0,false);
     for(const pane of [0,1] as const){
@@ -168,10 +169,11 @@ export class FocusHome {
       heading.dataset.tone=selectedList?.tone||"blue";
       setIcon(heading.createSpan({cls:"fjg-focus-list-icon",attr:{"aria-hidden":"true"}}),selectedList?.icon||"list");
       heading.createSpan({text:label(list)});
+      if(list==="past-due") heading.createSpan({text:String(pastDueCount),cls:"fjg-focus-count",attr:{"aria-label":`${pastDueCount} past-due objectives`}});
       button(paneHeader,"",()=>{this.picker=pane;this.search="";jump("focus-jump");},{icon:"chevron-down",label:pane?"Choose second list":"Choose primary list",key:pane?"focus-secondary-pick":"focus-primary-pick"});
       const scroller=part.createDiv({cls:"fjg-focus-scroll",attr:{"data-focus-scroll":scrollerKey}});
       const groups=focusGroups(tasks,list,today,areas);
-      if(!groups.some(g=>g.tasks.length))scroller.createEl("p",{cls:"fjg-focus-empty",text:list==="today"?"Nothing planned for today. Add an objective or schedule one from another list.":"Nothing in this list yet."});
+      if(!groups.some(g=>g.tasks.length))scroller.createEl("p",{cls:"fjg-focus-empty",text:list==="today"?"Nothing planned for today. Add an objective or schedule one from another list.":list==="past-due"?"No open objectives are past due.":"Nothing in this list yet."});
       const drop=(element:HTMLElement,day:string)=>{
         element.addEventListener("dragover",event=>{if(!this.drag || this.busy)return;event.preventDefault();element.addClass("is-drop");});
         element.addEventListener("dragleave",()=>element.removeClass("is-drop"));
@@ -187,6 +189,10 @@ export class FocusHome {
         if(group.label){
           const caption=section.createDiv({cls:"fjg-focus-date"});
           caption.createEl("h3",{text:group.label});
+          if(group.key==="0-overdue") {
+            caption.addClass("is-past-due");
+            button(caption,`View all · ${group.tasks.length}`,()=>setList(pane,"past-due"),{cls:"fjg-focus-past-due-link",label:`View all ${group.tasks.length} past-due objectives`});
+          }
           if(group.scheduleDay)drop(caption,group.scheduleDay);
         }
         for(const task of group.tasks){
@@ -205,8 +211,11 @@ export class FocusHome {
           },check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
           const name=button(row,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
           name.setAttribute("aria-expanded",String(opened));name.createSpan({text:r.title});
-          const sub=[statusLabel(r.status), r.scheduled_for?`Planned ${r.scheduled_for}`:"",r.due?`Due ${r.due}`:""].filter(Boolean).join(" · ");
-          name.createEl("small",{text:sub});
+          const due=planningDay(r.due), past=!!due && due<today && !done;
+          const sub=name.createEl("small",{cls:"fjg-focus-meta"});
+          sub.createSpan({text:statusLabel(r.status)});
+          if(r.scheduled_for)sub.createSpan({text:`Planned ${r.scheduled_for}`});
+          if(r.due)sub.createSpan({text:`${past?"Past due":"Due"} ${r.due}`,cls:past?"fjg-focus-overdue":undefined});
           if(canScheduleFocusObjective(task)){
             name.draggable=true;
             name.addEventListener("dragstart",ev=>{this.drag={type:"objective",id,path:task.taskFile.path,prior:r.scheduled_for||""};ev.dataTransfer?.setData("text/plain","Objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="move";});

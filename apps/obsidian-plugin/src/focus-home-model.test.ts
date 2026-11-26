@@ -38,3 +38,10 @@ describe("Focus Lists smart filters",()=>{
     expect(addFocusDays("2026-12-31",1)).toBe("2027-01-01");
   });
 });
+
+it("offers past-due deadlines separately from today's deadlines, stale plans and finished work",()=>{
+  const tasks=[make("Overdue waiting","waiting","2026-11-25"),make("Overdue hold","on-hold","2026-10-17","2026-12-02"),
+    make("Due today","do-soon",anchor),make("Stale plan","ongoing","","2026-11-24"),make("Finished","completed","2026-11-23")];
+  expect(labels(tasks,"past-due")).toEqual(["Overdue hold","Overdue waiting"]);
+  expect(focusGroups(tasks,"today",anchor,[])[0]).toMatchObject({label:"Past Due",tasks:[tasks[1],tasks[0]]});
+});

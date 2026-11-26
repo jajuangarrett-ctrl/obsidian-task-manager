@@ -12,6 +12,9 @@ function make(title,status,other={},dest="08 Tasks/Inbox/Files") {
     record:{task_id:"obj_"+(++id),title,status,due:"",completed_at:day+"T12:00:00Z",updated_at:day+"T12:00:00Z",priority:"normal",project:"",tags:[],people:[],delegated_to:"",subtasks:[],...other}};
 }
 const tasks=[
+ make("Coordinate Three Temporary Counselor Offices During the Campus Renovation Across All Service Locations","waiting",{due:addFocusDays(day,-2)}),
+ make("Prepare the Annual Enrollment and Outreach Report Across All Programs and Campus Locations","on-hold",{due:addFocusDays(day,-1)}),
+ make("Completed overdue fixture","completed",{due:addFocusDays(day,-1)}),
  make("Confirm advisor coverage","do-first",{due:day,subtasks:[{id:"a",title:"Check draft schedule",status:"do-soon",completed:false}]}),
  make("Prepare workshop agenda","do-soon",{scheduled_for:tomorrow,due:later},area),
  make("A historical completed objective","completed"),

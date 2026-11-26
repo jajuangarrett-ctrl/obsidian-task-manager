@@ -138,6 +138,34 @@ async function runScenarios(page, out) {
   event=await page.evaluate(()=>window.fixtureEvents.find(e=>e.action==="capture"));
   assert.deepEqual(event.p.initialActions,["One","Two"]);assert.equal(event.p.status,"inbox");
 
+  await page.setViewportSize({width:871,height:669});
+  await page.locator("body").evaluate(el=>{el.classList.remove("theme-light");el.classList.add("theme-dark","custom-theme");});
+  await page.addStyleTag({content:`
+    .custom-theme { --background-primary:#111634; --background-secondary:#1d2549; --text-normal:#f1f2ff; --text-muted:#c3cce1; }
+    .custom-theme .fjg-focus-home button { height:44px !important; max-height:44px; font-size:19px; }
+    .custom-theme .fjg-focus-home .fjg-focus-title { font-size:20px; }
+    .custom-theme .fjg-focus-home button span { white-space:nowrap; }
+  `});
+  const overdue=pane1.getByRole("button",{name:/^Coordinate Three Temporary/});
+  const next=pane1.getByRole("button",{name:/^Prepare the Annual Enrollment/});
+  for (const [width,height] of [[871,669],[386,678],[669,871]]) {
+    await page.setViewportSize({width,height});await overdue.waitFor();
+    const a=await overdue.boundingBox(), b=await next.boundingBox();
+    assert.ok(a.height>=72, "Wrapped title must grow despite a fixed theme button height");
+    assert.ok(a.y+a.height+2<=b.y, "Wrapped title and next row must not overlap");
+    const inner=await overdue.evaluate(el=>{const t=el.firstElementChild.getBoundingClientRect(),m=el.lastElementChild.getBoundingClientRect();return {titleBottom:t.bottom, metaTop:m.top, metaBottom:m.bottom, rowBottom:el.getBoundingClientRect().bottom};});
+    assert.ok(inner.titleBottom+2<=inner.metaTop && inner.metaBottom<inner.rowBottom,"Metadata has space inside its own row");
+    await screen("05-theme-long-title-"+width);
+  }
+  await pane1.getByRole("heading",{name:"Past Due",exact:true,level:3}).waitFor();
+  await pane1.getByRole("button",{name:"View all 2 past-due objectives"}).click();
+  await pane1.getByRole("heading",{name:/Past Due/,level:2}).waitFor();
+  assert.equal(await pane1.locator(".fjg-focus-row").count(),2);
+  assert.equal(await pane1.getByText(/Completed overdue fixture/).count(),0);
+  assert.equal(await pane1.getByText(/Confirm advisor coverage/).count(),0);
+  await pane1.getByRole("button",{name:"Choose primary list"}).click();
+  await page.getByRole("button",{name:"Today",exact:true}).click();
+
   await all.click();
   await page.getByRole("heading",{name:"All",exact:true}).waitFor();
   await page.getByRole("searchbox",{name:"Search All objectives"}).waitFor();

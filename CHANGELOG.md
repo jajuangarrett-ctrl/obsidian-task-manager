@@ -1,3 +1,8 @@
+## 0.30.24
+
+- Fix crowded and overlapping Focus Lists text under mobile themes that give buttons a fixed height; long objective titles and their metadata now have room to wrap.
+- Put open objectives with deadlines before today in a labeled Past Due section at the top of Today and a dedicated Lists → Past Due view. Completed items, deadlines due today, and old planning dates alone are not past due.
+
 ## 0.30.23
 
 - Home now opens Focus Lists, with folded single-pane, unfolded Book Split and optional Sidebar or Single List layouts. Unfolded portrait gives the active list the whole pane.

@@ -5,6 +5,7 @@ import type { IndexedTask } from "./workspace-service";
 export const FOCUS_LISTS = [
   { key: "inbox", label: "Inbox", icon: "inbox", tone: "blue" },
   { key: "today", label: "Today", icon: "star", tone: "gold" },
+  { key: "past-due", label: "Past Due", icon: "calendar-clock", tone: "red" },
   { key: "upcoming", label: "Upcoming", icon: "calendar-days", tone: "pink" },
   { key: "anytime", label: "Anytime", icon: "layers", tone: "teal" },
   { key: "someday", label: "Someday", icon: "archive", tone: "amber" },
@@ -46,8 +47,10 @@ export function focusGroups(tasks: readonly IndexedTask[], list: FocusList, toda
     if (list==="logbook") {
       if (done) { const day = planningDay(r.completed_at.slice(0,10)); add(day||"0000",day ? focusDayLabel(day) : "Earlier",task); }
     } else if (!done) {
-      if (list==="today") {
-        if (due && due<today) add("0-overdue","Overdue deadlines",task);
+      if (list==="past-due") {
+        if (due && due<today) add("0-overdue","",task);
+      } else if (list==="today") {
+        if (due && due<today) add("0-overdue","Past Due",task);
         else if (dates[0] && dates[0]<=today) add("1-today","Today",task,today);
         else if (!dates.length && r.status==="do-first") add("2-priority","Do First · not scheduled",task);
       } else if (list==="upcoming") {
