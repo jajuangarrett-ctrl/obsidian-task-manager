@@ -325,7 +325,7 @@ export class TaskRelocationModal extends Modal {
   }
 
   onOpen(): void {
-    this.modalEl.addClass("fjg-task-project-picker-modal");
+    this.modalEl.addClass("fjg-task-project-picker-modal", "fjg-task-relocation-modal");
     this.setTitle(this.purpose === "capture" ? "Choose objective save folder" : `Move objective: ${this.taskTitle}`);
     this.render();
   }
@@ -366,8 +366,25 @@ export class TaskRelocationModal extends Modal {
       cls: "fjg-project-picker-choices",
       attr: { role: "listbox", "aria-label": "Objective destination folders" }
     });
+    const summary = this.contentEl.createDiv({
+      cls: "fjg-relocation-selection",
+      attr: { role: "status", "aria-atomic": "true" }
+    });
+    let setConfirmDisabled: (disabled: boolean) => void = () => {};
+    const rows: Array<{ path: string; button: HTMLButtonElement; marker: HTMLElement }> = [];
+    const updateSelection = () => {
+      for (const { path, button, marker } of rows) {
+        const selected = path === this.selectedDestination;
+        button.setAttribute("aria-selected", String(selected));
+        marker.hidden = !selected;
+      }
+      summary.textContent = this.selectedDestination ? `Selected folder: ${this.selectedDestination}` : "";
+      summary.hidden = !this.selectedDestination;
+      setConfirmDisabled(this.moving || !this.selectedDestination);
+    };
     const renderChoices = () => {
       choices.empty();
+      rows.length = 0;
       const normalizedQuery = normalizeProjectPickerText(this.query);
       const matches = this.destinations.filter((path) => path !== this.currentLocation
         && normalizeProjectPickerText(path).includes(normalizedQuery));
@@ -380,50 +397,60 @@ export class TaskRelocationModal extends Modal {
         });
       } else {
         for (const path of matches) {
-          const selected = path === this.selectedDestination;
           const button = choices.createEl("button", {
-            cls: `fjg-project-picker-option${selected ? " is-selected" : ""}`,
-            text: path,
+            cls: "fjg-project-picker-option",
             attr: {
               type: "button",
               role: "option",
-              "aria-selected": String(selected)
+              "aria-selected": "false"
             }
           });
+          button.createSpan({ cls: "fjg-relocation-path", text: path });
+          const marker = button.createSpan({
+            cls: "fjg-relocation-marker",
+            text: "✓ Selected",
+            attr: { "aria-hidden": "true" }
+          });
+          rows.push({ path, button, marker });
           button.disabled = this.moving;
           button.addEventListener("click", () => {
             this.selectedDestination = path;
             this.error = "";
-            this.render();
+            error.hidden = true;
+            updateSelection();
           });
         }
       }
+      updateSelection();
     };
-    renderChoices();
 
     new Setting(this.contentEl)
       .addButton((button) => button
         .setButtonText("Cancel")
         .setDisabled(this.moving)
         .onClick(() => this.close()))
-      .addButton((button) => button
-        .setButtonText(this.purpose === "capture" ? (this.moving ? "Selecting…" : "Use this folder") : (this.moving ? "Moving…" : "Move objective"))
+      .addButton((button) => {
+        setConfirmDisabled = (disabled) => { button.setDisabled(disabled); };
+        button.setButtonText(this.purpose === "capture" ? (this.moving ? "Selecting…" : "Use this folder") : (this.moving ? "Moving…" : "Move objective"))
         .setCta()
-        .setDisabled(this.moving || !this.selectedDestination)
         .onClick(async () => {
+          if (this.moving || !this.selectedDestination) return;
+          const destination = this.selectedDestination;
           this.moving = true;
           this.error = "";
           this.render();
           try {
-            await this.submit(this.selectedDestination);
+            await this.submit(destination);
             this.close();
           } catch (error) {
             this.moving = false;
             this.error = error instanceof Error ? error.message : String(error);
             this.render();
           }
-        }));
-    if (!this.moving) window.setTimeout(() => search.focus(), 0);
+        });
+      });
+    renderChoices();
+    if (!this.moving) window.setTimeout(() => { if (search.isConnected) search.focus(); }, 0);
   }
 }
 

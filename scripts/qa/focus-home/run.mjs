@@ -289,5 +289,35 @@ async function runScenarios(page, out) {
   await home.click();await pane1.getByRole("heading",{name:"Today",exact:true,level:2}).waitFor();
   assert.equal(await sectionBar.isVisible(),false,"Returning to Home restores the space-saving default");
   assert.equal(await reveal.evaluate(el=>el===document.activeElement),true);
-  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize and All");
+  await page.addStyleTag({content:`
+    .is-mobile .modal button { background: #d5daee !important; height: 44px !important; }
+    .modal { position: fixed; inset: 8px; z-index: 10; padding: 12px; overflow:auto; background: var(--background-secondary); }
+  `});
+  for(const w of [386,871]){
+    await page.setViewportSize({width:w,height:w===386?678:669});
+    await row().click();
+    const details=w===386?pane1:reading;
+    await details.locator("summary").filter({hasText:"More"}).click();
+    await details.getByRole("button",{name:"Move",exact:true}).click();
+    const dialog=page.getByRole("dialog",{name:/Move objective/});
+    const select=dialog.getByRole("option");
+    const confirm=dialog.getByRole("button",{name:"Move objective"});
+    assert.equal(await confirm.isDisabled(),true);
+    await select.nth(1).tap();
+    assert.equal(await select.nth(1).getAttribute("aria-selected"),"true");
+    await select.nth(1).getByText("✓ Selected",{exact:true}).waitFor();
+    assert.notEqual(await select.nth(0).evaluate(e=>getComputedStyle(e).backgroundColor),await select.nth(1).evaluate(e=>getComputedStyle(e).backgroundColor));
+    assert.ok((await select.nth(1).boundingBox()).height>=44);
+    await dialog.getByRole("searchbox").fill("Synthetic reference");
+    await dialog.getByRole("status").getByText(/Selected folder: .*Long Folder/).waitFor();
+    await select.first().tap();
+    await dialog.getByRole("status").getByText("Selected folder: 03 Areas/Synthetic reference",{exact:true}).waitFor();
+    assert.equal(await confirm.isEnabled(),true);
+    await confirm.tap();
+    await dialog.waitFor({state:"hidden"});
+    if(w!==386)await reading.getByRole("button",{name:"Back to lists",exact:true}).click();
+    else await row().click();
+  }
+  assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="move").map(e=>e.args)),[["03 Areas/Synthetic reference"],["03 Areas/Synthetic reference"]]);
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, and themed Move folder selection");
 }

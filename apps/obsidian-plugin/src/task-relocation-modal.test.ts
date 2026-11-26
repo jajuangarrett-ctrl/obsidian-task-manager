@@ -3,11 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 class Element {
   children: Element[] = [];
   value = ""; text = ""; hidden = false; disabled = false;
+  isConnected = true; attrs: Record<string, string> = {};
+  set textContent(value: string) { this.text = value; }
   handlers = new Map<string, () => void>();
   constructor(public tag = "div") {}
-  createEl(tag: string, options: { text?: string } = {}) { const child = new Element(tag); child.text = options.text || ""; this.children.push(child); return child; }
+  createEl(tag: string, options: { text?: string; attr?: Record<string, string> } = {}) { const child = new Element(tag); child.text = options.text || ""; child.attrs = {...options.attr}; this.children.push(child); return child; }
   createDiv(options = {}) { return this.createEl("div", options); }
   addClass() {}
+  createSpan(options = {}) { return this.createEl("span", options); }
+  setAttribute(key: string, value: string) { this.attrs[key] = value; }
   empty() { this.children = []; }
   focus() {}
   addEventListener(name: string, handler: () => void) { this.handlers.set(name, handler); }
@@ -56,7 +60,23 @@ describe("shared objective folder picker", () => {
     const { modal, content, submit } = picker();
     expect(modal.setTitle).toHaveBeenCalledWith("Move objective: Example");
     expect(content.all().some((element) => element.text === "Current location: 08 Tasks/Inbox")).toBe(true);
-    content.all().find((element) => element.text === "02 Programs/CalWORKs")!.handlers.get("click")!();
+    const options = content.all().filter((element) => element.attrs.role === "option");
+    expect(options.map((row) => row.attrs["aria-selected"])).toEqual(["false", "false"]);
+    options[0].handlers.get("click")!();
+    expect(options[0].attrs["aria-selected"]).toBe("true");
+    expect(options[0].children[1].hidden).toBe(false);
+    options[1].handlers.get("click")!();
+    expect(options[0].attrs["aria-selected"]).toBe("false");
+    expect(options[0].children[1].hidden).toBe(true);
+    expect(options[1].attrs["aria-selected"]).toBe("true");
+    const search = content.all().find((element) => element.tag === "input")!;
+    search.value = "CalWORKs"; search.handlers.get("input")!();
+    expect(content.all().some((element) => element.text === "Selected folder: 03 Areas/Misc" && !element.hidden)).toBe(true);
+    const option = content.all().find((element) => element.attrs.role === "option")!;
+    option.handlers.get("click")!();
+    expect(option.attrs["aria-selected"]).toBe("true");
+    expect(content.all().find((element) => element.tag === "input")).toBe(search);
+    expect(submit).not.toHaveBeenCalled();
     const save = content.all().find((element) => element.text === "Move objective")!;
     expect(save.disabled).toBe(false); await save.handlers.get("click")!();
     expect(submit).toHaveBeenCalledExactlyOnceWith("02 Programs/CalWORKs");

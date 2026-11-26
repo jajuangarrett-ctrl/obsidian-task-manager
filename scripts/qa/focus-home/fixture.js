@@ -1,3 +1,4 @@
+import { TaskRelocationModal } from "../../../apps/obsidian-plugin/src/modals.ts";
 import { TFile, TFolder } from "obsidian";
 import { TaskDashboardView } from "../../../apps/obsidian-plugin/src/dashboard-view.ts";
 import { localDateKey } from "../../../apps/obsidian-plugin/src/dashboard-date.ts";
@@ -43,7 +44,10 @@ const service={
  async updateSubtask(id,a,{status}){await gate();const r=get(id).record;const action=r.subtasks.find(x=>x.id===a);action.status=status;action.completed=status==="completed";},
 };
 const record=(name)=>(...args)=>window.fixtureEvents.push({action:name,args});
-const plugin={app,workspaceService:service,settings:{dashboardDefault:"do-first"},refreshDashboard:()=>view.render(),openLiveVoice:record("voice"),openTaskDueDateModal:record("deadline"),openObjectiveWorkspace:record("files"),openTaskUpdates:record("updates"),openRenameTaskModal:record("rename"),openTaskRelocationModal:record("move"),openTask:record("open"),openObjectiveActionModal:record("add-action")};
+const plugin={app,workspaceService:service,settings:{dashboardDefault:"do-first"},refreshDashboard:()=>view.render(),openLiveVoice:record("voice"),openTaskDueDateModal:record("deadline"),openObjectiveWorkspace:record("files"),openTaskUpdates:record("updates"),openRenameTaskModal:record("rename"),openTaskRelocationModal:()=>new TaskRelocationModal(app,"Synthetic objective","08 Tasks/Inbox/Files",[
+  "02 Programs/Synthetic Program","02 Programs/Synthetic Program/Long Folder Name for Wrapping on Narrow Mobile Screens",
+  "03 Areas/Synthetic reference"
+],async (path)=>record("move")(path)).open(),openTask:record("open"),openObjectiveActionModal:record("add-action")};
 const view=new TaskDashboardView({app,containerEl:document.querySelector(".workspace-leaf")},plugin);
 window.focusFixture={day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
 view.onOpen().then(()=>{document.body.dataset.fixtureReady="true";}).catch(e=>{document.body.dataset.fixtureError=String(e);throw e;});

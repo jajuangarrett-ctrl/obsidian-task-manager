@@ -69,9 +69,22 @@ export class Menu {
 export function setIcon(el, name) { el.dataset.icon = name; }
 export function setTooltip(el, text) { el.title = text; }
 export const MarkdownRenderer = { async render(_app, markdown, target) { target.textContent = markdown; } };
-export class Modal extends Component {}
+export class Modal extends Component {
+  constructor(app) { super(); this.app=app; this.modalEl=document.createElement("div"); this.modalEl.className="modal"; this.modalEl.setAttribute("role","dialog"); this.contentEl=this.modalEl.createDiv({cls:"modal-content"}); }
+  setTitle(title) { this.modalEl.setAttribute("aria-label",title); }
+  open() { document.body.append(this.modalEl); this.onOpen?.(); }
+  close() { this.onClose?.(); this.modalEl.remove(); }
+}
 export class WorkspaceLeaf {}
 export const Keymap = { isModEvent: () => "tab" };
 export class FuzzySuggestModal extends Modal {}
-export class Setting {}
+export class Setting {
+  constructor(parent) { this.row=parent.createDiv({cls:"setting-item"}); }
+  addButton(setup) {
+    const el=this.row.createEl("button",{type:"button"});
+    const button={setButtonText(text){el.textContent=text;return button;},setCta(){el.classList.add("mod-cta");return button;},
+      setDisabled(disabled){el.disabled=disabled;return button;},onClick(handler){el.addEventListener("click",handler);return button;}};
+    setup(button);return this;
+  }
+}
 export async function requestUrl() { throw new Error("Network is forbidden in this fixture."); }

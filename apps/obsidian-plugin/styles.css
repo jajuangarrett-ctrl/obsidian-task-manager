@@ -1128,6 +1128,35 @@
   background: var(--background-modifier-hover);
 }
 
+/* The Move/Capture folder chooser needs a state that survives mobile theme styling. */
+.fjg-task-relocation-modal .fjg-project-picker-choices { grid-template-columns: minmax(0, 1fr); }
+.fjg-task-relocation-modal button.fjg-project-picker-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-width: 0; width: 100%; height: auto !important; max-height: none !important;
+  min-height: 44px; white-space: normal; padding: 8px 12px;
+}
+.fjg-task-relocation-modal button.fjg-project-picker-option[aria-selected="true"] {
+  background: var(--interactive-accent) !important;
+  border-color: var(--interactive-accent) !important;
+  color: var(--text-on-accent, white) !important;
+  font-weight: 700;
+}
+.fjg-task-relocation-modal .fjg-relocation-path,
+.fjg-task-relocation-modal .fjg-relocation-selection {
+  min-width: 0; overflow-wrap: anywhere; white-space: normal !important;
+}
+.fjg-task-relocation-modal .fjg-relocation-path { color: inherit; }
+.fjg-task-relocation-modal .fjg-relocation-marker {
+  flex: none; color: inherit; border: 1px solid currentColor; border-radius: 999px;
+  padding: 2px 6px; font-size: 0.8em; line-height: 1.3; white-space: nowrap;
+}
+.fjg-task-relocation-modal .fjg-relocation-marker[hidden],
+.fjg-task-relocation-modal .fjg-relocation-selection[hidden] { display: none !important; }
+.fjg-task-relocation-modal .fjg-relocation-selection {
+  border-inline-start: 3px solid var(--interactive-accent);
+  padding-inline-start: 8px; color: var(--text-normal); font-weight: 600;
+}
+
 .fjg-project-picker-empty,
 .fjg-project-picker-error {
   padding: 10px;

@@ -1,3 +1,7 @@
+## 0.30.31
+
+- Make the chosen folder obvious in the Move objective dialog with a strong highlight, a Selected badge, and the exact destination above the confirmation buttons. Selecting a row no longer jumps back to search.
+
 ## 0.30.30
 
 - Make Home’s objective circles and checklist checkmarks respond immediately while the vault saves. Keep the checkmark through redraws, revert and show the error if saving fails, and move completed objectives only after confirmation.
