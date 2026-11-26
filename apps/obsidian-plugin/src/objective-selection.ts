@@ -65,21 +65,42 @@ export function renderSelectionCheckbox(parent:HTMLElement,task:IndexedTask,view
   check.addEventListener("change",()=>{selection.set(task.record.task_id,view,check.checked);changed();});
 }
 
-export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],all:IndexedTask[],view:SelectionView,selection:ObjectiveSelection,changed:()=>void,copyText:(text:string)=>Promise<void>=text=>navigator.clipboard.writeText(text),createDeletePrompt?:()=>string):void {
+let nextSelectionPanelId = 0;
+
+export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],all:IndexedTask[],view:SelectionView,selection:ObjectiveSelection,changed:()=>void,copyText:(text:string)=>Promise<void>=text=>navigator.clipboard.writeText(text),createDeletePrompt?:()=>string,disclosure:{expanded:boolean;renderIcon?:(button:HTMLButtonElement)=>void}={expanded:false}):void {
   const box=parent.createDiv({cls:"fjg-objective-selection"});
   const entries=selection.entries(),visibleIds=new Set(visible.map(task=>task.record.task_id));
   const hidden=entries.filter(entry=>!visibleIds.has(entry.task_id)).length;
-  box.createEl("strong",{text:`${entries.length} checked${hidden?` · ${hidden} outside this view or filter`:""}`});
-  const controls=box.createDiv({cls:"fjg-objective-selection-controls"});
+  const header=box.createDiv({cls:"fjg-objective-selection-header"});
+  const heading=header.createDiv();
+  heading.createSpan({text:"Bulk actions",cls:"fjg-objective-selection-label"});
+  heading.createEl("strong",{text:`${entries.length} checked${hidden?` · ${hidden} outside this view or filter`:""}`});
+  const bodyId=`fjg-objective-selection-body-${++nextSelectionPanelId}`;
+  const toggle=header.createEl("button",{cls:"fjg-objective-selection-toggle",attr:{type:"button","aria-controls":bodyId}});
+  disclosure.renderIcon?.(toggle);
+  const body=box.createDiv({cls:"fjg-objective-selection-body",attr:{id:bodyId}});
+  const updateDisclosure=()=>{
+    const label=disclosure.expanded?"Hide bulk actions":"Show bulk actions";
+    toggle.title=label;
+    toggle.setAttribute("aria-label",label);
+    toggle.setAttribute("aria-expanded",String(disclosure.expanded));
+    body.hidden=!disclosure.expanded;
+  };
+  updateDisclosure();
+  toggle.addEventListener("click",()=>{
+    disclosure.expanded=!disclosure.expanded;
+    updateDisclosure();
+  });
+  const controls=body.createDiv({cls:"fjg-objective-selection-controls"});
   const select=controls.createEl("button",{text:"Select visible"});select.disabled=!visible.length;
   select.addEventListener("click",()=>{for(const task of visible)selection.set(task.record.task_id,view,true);changed();});
   const clear=controls.createEl("button",{text:"Clear selection"});clear.disabled=!entries.length;clear.addEventListener("click",()=>{selection.clear();changed();});
-  box.createEl("p",{text:"Select objectives, copy the prompt below, then paste it into Claudian and send it. Claudian will confirm the selection and wait for your instructions. Use Claudian on this same device; selection clears on plugin reload."});
-  const prompt=box.createEl("textarea",{cls:"fjg-selection-prompt",attr:{"aria-label":"Prompt to paste into Claudian",rows:"8",spellcheck:"false",placeholder:"Check one or more objectives to prepare your prompt."}});
+  body.createEl("p",{text:"Select objectives, copy the prompt below, then paste it into Claudian and send it. Claudian will confirm the selection and wait for your instructions. Use Claudian on this same device; selection clears on plugin reload."});
+  const prompt=body.createEl("textarea",{cls:"fjg-selection-prompt",attr:{"aria-label":"Prompt to paste into Claudian",rows:"8",spellcheck:"false",placeholder:"Check one or more objectives to prepare your prompt."}});
   prompt.readOnly=true;prompt.value=checkedObjectivesPrompt(selection,all);
   const revision=selection.revision;
-  const copy=box.createEl("button",{text:"Copy prompt"});copy.disabled=!entries.length;
-  const feedback=box.createEl("p",{attr:{role:"status","aria-live":"polite"}});
+  const copy=body.createEl("button",{text:"Copy prompt"});copy.disabled=!entries.length;
+  const feedback=body.createEl("p",{attr:{role:"status","aria-live":"polite"}});
   copy.addEventListener("click",async()=>{
     if(selection.revision!==revision){changed();return;}
     prompt.value=checkedObjectivesPrompt(selection,all);
@@ -90,8 +111,8 @@ export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],
     finally {copy.disabled=!selection.entries().length;}
   });
   if(createDeletePrompt) {
-    const deleteCopy=box.createEl("button",{text:"Copy delete prompt"});deleteCopy.disabled=!entries.length;
-    box.createEl("p",{text:"Copy delete prompt authorizes these checked IDs for one recoverable deletion within 10 minutes, including owned files and actions. Paste and send it in Claudian to execute. Shared content and unselected parent dependencies remain blocked. Nothing is deleted by copying. A copied authorization stays valid if you change your selection; reload the plugin to revoke it."});
+    const deleteCopy=body.createEl("button",{text:"Copy delete prompt"});deleteCopy.disabled=!entries.length;
+    body.createEl("p",{text:"Copy delete prompt authorizes these checked IDs for one recoverable deletion within 10 minutes, including owned files and actions. Paste and send it in Claudian to execute. Shared content and unselected parent dependencies remain blocked. Nothing is deleted by copying. A copied authorization stays valid if you change your selection; reload the plugin to revoke it."});
     deleteCopy.addEventListener("click",async()=>{
       if(selection.revision!==revision){changed();return;}
       deleteCopy.disabled=true;
@@ -103,7 +124,7 @@ export function renderSelectionSummary(parent:HTMLElement,visible:IndexedTask[],
       finally{deleteCopy.disabled=!selection.entries().length;}
     });
   }
-  if(entries.length){const details=box.createEl("details");details.createEl("summary",{text:"Review all checked objectives"});
+  if(entries.length){const details=body.createEl("details");details.createEl("summary",{text:"Review all checked objectives"});
     for(const entry of entries){const task=all.find(task=>task.record.task_id===entry.task_id),line=details.createDiv();
       line.createSpan({text:`${task?.record.title||"Unavailable objective"} · ${task?.taskFile.path||entry.task_id} · checked in ${SELECTION_VIEWS[entry.selected_from]}`});
       const remove=line.createEl("button",{text:"Uncheck",attr:{"aria-label":`Uncheck ${task?.record.title||entry.task_id} (${entry.task_id})`}});remove.addEventListener("click",()=>{selection.set(entry.task_id,entry.selected_from,false);changed();});

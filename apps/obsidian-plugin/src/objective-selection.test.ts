@@ -3,11 +3,12 @@ import {ObjectiveSelection,checkedObjectivesPrompt,isSelectionView,renderSelecti
 import type {IndexedTask} from "./workspace-service";
 const task=(id:string,title="Same title",path=`08 Tasks/Inbox/Files/${id}/task.md`)=>({record:{task_id:id,title,status:"completed",related_files:[],subtasks:[]},taskFile:{path},folderPath:path.slice(0,path.lastIndexOf('/')),updatesFile:null,statusAssigned:true} as unknown as IndexedTask);
 class Element {
- children:Element[]=[];events:Record<string,(event?:any)=>void>={};checked=false;disabled=false;value="";readOnly=false;focused=false;selected=false;
+ children:Element[]=[];events:Record<string,(event?:any)=>void>={};checked=false;disabled=false;value="";readOnly=false;focused=false;selected=false;hidden=false;
  constructor(public tag="",public options:any={}){}
  createEl(tag:string,options:any={}){const el=new Element(tag,options);this.children.push(el);return el;}
  createDiv(options:any={}){return this.createEl('div',options);}createSpan(options:any={}){return this.createEl('span',options);}
  addEventListener(name:string,callback:any){this.events[name]=callback;}
+ setAttribute(key:string,value:string){(this.options.attr??={})[key]=value;}
  setText(text:string){this.options.text=text;}focus(){this.focused=true;}select(){this.selected=true;}
  all():Element[]{return [this,...this.children.flatMap(el=>el.all())];}
 }
@@ -96,4 +97,27 @@ it('issues deletion authorization only on explicit copy, leaves manual fallback,
  expect(prompt.value).toBe('Disposable delete prompt');expect(prompt.selected).toBe(true);
  await root.all().find(el=>el.options.text==='Copy prompt')!.events.click();expect(prompt.value).toContain('Then wait for my instructions');
  s.set('b','converted',true);await root.all().find(el=>el.options.text==='Copy delete prompt')!.events.click();expect(issue).toHaveBeenCalledOnce();
+});
+
+
+it("collapses bulk controls without changing checked IDs or issuing a delete prompt",()=>{
+ const selection=new ObjectiveSelection(), a=task("a"), root=new Element();
+ const panel={expanded:false}, refresh=vi.fn(), issue=vi.fn();
+ selection.set("a","completed",true);
+ const revision=selection.revision;
+ renderSelectionSummary(root as never,[a],[a],"completed",selection,refresh,undefined,issue,panel);
+ const button=root.all().find(el=>el.options.cls==="fjg-objective-selection-toggle")!;
+ const body=root.all().find(el=>el.options.cls==="fjg-objective-selection-body")!;
+ expect(button.options.attr).toMatchObject({"aria-expanded":"false","aria-controls":body.options.attr.id});
+ expect(body.hidden).toBe(true);
+ button.events.click();
+ expect(panel.expanded).toBe(true);
+ expect(body.hidden).toBe(false);
+ expect(button.options.attr).toMatchObject({"aria-expanded":"true","aria-label":"Hide bulk actions"});
+ button.events.click();
+ expect(body.hidden).toBe(true);
+ expect(selection.revision).toBe(revision);
+ expect(selection.has("a")).toBe(true);
+ expect(refresh).not.toHaveBeenCalled();
+ expect(issue).not.toHaveBeenCalled();
 });

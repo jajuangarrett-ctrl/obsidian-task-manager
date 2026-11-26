@@ -2073,7 +2073,19 @@
 }
 
 
-.fjg-objective-selection { padding: 12px; margin-bottom: 12px; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.fjg-objective-selection { padding: 4px 10px; margin-bottom: 6px; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.fjg-objective-selection-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; line-height: 1.25; }
+.fjg-objective-selection-label { display: block; color: var(--text-muted); font-size: var(--font-smallest); }
+.fjg-objective-selection-header strong { overflow-wrap: anywhere; }
+.fjg-task-dashboard button.fjg-objective-selection-toggle {
+  display: grid; place-items: center; flex: 0 0 44px; width: 44px; min-width: 44px; min-height: 44px; height: 44px;
+  margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; color: var(--text-muted);
+}
+.fjg-task-dashboard button.fjg-objective-selection-toggle:is([aria-expanded="true"],:hover,:focus-visible) {
+  background: var(--background-modifier-hover); color: var(--interactive-accent);
+}
+.fjg-objective-selection-body { padding-bottom: 8px; }
+.fjg-objective-selection-body[hidden] { display: none; }
 .fjg-objective-selection-controls { display: flex; gap: 8px; margin-top: 8px; }
 .fjg-objective-selection p { color: var(--text-muted); font-size: var(--font-smallest); }
 .fjg-objective-selection details div { display: flex; align-items: center; gap: 8px; margin: 8px 0; overflow-wrap: anywhere; }

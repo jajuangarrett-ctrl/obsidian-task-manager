@@ -320,6 +320,42 @@ async function runScenarios(page, out) {
   const convertedName=convertedCard.getByRole("button",{name:convertedTitle,exact:true});
   await convertedName.waitFor();
 
+  const panel=page.locator(".fjg-objective-selection");
+  const showBulk=panel.getByRole("button",{name:"Show bulk actions"});
+  const hideBulk=panel.getByRole("button",{name:"Hide bulk actions"});
+  const copyDelete=panel.getByRole("button",{name:"Copy delete prompt"});
+  const selection=convertedCard.getByRole("checkbox",{name:/^Select objective/});
+  const panelBox=await panel.boundingBox();
+  const toggleSize=await showBulk.boundingBox();
+  assert.ok(toggleSize.width>=44 && toggleSize.height>=44);
+  assert.equal(await copyDelete.isVisible(),false);
+  assert.equal(await showBulk.getAttribute("aria-expanded"),"false");
+  assert.equal(await showBulk.getAttribute("aria-controls"),await panel.locator(".fjg-objective-selection-body").getAttribute("id"));
+  await showBulk.click();
+  assert.ok((await panel.boundingBox()).height>panelBox.height+150,"Collapsing gives substantial vertical space back");
+  assert.equal(await copyDelete.isVisible(),true);
+  assert.equal(await copyDelete.isEnabled(),false);
+  await panel.getByRole("button",{name:"Select visible"}).click();
+  await panel.getByText("1 checked",{exact:true}).waitFor();
+  assert.equal(await selection.isChecked(),true);
+  assert.equal(await copyDelete.isEnabled(),true);
+  await hideBulk.focus();
+  await hideBulk.press("Enter");
+  assert.equal(await showBulk.evaluate(el=>el===document.activeElement),true);
+  assert.equal(await selection.isChecked(),true);
+  assert.equal(await copyDelete.isVisible(),false);
+  await page.locator('button[data-view="completed"]').click();
+  await panel.getByText("1 checked · 1 outside this view or filter",{exact:true}).waitFor();
+  assert.equal(await showBulk.getAttribute("aria-expanded"),"false");
+  await page.locator('button[data-view="converted"]').click();
+  assert.equal(await selection.isChecked(),true);
+  await showBulk.click();
+  assert.equal(await copyDelete.isEnabled(),true);
+  await panel.getByRole("button",{name:"Clear selection"}).click();
+  assert.equal(await selection.isChecked(),false);
+  assert.equal(await copyDelete.isEnabled(),false);
+  await hideBulk.click();
+
   for(const [viewport,pane,stacked] of [[386,386,true],[871,871,true],[1100,340,true],[1280,1280,false]]){
     await page.setViewportSize({width:viewport,height:678});
     await page.locator(".workspace-leaf").evaluate((el,w)=>el.style.width=w+"px",pane);
@@ -395,5 +431,5 @@ async function runScenarios(page, out) {
   assert.equal(await trash.count(),0);
   await deletion.getByRole("button",{name:"Close"}).click();
   assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="trash-preview").map(e=>e.args)),[[{acknowledgeLinks:true}]]);
-  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation, stable lowercase search fields, and readable Converted cards across pane sizes");
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation, stable lowercase search fields, readable Converted cards across pane sizes, and collapsible bulk actions without losing selection");
 }

@@ -1,3 +1,7 @@
+## 0.30.36
+
+- Collapse the bulk actions panel by default in Inbox folder, Completed, and Converted. The checked count and row checkboxes remain visible; show or hide the controls without changing the selection.
+
 ## 0.30.35
 
 - Keep long objective titles and linked action names readable. In narrow panes, put the action buttons below the title and conversion details.
