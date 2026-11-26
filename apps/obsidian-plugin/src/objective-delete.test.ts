@@ -23,13 +23,13 @@ function fixture(split=false){
  const others=[task];const preview=()=>previewObjectiveDelete(app,task,roots,others);const tx=new ObjectiveDeleteTransaction(app,preview);
  return {entries,roots,put,app,api,task,others,preview,tx,setFailRename:(n:number)=>failRename=n,setFailTrash:()=>failTrash=true,setAdd:()=>addDuringMove=true,setRollbackFail:()=>rollbackFail=true};
 }
-const confirm={title:'Test',acknowledgeLinks:true};
+const confirm={acknowledgeLinks:true};
 describe('recoverable objective deletion',()=>{
  it.each([false,true])('previews without mutation then preserves all contents in local Trash (split %s)',async split=>{const f=fixture(split),before=[...f.entries],p=await f.preview();expect([...f.entries]).toEqual(before);expect(p.files).toHaveLength(3);expect(p.actions).toEqual(['Keep action']);expect(p.externalFiles).toEqual(['Shared/reference.md']);const recovery=await f.tx.execute(p,confirm);expect(recovery).toMatch(/^\.trash\//);expect(f.api.trash).toHaveBeenCalledTimes(f.roots.length+1);expect(f.api.delete).not.toHaveBeenCalled();for(const root of f.roots)expect(f.entries.has(root)).toBe(false);for(const [,value]of before.filter(([p,v])=>v!==null&&p!=='Shared/reference.md'))expect([...f.entries.values()]).toContain(value);expect(f.entries.get('Shared/reference.md')).toBe('External note stays');expect([...f.entries.keys()].some(p=>p.includes('Recovery manifest.json'))).toBe(true);});
- it('requires exact explicit confirmation; cancellation is non-mutating',async()=>{const f=fixture(),p=await f.preview(),before=[...f.entries];await expect(f.tx.execute(p,{title:'Wrong',acknowledgeLinks:true})).rejects.toThrow('confirmation');await expect(f.tx.execute(p,{title:'Test',acknowledgeLinks:false})).rejects.toThrow('confirmation');expect([...f.entries]).toEqual(before);expect(f.api.trash).not.toHaveBeenCalled();});
+ it('requires acknowledgement without title typing; cancellation is non-mutating',async()=>{const f=fixture(),p=await f.preview(),before=[...f.entries];await expect(f.tx.execute(p,{acknowledgeLinks:false})).rejects.toThrow('confirmation');expect([...f.entries]).toEqual(before);expect(f.api.trash).not.toHaveBeenCalled();});
  it('rejects changes after preview',async()=>{const f=fixture(),p=await f.preview();f.put(f.roots[0]+'/new.md','Keep');await expect(f.tx.execute(p,confirm)).rejects.toThrow('changed');expect(f.entries.has(f.task.taskFile.path)).toBe(true);expect(f.api.trash).not.toHaveBeenCalled();});
  it('blocks nested objectives and shared files',async()=>{const f=fixture();f.put(f.roots[0]+'/Nested/task.md','Other');f.others.push({record:{task_id:'other',title:'Other',related_files:[f.roots[0]+'/.hidden/nested.txt'],subtasks:[]},taskFile:{path:'Other/task.md'}} as unknown as IndexedTask);const p=await f.preview();expect(p.blockers.join(' ')).toMatch(/Nested/);expect(p.blockers.join(' ')).toMatch(/Shared/);await expect(f.tx.execute(p,confirm)).rejects.toThrow();expect(f.api.trash).not.toHaveBeenCalled();});
- it('blocks dependent actions and linked attachments, previews inbound objective links',async()=>{const f=fixture();f.app.metadataCache.resolvedLinks={'Another.md':{[f.task.taskFile.path]:1,[f.roots[0]+'/.hidden/nested.txt']:1}};f.others.push({record:{task_id:'other',title:'Parent',related_files:[],subtasks:[{source_task_id:'id-test'}]},taskFile:{path:'Parent/task.md'}} as unknown as IndexedTask);const p=await f.preview();expect(p.incoming).toEqual(['Another.md']);expect(p.blockers.join(' ')).toMatch(/depends/);expect(p.blockers.join(' ')).toMatch(/linked from another note/);});
+ it('blocks dependent actions and warns about inbound objective and attachment links',async()=>{const f=fixture();f.app.metadataCache.resolvedLinks={'Another.md':{[f.task.taskFile.path]:1,[f.roots[0]+'/.hidden/nested.txt']:1}};f.others.push({record:{task_id:'other',title:'Parent',related_files:[],subtasks:[{source_task_id:'id-test'}]},taskFile:{path:'Parent/task.md'}} as unknown as IndexedTask);const p=await f.preview();expect(p.incoming).toEqual(['Another.md']);expect(p.blockers.join(' ')).toMatch(/depends/);expect(p.blockers).toHaveLength(1);expect(p.linkWarnings.map(link=>link.attachment).sort()).toEqual([false,true]);});
  it('rolls back partial moves and never falls back to permanent delete',async()=>{const f=fixture(true),p=await f.preview();f.setFailRename(2);await expect(f.tx.execute(p,confirm)).rejects.toThrow('restored');expect(f.entries.has(f.task.taskFile.path)).toBe(true);expect(f.entries.has(f.task.updatesFile!.path)).toBe(true);expect(f.api.delete).not.toHaveBeenCalled();expect(f.api.trash).toHaveBeenCalledTimes(2);});
  it('restores original paths when Trash fails',async()=>{const f=fixture(),p=await f.preview();f.setFailTrash();await expect(f.tx.execute(p,confirm)).rejects.toThrow('restored');expect(f.entries.has(f.task.taskFile.path)).toBe(true);expect(f.api.delete).not.toHaveBeenCalled();});
  it('retains verified recovery copies if Trash fails',async()=>{const f=fixture(),p=await f.preview();f.setFailTrash();await expect(f.tx.execute(p,confirm)).rejects.toThrow('Exact recovery copies');expect([...f.entries.values()]).toContain('Keep all history');expect(f.api.delete).not.toHaveBeenCalled();});
@@ -59,7 +59,7 @@ describe('existing inventory dependency checks',()=>{
   const f=fixture(),target=f.roots[0]+suffix;addReference(f,target);
   f.app.metadataCache.resolvedLinks={'Other.md':{[target]:1}};
   const p=await f.preview();expect(p.blockers).toContain(`Shared file used by Other: ${target}`);
-  expect(p.blockers).toContain(`File is linked from another note: Other.md → ${target}`);
+  expect(p.linkWarnings).toContainEqual({source:"Other.md",target,attachment:true});
   await expect(f.tx.execute(p,confirm)).rejects.toThrow();expect(f.api.trash).not.toHaveBeenCalled();
  });
  it.each(['before confirmation','during recovery'])('rejects a referenced file arriving %s',async phase=>{
@@ -84,11 +84,42 @@ describe('existing inventory dependency checks',()=>{
 it('runs an authorized batch through actual recovery transaction including hidden files and owned actions',async()=>{
  const f=fixture();f.task.record.subtasks=[{id:'owned',title:'Owned action',attachment_folder:f.roots[0]+'/.hidden'}] as never;
  let n=0;const manager=new DeleteCapabilities(()=>1000,()=>`fixture-${++n}`),issued=manager.issue(['id-test'],'Fixture',[]);
- await manager.execute('fixture-1',async()=>{},()=>f.preview(),p=>f.tx.execute(p,{title:p.title,acknowledgeLinks:true}));
+ await manager.execute('fixture-1',async()=>{},()=>f.preview(),p=>f.tx.execute(p,confirm));
  expect(manager.receipt(issued.batchId)?.items[0]).toMatchObject({status:'deleted',actions:['Owned action']});
  expect(f.entries.has(f.task.taskFile.path)).toBe(false);expect([...f.entries.values()]).toContain('hidden evidence');expect(f.entries.get('Shared/reference.md')).toBe('External note stays');
 });
 it('blocks action attachments outside objective ownership rather than silently omitting them',async()=>{
  const f=fixture();f.task.record.subtasks=[{id:'external',title:'External action',attachment_folder:'Shared'}] as never;
  expect((await f.preview()).blockers).toContain('Action files are outside owned folders: external');
+});
+
+
+it("warns for an ordinary backlink, then moves owned files to Trash and retains the linking note",async()=>{
+ const f=fixture(),target=f.roots[0]+"/.hidden/nested.txt";
+ f.app.metadataCache.resolvedLinks={"Shared/reference.md":{[target]:1}};
+ const p=await f.preview();
+ expect(p.blockers).toEqual([]);
+ expect(p.linkWarnings).toEqual([{source:"Shared/reference.md",target,attachment:true}]);
+ await f.tx.execute(p,confirm);
+ expect(f.entries.get("Shared/reference.md")).toBe("External note stays");
+ expect(f.entries.get(".trash/Test/.hidden/nested.txt")).toBe("hidden evidence");
+ expect(f.api.delete).not.toHaveBeenCalled();
+});
+
+it("revalidates actual link targets even when the linking note stays the same",async()=>{
+ const f=fixture(),source="Shared/reference.md";
+ f.app.metadataCache.resolvedLinks={[source]:{[f.task.taskFile.path]:1}};
+ const p=await f.preview();
+ f.app.metadataCache.resolvedLinks={[source]:{[f.task.updatesFile!.path]:1}};
+ await expect(f.tx.execute(p,confirm)).rejects.toThrow("changed");
+ expect(f.api.trash).not.toHaveBeenCalled();
+});
+
+it("keeps existing link safeguards for copied batch prompts without a live review",async()=>{
+ const f=fixture(),target=f.roots[0]+"/.hidden/nested.txt";
+ f.app.metadataCache.resolvedLinks={"Shared/reference.md":{[target]:1}};
+ let n=0;const manager=new DeleteCapabilities(()=>1000,()=>`fixture-${++n}`),issued=manager.issue(["id-test"],"Fixture",[]);
+ await manager.execute("fixture-1",async()=>{},()=>f.preview(),p=>f.tx.execute(p,confirm));
+ expect(manager.receipt(issued.batchId)?.items[0]).toMatchObject({status:"blocked",error:expect.stringContaining("Delete objective dialog")});
+ expect(f.api.trash).not.toHaveBeenCalled();
 });

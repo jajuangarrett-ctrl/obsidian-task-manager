@@ -319,5 +319,21 @@ async function runScenarios(page, out) {
     else await row().click();
   }
   assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="move").map(e=>e.args)),[["03 Areas/Synthetic reference"],["03 Areas/Synthetic reference"]]);
-  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, and themed Move folder selection");
+  await page.setViewportSize({width:386,height:678});
+  const deletion=page.getByRole("dialog",{name:"Delete objective: Synthetic objective"});
+  await page.evaluate(()=>window.focusFixture.openDelete());
+  await deletion.getByText("Other note.md → Vault/Synthetic/Attachment.md",{exact:true}).waitFor();
+  assert.equal(await deletion.getByRole("textbox").count(),0);
+  const trash=deletion.getByRole("button",{name:"Move to Trash"});
+  assert.equal(await trash.isDisabled(),true);
+  await deletion.getByRole("checkbox",{name:"I reviewed what will go to Trash"}).check();
+  assert.equal(await trash.isEnabled(),true);
+  await trash.tap();
+  await deletion.waitFor({state:"hidden"});
+  await page.evaluate(()=>window.focusFixture.openDelete(true));
+  await deletion.getByText("Contains another objective",{exact:true}).waitFor();
+  assert.equal(await trash.count(),0);
+  await deletion.getByRole("button",{name:"Close"}).click();
+  assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="trash-preview").map(e=>e.args)),[[{acknowledgeLinks:true}]]);
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation");
 }

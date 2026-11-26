@@ -6,8 +6,11 @@ export interface DeletePreview {
   id: string; title: string; taskPath: string; roots: string[];
   files: Array<{path:string;hash:string}>; folders: string[];
   actions: string[]; externalFiles: string[]; incoming: string[]; blockers: string[];
+  linkWarnings: Array<{ source: string; target: string; attachment: boolean }>;
   fingerprint: string;
 }
+export interface DeleteConfirmation { acknowledgeLinks: boolean }
+
 const within=(path:string,root:string)=>path===root || path.startsWith(root+"/");
 const owned=(path:string,roots:string[])=>roots.some(root=>within(path,root));
 const digest=async(bytes:BufferSource)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(b=>b.toString(16).padStart(2,"0")).join("");
@@ -15,7 +18,7 @@ const hashText=(text:string)=>digest(new TextEncoder().encode(text));
 
 /** Never calls Vault.delete or adapter.remove. Hidden files are included via the adapter. */
 export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:string[], others:IndexedTask[], derivedIndexes:readonly string[]=[]):Promise<DeletePreview> {
-  const result:DeletePreview={id:task.record.task_id,title:task.record.title,taskPath:task.taskFile.path,roots:[],files:[],folders:[],actions:task.record.subtasks.map(a=>a.title),externalFiles:[],incoming:[],blockers:[],fingerprint:""};
+  const result:DeletePreview={id:task.record.task_id,title:task.record.title,taskPath:task.taskFile.path,roots:[],files:[],folders:[],actions:task.record.subtasks.map(a=>a.title),externalFiles:[],incoming:[],linkWarnings:[],blockers:[],fingerprint:""};
   const adapter=app.vault.adapter;
   for(const root of [...new Set(roots)]) {
     if(!root || root.startsWith(".") || root.split("/").some(p=>!p||p==="."||p==="..") || root.split("/").length<3) {result.blockers.push(`Unsafe ownership root: ${root}`);continue;}
@@ -56,20 +59,21 @@ export async function previewObjectiveDelete(app:App, task:IndexedTask, roots:st
       for(const target of Object.keys(targets))if(!owned(target,result.roots))result.externalFiles.push(target);
     } else if(Object.keys(targets).some(target=>existingOwnedPaths.has(target))) {
       result.incoming.push(source);
-      for(const target of Object.keys(targets)) if(!derivedIndexes.includes(source) && existingOwnedPaths.has(target) && target!==task.taskFile.path && target!==task.updatesFile?.path)
-        result.blockers.push(`File is linked from another note: ${source} → ${target}`);
+      for(const target of Object.keys(targets)) if(!derivedIndexes.includes(source) && existingOwnedPaths.has(target))
+        result.linkWarnings.push({source,target,attachment:target!==task.taskFile.path && target!==task.updatesFile?.path});
     }
   }
   result.externalFiles=[...new Set(result.externalFiles)].sort();result.incoming.sort();result.blockers=[...new Set(result.blockers)].sort();result.files.sort((a,b)=>a.path.localeCompare(b.path));result.folders.sort();
+  result.linkWarnings.sort((a,b)=>a.source.localeCompare(b.source)||a.target.localeCompare(b.target));
   result.fingerprint=await hashText(JSON.stringify(result));return result;
 }
 
 export class ObjectiveDeleteTransaction {
   private busy=false;
   constructor(private app:App,private preview:(id:string)=>Promise<DeletePreview>){}
-  async execute(approved:DeletePreview, confirmation:{title:string;acknowledgeLinks:boolean}):Promise<string> {
+  async execute(approved:DeletePreview, confirmation:DeleteConfirmation):Promise<string> {
     if(this.busy)throw Error("Another deletion is in progress.");
-    if(confirmation.title!==approved.title || !confirmation.acknowledgeLinks)throw Error("Explicit confirmation is required.");
+    if(confirmation.acknowledgeLinks!==true)throw Error("Explicit confirmation is required.");
     this.busy=true;
     const vault=this.app.vault, packageName=`Objective deletion recovery ${crypto.randomUUID()}`;
     try {

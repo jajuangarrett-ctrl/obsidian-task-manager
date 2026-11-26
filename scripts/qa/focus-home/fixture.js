@@ -1,3 +1,4 @@
+import { DeleteObjectiveModal } from "../../../apps/obsidian-plugin/src/delete-objective-modal.ts";
 import { TaskRelocationModal } from "../../../apps/obsidian-plugin/src/modals.ts";
 import { TFile, TFolder } from "obsidian";
 import { TaskDashboardView } from "../../../apps/obsidian-plugin/src/dashboard-view.ts";
@@ -49,5 +50,11 @@ const plugin={app,workspaceService:service,settings:{dashboardDefault:"do-first"
   "03 Areas/Synthetic reference"
 ],async (path)=>record("move")(path)).open(),openTask:record("open"),openObjectiveActionModal:record("add-action")};
 const view=new TaskDashboardView({app,containerEl:document.querySelector(".workspace-leaf")},plugin);
-window.focusFixture={day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
+const openDelete=(blocked=false)=>new DeleteObjectiveModal(app,{
+  id:"synthetic",title:"Synthetic objective",taskPath:"Vault/Synthetic/Objective.md",roots:["Vault/Synthetic"],
+  files:[{path:"Vault/Synthetic/Attachment.md",hash:"synthetic"}],folders:["Vault/Synthetic"],
+  actions:[],externalFiles:[],incoming:["Other note.md"],linkWarnings:[{source:"Other note.md",target:"Vault/Synthetic/Attachment.md",attachment:true}],
+  blockers:blocked?["Contains another objective"]:[],fingerprint:"synthetic"
+},async confirmation=>record("trash-preview")(confirmation)).open();
+window.focusFixture={openDelete,day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
 view.onOpen().then(()=>{document.body.dataset.fixtureReady="true";}).catch(e=>{document.body.dataset.fixtureError=String(e);throw e;});

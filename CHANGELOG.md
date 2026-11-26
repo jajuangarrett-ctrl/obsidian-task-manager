@@ -1,3 +1,7 @@
+## 0.30.32
+
+- The Delete objective dialog lists ordinary incoming links as warnings. Review them and confirm Move to Trash without typing the objective’s title. Shared ownership, nested or dependent objectives, and copied batch safeguards are unchanged.
+
 ## 0.30.31
 
 - Make the chosen folder obvious in the Move objective dialog with a strong highlight, a Selected badge, and the exact destination above the confirmation buttons. Selecting a row no longer jumps back to search.

@@ -2,7 +2,7 @@ import { isObjectiveFileName, namedStem, objectiveFileName, taskArtifactPathPart
 import type { ObjectiveSelection } from "./objective-selection";
 import { isReviewArtifact } from "./objective-file-review";
 import { movedPath, rewriteMovedLinks } from "./move-links";
-import { DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
+import { DeleteConfirmation, DeletePreview, ObjectiveDeleteTransaction, previewObjectiveDelete } from "./objective-delete";
 import YAML from "yaml";
 import { AGENDA_FOLDER, OBJECTIVE_AGENDA_PATH, agendaObjectives, agendaChoice, normalizePeople } from "./people-model";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
@@ -2180,7 +2180,7 @@ export class TaskWorkspaceService {
     return previewObjectiveDelete(this.app, task, this.taskOwnedFolderRoots(task), others, [this.briefingPath()]);
   }
 
-  async deleteObjective(preview: DeletePreview, confirmation: {title:string;acknowledgeLinks:boolean}): Promise<string> {
+  async deleteObjective(preview: DeletePreview, confirmation: DeleteConfirmation): Promise<string> {
     this.deletion ||= new ObjectiveDeleteTransaction(this.app, id => this.previewDelete(id));
     const recovery = await this.deletion.execute(preview, confirmation);
     try {await this.refresh();}

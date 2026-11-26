@@ -82,9 +82,16 @@ export class Setting {
   constructor(parent) { this.row=parent.createDiv({cls:"setting-item"}); }
   addButton(setup) {
     const el=this.row.createEl("button",{type:"button"});
-    const button={setButtonText(text){el.textContent=text;return button;},setCta(){el.classList.add("mod-cta");return button;},
+    const button={setWarning(){el.classList.add("mod-warning");return button;},setButtonText(text){el.textContent=text;return button;},setCta(){el.classList.add("mod-cta");return button;},
       setDisabled(disabled){el.disabled=disabled;return button;},onClick(handler){el.addEventListener("click",handler);return button;}};
     setup(button);return this;
+  }
+  setName(name) { this.name=name; return this; }
+  setDesc(desc) { this.row.createDiv({text:desc}); return this; }
+  addToggle(setup) {
+    const el=this.row.createEl("input",{type:"checkbox",attr:{"aria-label":this.name}});
+    setup({onChange(handler){el.addEventListener("change",()=>handler(el.checked));return this;}});
+    return this;
   }
 }
 export async function requestUrl() { throw new Error("Network is forbidden in this fixture."); }

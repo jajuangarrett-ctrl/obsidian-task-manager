@@ -99,7 +99,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
       if(!validDeleteProtocol(params,this.app.vault.getName())) {new Notice("Deletion request rejected.");return;}
       const accepted=await this.deleteCapabilities.execute(String(params.capability||""),
         ()=>this.workspaceService.refresh(), id=>this.workspaceService.previewDelete(id),
-        preview=>this.workspaceService.deleteObjective(preview,{title:preview.title,acknowledgeLinks:true}));
+        preview=>this.workspaceService.deleteObjective(preview,{acknowledgeLinks:true}));
       new Notice(accepted?"Deletion batch finished. Read its receipt for each result.":"Deletion request expired, already used, or belongs to another session.");
       this.refreshDashboard();
     });

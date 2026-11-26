@@ -57,6 +57,11 @@ export class DeleteCapabilities {
           if(fresh.id!==item.task_id)throw Error("Objective identity changed.");
           item.path=fresh.taskPath;item.actions=fresh.actions;
           if(fresh.blockers.length)throw Error(fresh.blockers.join("\n"));
+          // A copied prompt does not show a live link preview. Keep the existing
+          // linked-attachment safeguard for batches; review these in the dialog.
+          const links=fresh.linkWarnings.filter(link=>link.attachment);
+          if(links.length)throw Error(links.map(({source,target})=>
+            `Review this linked file in the Delete objective dialog: ${source} → ${target}`).join("\n"));
           item.recovery=await remove(fresh);item.status="deleted";
         }catch(error){item.status="blocked";item.error=error instanceof Error?error.message:String(error);}
       }
