@@ -30,6 +30,7 @@ export class FocusHome {
   private drag?: Drag;
   private undo?: Undo;
   private busy = false;
+  private pendingCheck?: { key: string; checked: boolean };
   private restoreKey = "";
   private promiseError = "";
   private scheduleId = "";
@@ -69,6 +70,30 @@ export class FocusHome {
       if(opts.icon) setIcon(el.createSpan({cls:"fjg-focus-icon",attr:{"aria-hidden":"true"}}),opts.icon);
       if(text) el.createSpan({text});
       el.addEventListener("click",act);return el;
+    };
+    // Reflect a tap before writing vault files. Keep the pending mark across redraws,
+    // but leave ordering and Logbook membership to the confirmed record.
+    const checkButton=(parent:HTMLElement, key:string, checked:boolean, title:string, action:()=>Promise<unknown>,
+      opts:{ checklist?:boolean; disabled?:boolean }={})=>{
+      const draw=(value:boolean, pending:boolean)=>{
+        const icon=el.querySelector<HTMLElement>(".fjg-focus-icon");
+        if(icon) setIcon(icon,value?"circle-check":"circle");
+        el.setAttribute("aria-pressed",String(value));
+        if(pending)el.setAttribute("aria-busy","true");
+        else el.removeAttribute("aria-busy");
+        el.disabled=!!opts.disabled||pending;
+      };
+      const el=button(parent,opts.checklist?title:"",()=>void this.run(async()=>{
+        this.pendingCheck={key,checked:!checked};
+        draw(!checked,true);
+        try { await action(); }
+        finally { this.pendingCheck=undefined; }
+        this.plugin.refreshDashboard();
+      },el),{cls:opts.checklist?"fjg-focus-action":"fjg-focus-check",
+        label:opts.checklist?undefined:`${checked?"Reopen":"Complete"} ${title}`,icon:checked?"circle-check":"circle",pressed:checked});
+      const pending=this.pendingCheck?.key===key?this.pendingCheck:undefined;
+      if(pending)draw(pending.checked,true);
+      else el.disabled=!!opts.disabled;
     };
     const jump=(key:string)=>{this.restoreKey=key;this.redraw();};
     const run=(action:()=>Promise<unknown>,from?:HTMLButtonElement|HTMLInputElement|HTMLSelectElement)=>void this.run(action,from);
@@ -191,7 +216,7 @@ export class FocusHome {
     if(this.detailId && !focusedTask){this.detailId="";this.detailPath="";this.readingWide=false;}
     if(focusedTask){shell.addClass("has-objective-detail");shell.toggleClass("is-reading-wide",this.readingWide);}
     const sidebar=body.createDiv({cls:"fjg-focus-sidebar"}); if(this.layout==="sidebar") listNav(sidebar,0,false);
-    const updateStatus=async(task:IndexedTask,target:TaskStatus|"restore")=>{
+    const updateStatus=async(task:IndexedTask,target:TaskStatus|"restore",refresh=true)=>{
       const r=task.record,id=r.task_id;
       const current=taskNow(task);
       if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before changing its status.");
@@ -202,7 +227,7 @@ export class FocusHome {
         if(now.record.status!==saved.record.status || now.record.updated_at!==saved.record.updated_at)throw new Error("This objective has changed since that action.");
         await this.plugin.workspaceService.changeStatus(id,r.status);
       }};
-      this.plugin.refreshDashboard();
+      if(refresh)this.plugin.refreshDashboard();
     };
     const renderDetails=(detail:HTMLElement,task:IndexedTask,pane:Pane,full=false)=>{
       const r=task.record,id=r.task_id,done=r.status==="completed";
@@ -211,13 +236,11 @@ export class FocusHome {
         const checklist=detail.createDiv({cls:"fjg-focus-checklist"});
         checklist.createEl(full?"h3":"h4",{text:"Checklist"});
         for(const action of actions){
-          const toggle=button(checklist,action.title,()=>run(async()=>{
+          checkButton(checklist,JSON.stringify([id,action.id]),action.completed,action.title,async()=>{
             const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
             if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
             await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
-            this.plugin.refreshDashboard();
-          }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
-          toggle.disabled=done;
+          },{checklist:true,disabled:done});
         }
       }
       if(full && task.notes.trim()){
@@ -304,7 +327,7 @@ export class FocusHome {
         for(const task of group.tasks){
           const r=task.record,id=r.task_id,done=r.status==="completed", opened=this.selected[pane]===id, activeDetail=pane===0&&focusedTask?.record.task_id===id;
           const row=section.createDiv({cls:`fjg-focus-row${opened||activeDetail?" is-open":""}`});
-          const check=button(row,"",()=>run(()=>updateStatus(task,done?"restore":"completed"),check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
+          checkButton(row,id,done,r.title,()=>updateStatus(task,done?"restore":"completed",false));
           const name=button(row,"",()=>{
             this.scheduleId="";
             if(pane===0 && landscape()){

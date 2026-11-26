@@ -27,6 +27,10 @@ const tasks=[
 const duplicate=new Set();
 const get=id=>{if(duplicate.has(id))throw Error("Conflicting copies.");const t=tasks.find(t=>t.record.task_id===id);if(!t)throw Error("Not indexed");return t;};
 const app={workspace:{on:()=>()=>{}},vault:{getAllLoadedFiles:()=>[new TFolder(area)]}};
+let saveGate;
+const holdSave=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});saveGate={promise,resolve,reject};};
+const gate=async()=>{if(saveGate){const pending=saveGate; await pending.promise;}};
+const finishSave=fail=>{const pending=saveGate; saveGate=undefined;if(fail)pending.reject(new Error("Fixture save failed"));else pending.resolve();};
 const service={
  list:()=>tasks,getById:get,projectNames:()=>[],peopleNames:()=>[],refresh:async()=>{},
  async createTask(p) {const t=make(p.title,p.status,{scheduled_for:p.scheduledFor,subtasks:p.initialActions.map((title,i)=>({id:"a"+i,title,status:"do-soon"})),tags:p.tags},p.destination);tasks.unshift(t);window.fixtureEvents.push({action:"capture",p});return t;},
@@ -35,11 +39,11 @@ const service={
    t.record={...t.record,scheduled_for:day};
    window.fixtureEvents.push({action:"plan",id,day,due:t.record.due}); return {...t};
  },
- async changeStatus(id,status){const t=get(id);const before=t.record.status; t.record={...t.record,status:status==="restore"?t.record.completed_from_status||"inbox":status,completed_from_status:before,updated_at:new Date().toISOString()};return {...t};},
- async updateSubtask(id,a,{status}){const r=get(id).record;const action=r.subtasks.find(x=>x.id===a);action.status=status;action.completed=status==="completed";},
+ async changeStatus(id,status){await gate();const t=get(id);const before=t.record.status; t.record={...t.record,status:status==="restore"?t.record.completed_from_status||"inbox":status,completed_from_status:before,updated_at:new Date().toISOString()};return {...t};},
+ async updateSubtask(id,a,{status}){await gate();const r=get(id).record;const action=r.subtasks.find(x=>x.id===a);action.status=status;action.completed=status==="completed";},
 };
 const record=(name)=>(...args)=>window.fixtureEvents.push({action:name,args});
 const plugin={app,workspaceService:service,settings:{dashboardDefault:"do-first"},refreshDashboard:()=>view.render(),openLiveVoice:record("voice"),openTaskDueDateModal:record("deadline"),openObjectiveWorkspace:record("files"),openTaskUpdates:record("updates"),openRenameTaskModal:record("rename"),openTaskRelocationModal:record("move"),openTask:record("open"),openObjectiveActionModal:record("add-action")};
 const view=new TaskDashboardView({app,containerEl:document.querySelector(".workspace-leaf")},plugin);
-window.focusFixture={day,tomorrow,later,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
+window.focusFixture={day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
 view.onOpen().then(()=>{document.body.dataset.fixtureReady="true";}).catch(e=>{document.body.dataset.fixtureError=String(e);throw e;});
