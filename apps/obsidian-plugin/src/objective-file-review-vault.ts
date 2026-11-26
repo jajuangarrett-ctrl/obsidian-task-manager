@@ -1,4 +1,4 @@
-import { isObjectiveFileName } from "./objective-file-names";
+import { isObjectiveFileName, taskArtifactPathParts } from "./objective-file-names";
 import { App, FileSystemAdapter, Platform, TFile, TFolder } from "obsidian";
 import { parseTaskMarkdown, taskArtifactFilesPath } from "@fjg/task-core";
 import type { Stats } from "node:fs";
@@ -29,7 +29,7 @@ const errno = (error: unknown) => (error as { code?: string } | null)?.code;
 type SafeScope = { task: IndexedTask; files: string; stateFolder: string; state: string };
 
 function exclusiveFilesPath(task: IndexedTask): string {
-  const canonical = /^(.+)\/Tasks\/([^/]+)\/task\.md$/i.exec(task.taskFile.path);
+  const canonical = taskArtifactPathParts(task.taskFile.path);
   return task.relocatedBundle ? task.folderPath + "/Files"
     : task.legacyWorkspace ? task.folderPath + "/attachments"
     : canonical ? taskArtifactFilesPath(canonical[1], canonical[2]) : "";

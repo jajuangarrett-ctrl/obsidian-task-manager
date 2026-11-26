@@ -1,3 +1,7 @@
+## 0.30.33
+
+- Add Chat with this objective beside Review Files and in Home details. The existing Talk to Vault panel supports typed or spoken questions with read-only access to that objective and supported text in its own Files folder. It cannot search the rest of the vault or edit objectives.
+
 ## 0.30.32
 
 - The Delete objective dialog lists ordinary incoming links as warnings. Review them and confirm Move to Trash without typing the objective’s title. Shared ownership, nested or dependent objectives, and copied batch safeguards are unchanged.

@@ -158,6 +158,10 @@ async function runScenarios(page, out) {
   const readingHeading=reading.getByRole("heading",{name:"Confirm advisor coverage",level:2});
   await row().click();
   await readingHeading.waitFor();
+  await reading.getByRole("button",{name:"Chat with this objective",exact:true}).click();
+  assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.find(e=>e.action==="objective-chat").args),[
+    "obj_4","08 Tasks/Inbox/Files/Confirm advisor coverage/task.md"
+  ]);
   await reading.getByText(/Synthetic objective summary/).waitFor();
   await reading.getByRole("button",{name:"Check draft schedule"}).waitFor();
   assert.ok((await reading.getByRole("heading",{name:"Checklist",exact:true}).boundingBox()).y <

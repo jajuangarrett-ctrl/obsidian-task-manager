@@ -269,6 +269,8 @@ export class FocusHome {
         button(tools,"Deadline",()=>this.plugin.openTaskDueDateModal(id));
         button(tools,"Add action",()=>this.plugin.openObjectiveActionModal(id));
       }
+      const observedPath=task.taskFile.path;
+      button(tools,"Chat with this objective",()=>this.plugin.openObjectiveChat(id,observedPath),{icon:"messages-square"});
       button(tools,"Files",()=>this.plugin.openObjectiveWorkspace(id,true));
       button(tools,"Updates",()=>run(()=>this.plugin.openTaskUpdates(id)));
       const more=tools.createEl("details");more.createEl("summary",{text:"More"});

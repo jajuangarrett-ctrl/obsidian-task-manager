@@ -76,7 +76,7 @@ function setup(mobile: boolean) {
       startHereFile: () => null, objectiveFiles: () => [{ file }], updateSubtask: vi.fn()
     },
     copyTaskFolderPath: vi.fn(), showTaskFileLocationInFileFocus: vi.fn(),
-    openUpdateModal: vi.fn(), openObjectiveActionModal: vi.fn(), openObjectiveFileReview: vi.fn(),
+    openUpdateModal: vi.fn(), openObjectiveActionModal: vi.fn(), openObjectiveFileReview: vi.fn(), openObjectiveChat: vi.fn(),
     openTask: vi.fn(), openPeoplePicker: vi.fn(), refreshDashboard: vi.fn()
   };
   const view = Object.assign(Object.create(TaskDashboardView.prototype), {
@@ -110,6 +110,8 @@ it("opens on-mobile actions in a full-pane route and restores list context and f
     panel.findText("Update")?.handlers.click();
     panel.findText("Add action")?.handlers.click();
     expect(panel.findText("Evidence.pdf")).toBeUndefined();
+    panel.findText("Chat with this objective")?.handlers.click();
+    expect(plugin.openObjectiveChat).toHaveBeenCalledWith("goal-1", "Vault/Objective/task.md");
     panel.findText("Review Files")?.handlers.click();
     panel.findText("View Review")?.handlers.click();
     expect(plugin.openObjectiveFileReview).toHaveBeenNthCalledWith(1, "goal-1", "Vault/Objective/task.md", "review");

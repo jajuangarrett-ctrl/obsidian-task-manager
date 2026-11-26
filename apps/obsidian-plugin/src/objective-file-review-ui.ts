@@ -15,12 +15,17 @@ export type ObjectiveFileReviewMode = "review" | "view";
 
 export function renderObjectiveFileReviewActions(
   parent: HTMLElement,
-  open: (mode: ObjectiveFileReviewMode) => void
+  open: (mode: ObjectiveFileReviewMode) => void,
+  openChat?: () => void
 ): void {
   const actions = parent.createDiv({
     cls: "fjg-objective-review-actions",
     attr: { role: "group", "aria-label": "Objective file review" }
   });
+  if (openChat) {
+    const chat = actions.createEl("button", { text: "Chat with this objective", attr: { type: "button" } });
+    chat.addEventListener("click", openChat);
+  }
   for (const [label, mode] of [["Review Files", "review"], ["View Review", "view"]] as const) {
     const button = actions.createEl("button", { text: label, attr: { type: "button" } });
     button.addEventListener("click", () => open(mode));
@@ -34,6 +39,7 @@ export function renderObjectiveFilesDisclosure(
   options: {
     count: number;
     openReview: (mode: ObjectiveFileReviewMode) => void;
+    openChat?: () => void;
     initiallyOpen?: boolean;
     onToggle?: (open: boolean) => void;
   },
@@ -47,7 +53,7 @@ export function renderObjectiveFilesDisclosure(
     text: `Files · ${options.count}`,
     attr: { type: "button", "aria-controls": regionId, "aria-expanded": "false" }
   });
-  renderObjectiveFileReviewActions(header, options.openReview);
+  renderObjectiveFileReviewActions(header, options.openReview, options.openChat);
   const list = region.createDiv({ cls: "fjg-objective-files-content", attr: { id: regionId } });
   let expanded = false, mounted = false;
   const update = (open: boolean) => {

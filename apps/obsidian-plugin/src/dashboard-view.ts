@@ -1073,6 +1073,7 @@ export class TaskDashboardView extends ItemView {
     const observedPath = task.taskFile.path;
     renderObjectiveFilesDisclosure(parent, {
       count: files.length,
+      openChat: () => this.taskPlugin.openObjectiveChat(taskId, observedPath),
       openReview: (mode) => this.taskPlugin.openObjectiveFileReview(taskId, observedPath, mode),
     }, (section) => {
       if (!files.length) {

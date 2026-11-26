@@ -38,6 +38,7 @@ import {
   TextEntryModal
 } from "./src/modals";
 import { QuickCaptureModal } from "./src/quick-capture-modal";
+import type { LiveObjectiveScope } from "./src/live-objective-files";
 import { LiveVoiceModal } from "./src/live-voice-modal";
 import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./src/live-conversation-view";
 import type { TaskCaptureDraft } from "./src/quick-capture-model";
@@ -64,6 +65,7 @@ export default class FjgTaskManagerPlugin extends Plugin {
   private liveVoiceModal: LiveVoiceModal | null = null;
   declare settings: TaskManagerSettings;
   workspaceService!: TaskWorkspaceService;
+  private objectiveFilesWorkspace!: VaultObjectiveReviewWorkspace;
   private objectiveFileReviewService!: ObjectiveFileReviewService;
   readonly objectiveSelection = new ObjectiveSelection();
   private readonly deleteCapabilities = new DeleteCapabilities();
@@ -81,8 +83,9 @@ export default class FjgTaskManagerPlugin extends Plugin {
     await this.saveData(this.settings);
     this.workspaceService = new TaskWorkspaceService(this.app, () => this.settings);
     await this.workspaceService.initialize();
+    this.objectiveFilesWorkspace = new VaultObjectiveReviewWorkspace(this.app, this.workspaceService, () => this.settings);
     this.objectiveFileReviewService = new ObjectiveFileReviewService(
-      new VaultObjectiveReviewWorkspace(this.app, this.workspaceService, () => this.settings),
+      this.objectiveFilesWorkspace,
       () => this.settings.openAiApiKey,
     );
 
@@ -1090,15 +1093,34 @@ export default class FjgTaskManagerPlugin extends Plugin {
     }, 500);
   }
 
-  openLiveVoice(context?: () => string): void {
-    if (this.liveVoiceModal) { this.liveVoiceModal.restore(); return; }
+  openObjectiveChat(id: string, observedPath: string): void {
+    try {
+      const task = this.workspaceService.getById(id);
+      if (task.taskFile.path !== observedPath) throw new Error("This objective moved. Reopen it before starting chat.");
+      this.openLiveVoice(undefined, { id, observedPath, title: task.record.title });
+    } catch (error) {
+      new Notice(error instanceof Error ? error.message : "Could not open this objective chat.");
+    }
+  }
+
+  openLiveVoice(context?: () => string, scope?: LiveObjectiveScope): void {
+    if (this.liveVoiceModal) {
+      if (!this.liveVoiceModal.matchesObjective(scope)) {
+        new Notice("Close the current Talk to Vault conversation before switching what you’re chatting with.");
+      }
+      this.liveVoiceModal.restore();
+      return;
+    }
     const describe = () => JSON.stringify({
       local_date: new Date().toLocaleDateString("en-CA"),
       time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      dashboard: context?.() || "All objectives; no specific objective selected.",
-      active_objectives: this.workspaceService.list().length
+      ...(scope
+        ? { dashboard: "One selected objective and its owned files; read-only." }
+        : { dashboard: context?.() || "All objectives; no specific objective selected.",
+            active_objectives: this.workspaceService.list().length })
     });
-    this.liveVoiceModal = new LiveVoiceModal(this.app, this, describe, () => { this.liveVoiceModal = null; });
+    this.liveVoiceModal = new LiveVoiceModal(this.app, this, describe, () => { this.liveVoiceModal = null; },
+      scope ? { objective: scope, workspace: this.objectiveFilesWorkspace } : undefined);
     this.liveVoiceModal.open();
   }
 

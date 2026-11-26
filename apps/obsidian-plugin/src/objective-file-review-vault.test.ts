@@ -167,3 +167,17 @@ describe("production Objective Review scope/storage adapter", () => {
     expect(f.app.vault.readBinary).not.toHaveBeenCalled();
   });
 });
+
+
+it("recognizes readable objective filenames in the canonical split Tasks and Files layout", async () => {
+  const f = fixture();
+  const titleTarget = { id: "tsk_readable", observedPath: root + "/Tasks/Readable/Readable - Objective.md" };
+  const filesPath = root + "/Files/Readable";
+  f.task(titleTarget.id, titleTarget.observedPath, filesPath);
+  f.file(filesPath + "/notes.md", "Owned notes");
+  f.file(fileRoot + "/not-this-objective.md", "Unrelated notes");
+  const scope = await f.workspace.snapshot(titleTarget);
+  expect(scope.files.map(file=>file.relativePath)).toEqual(["notes.md"]);
+  const bytes = await f.workspace.readSource(titleTarget, scope.files[0]);
+  expect(new TextDecoder().decode(bytes)).toBe("Owned notes");
+});

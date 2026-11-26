@@ -281,3 +281,13 @@ describe("Live connection lifecycle", () => {
   });
 
 });
+
+
+it("exposes only scoped read tools for an objective chat, leaving global Talk to Vault unchanged", () => {
+  const scoped = liveRequest("offer", "backend", "data", true).session;
+  expect(scoped.delegation.responses.tools.map(tool => tool.name)).toEqual([
+    "read_current_objective", "list_objective_files", "read_objective_file"
+  ]);
+  expect(scoped.delegation.responses.instructions).toContain("untrusted");
+  expect(liveRequest("offer", "backend", "data").session.delegation.responses.tools.map(tool => tool.name)).toContain("change_task");
+});

@@ -1,6 +1,8 @@
 import { Platform, requestUrl } from "obsidian";
 import { backendInstructions, LIVE_INSTRUCTIONS, LIVE_TOOLS, LiveToolLoop } from "./live-tools";
 
+import { LIVE_OBJECTIVE_INSTRUCTIONS, LIVE_OBJECTIVE_TOOLS, objectiveBackendInstructions } from "./live-objective-files";
+
 export type LiveState = "idle" | "connecting" | "connected" | "ending" | "ended" | "error";
 export interface LiveCallbacks {
   state: (state: LiveState, message: string) => void;
@@ -9,10 +11,10 @@ export interface LiveCallbacks {
   execute: (name: string, args: string, id: string) => Promise<unknown>;
 }
 
-export function liveRequest(sdp: string, backendModel: string, context: string) {
-  return { session: { model: "gpt-live-1", instructions: LIVE_INSTRUCTIONS,
-    delegation: { type: "responses", responses: { model: backendModel, instructions: backendInstructions(context),
-      tools: LIVE_TOOLS, tool_choice: "auto", parallel_tool_calls: false, max_output_tokens: 1800 } } },
+export function liveRequest(sdp: string, backendModel: string, context: string, objectiveOnly = false) {
+  return { session: { model: "gpt-live-1", instructions: objectiveOnly ? LIVE_OBJECTIVE_INSTRUCTIONS : LIVE_INSTRUCTIONS,
+    delegation: { type: "responses", responses: { model: backendModel, instructions: objectiveOnly ? objectiveBackendInstructions(context) : backendInstructions(context),
+      tools: objectiveOnly ? LIVE_OBJECTIVE_TOOLS : LIVE_TOOLS, tool_choice: "auto", parallel_tool_calls: false, max_output_tokens: 1800 } } },
     transport: { type: "webrtc", sdp } };
 }
 
@@ -42,7 +44,7 @@ export class DashboardLiveSession {
   private ending = false;
   private timer?: ReturnType<typeof setTimeout>;
   private loop: LiveToolLoop;
-  constructor(private audio: HTMLAudioElement, private callbacks: LiveCallbacks) {
+  constructor(private audio: HTMLAudioElement, private callbacks: LiveCallbacks, private objectiveOnly = false) {
     this.loop = new LiveToolLoop(callbacks.execute, (event) => this.send(event));
   }
   get active(): boolean { return this.ready && !this.disposed && !this.ending; }
@@ -113,7 +115,7 @@ export class DashboardLiveSession {
       this.timer = setTimeout(() => this.fail("Voice connection timed out. Check your network and API model access, then try again."), 30000);
       const response = await requestUrl({ url: "https://api.openai.com/v1/live/sessions", method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(liveRequest(sdp, backendModel, context)), throw: false });
+        body: JSON.stringify(liveRequest(sdp, backendModel, context, this.objectiveOnly)), throw: false });
       if (this.disposed) return;
       if (response.status >= 400) {
         const hint = response.status === 401 ? "Check your saved OpenAI API key." : response.status === 403 || response.status === 404 ? "Check that your OpenAI project has GPT-Live-1 and backend model access." : response.status === 429 ? "Check your OpenAI quota or try again later." : "Try again after checking your OpenAI account and network.";

@@ -83,7 +83,8 @@ export class ObjectiveWorkspaceContent {
       const fileHeading = body.createDiv({ cls: "fjg-objective-files-heading" });
       fileHeading.createEl("h3", { text: "Key files" });
       const observedPath = task.taskFile.path;
-      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode));
+      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode),
+        () => this.plugin.openObjectiveChat(this.taskId, observedPath));
       this.renderFiles(body, service.objectiveFiles(this.taskId), true);
     } catch(error){this.contentEl.createEl("p",{text:`Unable to open this objective: ${String(error)}`,cls:"fjg-workspace-error"});}
   }
@@ -132,7 +133,8 @@ export class ObjectiveWorkspaceContent {
     if (this.appSection === "Files") {
       const fileHeading = body.createDiv({ cls: "fjg-objective-files-heading" });
       fileHeading.createEl("h3", { text: "Related files" });
-      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode));
+      renderObjectiveFileReviewActions(fileHeading, (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode),
+        () => this.plugin.openObjectiveChat(this.taskId, observedPath));
       body.createEl("code", { text: service.copyFolderForTask(this.taskId).folderPath, cls: "fjg-workspace-path" });
       const files = service.objectiveFiles(this.taskId);
       this.renderFiles(body.createDiv({ cls: "fjg-workspace-file-list" }), files, false, observedPath);
@@ -206,6 +208,7 @@ export class ObjectiveWorkspaceContent {
       initiallyOpen: this.mobileFilesOpen,
       onToggle: (open) => { this.mobileFilesOpen = open; },
       openReview: (mode) => this.plugin.openObjectiveFileReview(this.taskId, observedPath, mode),
+      openChat: () => this.plugin.openObjectiveChat(this.taskId, observedPath),
     }, (section) => this.renderFiles(section.createDiv({ cls: "fjg-workspace-file-list" }), files, false));
 
     const secondary = body.createEl("details", { cls: "fjg-overview-mobile-secondary" });

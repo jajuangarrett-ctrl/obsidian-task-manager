@@ -1,6 +1,8 @@
 import { Modal, Platform, type App, type WorkspaceLeaf } from "obsidian";
 import type FjgTaskManagerPlugin from "../main";
 import { DashboardLiveSession, type LiveState } from "./live-session";
+import { LiveObjectiveFiles, type LiveObjectiveScope } from "./live-objective-files";
+import type { ReviewWorkspace } from "./objective-file-review";
 import { LiveTaskTools } from "./live-tools";
 import { canSplitLive, followLiveViewport } from "./live-presentation";
 import { LIVE_CONVERSATION_VIEW, LiveConversationView } from "./live-conversation-view";
@@ -56,17 +58,25 @@ export class LiveVoiceModal extends Modal {
   private lastSpeaker = "";
   private lastText?: HTMLElement;
 
-  constructor(app: App, private plugin: FjgTaskManagerPlugin, private context: () => string, private released: () => void) { super(app); }
+  constructor(app: App, private plugin: FjgTaskManagerPlugin, private context: () => string, private released: () => void,
+    private objectiveChat?: { objective: LiveObjectiveScope; workspace: Pick<ReviewWorkspace, "snapshot" | "readSource"> }) { super(app); }
+
+  matchesObjective(scope?: LiveObjectiveScope): boolean {
+    const current = this.objectiveChat?.objective;
+    return scope?.id === current?.id && scope?.observedPath === current?.observedPath;
+  }
 
   onOpen(): void {
-    this.titleEl.setText("Talk to Vault");
+    this.titleEl.setText(this.objectiveChat ? "Chat with this objective" : "Talk to Vault");
     this.modalEl.addClass("fjg-live-modal");
     this.attachMobileLayout();
     if (this.rendered) return;
     this.rendered = true;
     const root = this.contentEl;
     const info = root.createDiv({ cls: "fjg-live-info" });
-    info.createEl("p", { text: "Ask about your objectives or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
+    info.createEl("p", { text: this.objectiveChat
+      ? `${this.objectiveChat.objective.title} · Read-only · This objective and its Files folder only`
+      : "Ask about your objectives or say what to change. Clear requests save immediately.", cls: "fjg-live-intro" });
     info.createEl("p", { text: microphoneDisclosure, cls: "fjg-live-caption" });
     this.status = root.createEl("p", { text: "Microphone off — press Start conversation", cls: "fjg-live-status", attr: { role: "status", "aria-live": "polite" } });
     const controls = root.createDiv({ cls: "fjg-live-controls" });
@@ -100,14 +110,22 @@ export class LiveVoiceModal extends Modal {
     });
     const scroll = root.createDiv({ cls: "fjg-live-scroll" });
     scroll.createEl("p", { text: microphoneDisclosure, cls: "fjg-live-caption fjg-live-mobile-policy" });
-    scroll.createEl("p", { text: typingDisclosure, cls: "fjg-live-caption fjg-live-mobile-policy fjg-live-mobile-typing-policy" });
+    scroll.createEl("p", { text: this.textDisclosure(), cls: "fjg-live-caption fjg-live-mobile-policy fjg-live-mobile-typing-policy" });
     this.coverage = scroll.createEl("p", { cls: "fjg-live-coverage", attr: { role: "status" } });
     this.transcript = scroll.createDiv({ cls: "fjg-live-transcript", attr: { role: "log", "aria-label": "Conversation transcript", "aria-live": "polite" } });
-    this.transcript.createEl("p", { text: "Try: “What is due this week?” or “Mark my budget review task completed.”", cls: "fjg-live-caption" });
+    this.transcript.createEl("p", { text: this.objectiveChat
+      ? "Try: “What did the latest notes say about next steps?” Supported text is read on request. PDFs and images are not read in this chat."
+      : "Try: “What is due this week?” or “Mark my budget review task completed.”", cls: "fjg-live-caption" });
     this.sources = scroll.createDiv({ cls: "fjg-live-search-results", attr: { "aria-label": "Referenced objectives" } });
     this.updates = scroll.createDiv({ cls: "fjg-live-updates", attr: { role: "log", "aria-label": "Saved task changes", "aria-live": "polite" } });
     this.renderTextComposer(root);
     this.watchMobileLane();
+  }
+
+  private textDisclosure(): string {
+    return this.objectiveChat
+      ? "Sending starts a paid OpenAI session using your saved key. OpenAI receives your message and requested objective or file excerpts. Microphone stays off until you turn it on. This chat cannot make changes."
+      : typingDisclosure;
   }
 
   private renderTextComposer(root: HTMLElement): void {
@@ -126,13 +144,14 @@ export class LiveVoiceModal extends Modal {
       setTyping(open);
       if (!open) void this.dockBesideCurrentView();
     });
-    panel.createEl("p", { text: typingDisclosure, cls: "fjg-live-caption fjg-live-desktop-policy" });
+    panel.createEl("p", { text: this.textDisclosure(), cls: "fjg-live-caption fjg-live-desktop-policy" });
     const form = panel.createEl("form", { cls: "fjg-live-search-form" });
     form.createEl("button", { text: "×", cls: "fjg-live-hide-keyboard", type: "button", attr: { "aria-label": "Hide typing" } })
       .addEventListener("click", () => { setTyping(false); void this.dockBesideCurrentView(); });
     const label = form.createEl("label");
-    label.createSpan({ text: "Message your dashboard", cls: "fjg-live-input-label" });
-    this.textInput = label.createEl("input", { type: "text", placeholder: "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": "Message your dashboard", enterkeyhint: "send" } });
+    const inputLabel = this.objectiveChat ? "Message this objective" : "Message your dashboard";
+    label.createSpan({ text: inputLabel, cls: "fjg-live-input-label" });
+    this.textInput = label.createEl("input", { type: "text", placeholder: this.objectiveChat ? "Ask about this objective’s files…" : "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": inputLabel, enterkeyhint: "send" } });
     this.textButton = form.createEl("button", { text: "Send", type: "submit", attr: { "aria-label": "Send message" } });
     form.addEventListener("submit", event => { event.preventDefault(); void this.submitText(); });
   }
@@ -161,7 +180,10 @@ export class LiveVoiceModal extends Modal {
     this.lastSpeaker = "";
     this.lastText = undefined;
     let session: DashboardLiveSession;
-    const tools = new LiveTaskTools(this.plugin.workspaceService, () => this.plugin.settings, (message) => {
+    const chat = this.objectiveChat;
+    const scoped = chat ? new LiveObjectiveFiles(chat.objective, chat.workspace, id => this.plugin.workspaceService.getById(id),
+      () => !this.closed && session.active && this.session === session) : undefined;
+    const tools = scoped ? undefined : new LiveTaskTools(this.plugin.workspaceService, () => this.plugin.settings, (message) => {
       this.plugin.refreshDashboard();
       if (!this.closed) this.updates.createEl("p", { text: message });
     }, () => !this.closed && session.active, message => { if (!this.closed) this.coverage.setText(message); },
@@ -172,7 +194,8 @@ export class LiveVoiceModal extends Modal {
       transcript: (speaker, delta) => { if (this.session === session) this.addTranscript(speaker, delta); },
       execute: async (name, args, id) => {
         if (this.closed || this.session !== session) throw new Error("Conversation ended.");
-        const result = await tools.execute(name, args, id);
+        if (scoped) return scoped.execute(name, args);
+        const result = await tools!.execute(name, args, id);
         if (!this.closed && this.session === session && (name === "find_tasks" || name === "read_task")) {
           const data = result as { tasks?: { task_id: string; title: string }[]; task_id?: string; title?: string };
           const tasks = data.tasks ?? (data.task_id && data.title ? [{ task_id: data.task_id, title: data.title }] : []);
@@ -191,7 +214,7 @@ export class LiveVoiceModal extends Modal {
         }
         return result;
       }
-    });
+    }, !!scoped);
     this.session = session;
     // Preserve the explicit Send user gesture before the asynchronous saved-key lookup.
     try { if (inputMode === "text") session.prepareTextInput(); }
@@ -465,7 +488,7 @@ export class LiveVoiceModal extends Modal {
       root.classList.add("fjg-live-lane-root");
       this.lane = root.createEl("aside", { cls: "fjg-live-lane", attr: { "aria-label": "Talk to Vault conversation" } });
       const header = this.lane.createDiv({ cls: "fjg-live-lane-header" });
-      header.createEl("h2", { text: "Talk to Vault" });
+      header.createEl("h2", { text: this.objectiveChat ? "Chat with this objective" : "Talk to Vault" });
       header.createEl("button", { text: "Close", attr: { "aria-label": "Close conversation" } }).addEventListener("click", () => this.close());
       this.lane.appendChild(this.contentEl);
     }
