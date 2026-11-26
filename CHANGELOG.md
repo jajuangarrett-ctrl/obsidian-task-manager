@@ -1,3 +1,8 @@
+## 0.30.28
+
+- Put the Home checklist directly beneath the objective header and before notes in the reading pane, and above the preview in inline details.
+- Move Quick Entry to a single unobtrusive toolbar icon. Remove the bottom button and its reserved row space without changing tap or drag behavior.
+
 ## 0.30.27
 
 - In landscape Book Split, selecting an objective on the left opens notes, checklist and controls on the right. Back restores the second list and its scroll.

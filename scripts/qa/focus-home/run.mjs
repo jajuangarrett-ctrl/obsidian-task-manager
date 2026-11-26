@@ -91,6 +91,14 @@ async function runScenarios(page, out) {
   assert.equal(await status.inputValue(),"do-first");
   await screen("01-folded-today");
 
+  const quickPlus=page.getByRole("button",{name:"Quick Entry",exact:true});
+  const plusBox=await quickPlus.boundingBox();
+  assert.equal(await quickPlus.evaluate(el=>!!el.closest(".fjg-focus-toolbar")),true);
+  assert.equal(await page.locator(".fjg-focus-addbar").count(),0);
+  assert.equal(await quickPlus.count(),1);
+  assert.ok(plusBox.width>=44 && plusBox.height>=44);
+  assert.equal(await quickPlus.evaluate(el=>getComputedStyle(el).backgroundColor),"rgba(0, 0, 0, 0)");
+  assert.ok((await pane1.getByRole("heading",{name:"Checklist"}).boundingBox()).y < (await pane1.getByText("Synthetic objective summary.",{exact:true}).boundingBox()).y);
   await pane1.getByRole("button",{name:"Check draft schedule"}).click();
   assert.equal(await pane1.getByRole("button",{name:"Check draft schedule"}).getAttribute("aria-pressed"),"true");
   await pane1.getByRole("button",{name:"When",exact:true}).click();
@@ -115,6 +123,9 @@ async function runScenarios(page, out) {
   await readingHeading.waitFor();
   await reading.getByText(/Synthetic objective summary/).waitFor();
   await reading.getByRole("button",{name:"Check draft schedule"}).waitFor();
+  assert.ok((await reading.getByRole("heading",{name:"Checklist",exact:true}).boundingBox()).y <
+    (await reading.getByRole("heading",{name:"Objective notes",exact:true}).boundingBox()).y);
+
   await reading.getByRole("combobox",{name:"Status for Confirm advisor coverage"}).waitFor();
   assert.equal(await pane2.isVisible(),false);
   assert.ok((await pane1.boundingBox()).x<(await reading.boundingBox()).x);
@@ -146,7 +157,7 @@ async function runScenarios(page, out) {
   await pane2.getByRole("button",{name:/^Fixture row 00/}).waitFor();
   await page.getByRole("button",{name:"Undo",exact:true}).click();
   await pane1.getByRole("button",{name:/^Fixture row 00/}).waitFor();
-  await pane1.getByRole("button",{name:"Quick Entry",exact:true}).dragTo(pane2.getByRole("heading",{name:"Tomorrow"}));
+  await page.getByRole("button",{name:"Quick Entry",exact:true}).dragTo(pane2.getByRole("heading",{name:"Tomorrow"}));
   assert.equal(await page.getByLabel("When · optional").inputValue(),dates.tomorrow);
   await page.getByRole("button",{name:"Cancel"}).click();
 
@@ -177,7 +188,7 @@ async function runScenarios(page, out) {
   await layout.selectOption("split");
   await pane2.getByRole("heading",{name:"Anytime",level:2}).waitFor();
 
-  await pane1.getByRole("button",{name:"Quick Entry",exact:true}).click();
+  await page.getByRole("button",{name:"Quick Entry",exact:true}).click();
   await page.getByRole("textbox",{name:"Title",exact:true}).fill("Captured from Home");
   await page.getByRole("textbox",{name:"Notes",exact:true}).fill("Keep this draft over rotation");
   await page.getByRole("textbox",{name:/Checklist/}).fill("One\nTwo");

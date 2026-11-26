@@ -100,6 +100,10 @@ export class FocusHome {
     for(const [key,text] of [["split","Book Split"],["sidebar","Sidebar"],["single","Single Pane"]])layout.createEl("option",{value:key,text});
     layout.value=this.layout;layout.addEventListener("change",()=>{this.layout=layout.value as typeof this.layout;if(this.layout!=="split")this.activePane=0;this.picker=null;jump("focus-layout");});
     button(toolbar,"",()=>this.plugin.openLiveVoice(()=>JSON.stringify({mode:"home",focusList:this.lists[0],secondaryList:this.layout==="split"?this.lists[1]:undefined})),{label:"Talk to Vault",icon:"mic"});
+    const add=button(toolbar,"",()=>capture("",this.layout==="split"?this.activePane:0),{cls:"fjg-focus-plus",label:"Quick Entry",icon:"plus",key:"focus-add-0"});
+    add.draggable=true;
+    add.addEventListener("dragstart",ev=>{this.drag={type:"capture"};ev.dataTransfer?.setData("text/plain","New objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="copy";});
+    add.addEventListener("dragend",()=>{this.drag=undefined;});
     if(this.undo){
       const undo=this.undo, notice=shell.createDiv({cls:"fjg-focus-undo",attr:{role:"status"}});
       notice.createSpan({text:undo.text});
@@ -189,6 +193,20 @@ export class FocusHome {
     };
     const renderDetails=(detail:HTMLElement,task:IndexedTask,pane:Pane,full=false)=>{
       const r=task.record,id=r.task_id,done=r.status==="completed";
+      const actions=r.subtasks.filter(x=>x.status!=="archived");
+      if(actions.length){
+        const checklist=detail.createDiv({cls:"fjg-focus-checklist"});
+        checklist.createEl(full?"h3":"h4",{text:"Checklist"});
+        for(const action of actions){
+          const toggle=button(checklist,action.title,()=>run(async()=>{
+            const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
+            if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
+            await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
+            this.plugin.refreshDashboard();
+          }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
+          toggle.disabled=done;
+        }
+      }
       if(full && task.notes.trim()){
         detail.createEl("h3",{text:"Objective notes"});
         const target=detail.createDiv({cls:"fjg-focus-notes markdown-rendered"});
@@ -199,18 +217,6 @@ export class FocusHome {
       }else {
         const preview=description(task.notes);
         if(preview)detail.createEl("p",{text:preview});
-      }
-      if(r.subtasks.length){
-        detail.createEl("h4",{text:"Checklist"});
-        for(const action of r.subtasks.filter(x=>x.status!=="archived")){
-          const toggle=button(detail,action.title,()=>run(async()=>{
-            const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
-            if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
-            await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
-            this.plugin.refreshDashboard();
-          }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
-          toggle.disabled=done;
-        }
       }
       const tools=detail.createDiv({cls:"fjg-focus-tools"});
       // A native select, outside the title button, sits with the other expanded actions.
@@ -312,11 +318,6 @@ export class FocusHome {
         }
       }
       scroller.scrollTop=this.positions.get(scrollerKey)||0;
-      const action=part.createDiv({cls:"fjg-focus-addbar"});
-      const add=button(action,"",()=>capture("",pane),{cls:"fjg-focus-plus",label:pane?"Quick Entry from second list":"Quick Entry",icon:"plus",key:`focus-add-${pane}`});
-      add.draggable=true;
-      add.addEventListener("dragstart",ev=>{this.drag={type:"capture"};ev.dataTransfer?.setData("text/plain","New objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="copy";});
-      add.addEventListener("dragend",()=>{this.drag=undefined;});
     }
     if(focusedTask){
       const r=focusedTask.record,id=r.task_id;
