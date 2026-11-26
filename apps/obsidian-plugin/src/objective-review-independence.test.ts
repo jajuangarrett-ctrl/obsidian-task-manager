@@ -53,14 +53,15 @@ function fixture() {
   let ids = new Map<string, string>();
   const buildReply = () => simpleReport(citations.map(([path, text]) => [ids.get(path) ?? path, text]));
   let fail = false;
+  let responseOverride: unknown;
   const posted: {url: string; body: string}[] = [];
   const getKey = vi.fn(() => "fixture-key-not-real");
   const transport = vi.fn(async (url: string, init: RequestInit) => {
     posted.push({url, body: String(init.body)});
-    return new Response(JSON.stringify(fail ? {error: {message: "Synthetic service failure"}} : {
+    return new Response(JSON.stringify(responseOverride ?? (fail ? {error: {message: "Synthetic service failure"}} : {
       status: "completed",
       output: [{type: "message", role: "assistant", status: "completed", content: [{type: "output_text", text: JSON.stringify(buildReply())}]}]
-    }), {status: fail ? 503 : 200, headers: {"content-type": "application/json"}});
+    })), {status: fail ? 503 : 200, headers: {"content-type": "application/json"}});
   });
   const workspace = {
     snapshot: vi.fn(async (scope: Target) => ({
@@ -86,7 +87,8 @@ function fixture() {
   return {service, posted, getKey, workspace, stored, put, take, prepare,
     run: async (scope = target) => service.run(await prepare(scope)),
     answer: (evidence: Array<[string, string]>) => { citations = evidence; },
-    fail: () => { fail = true; }
+    fail: () => { fail = true; },
+    respond: (value: unknown) => { responseOverride = value; }
   };
 }
 
@@ -130,6 +132,24 @@ describe("objective review independent integration, synthetic vault and in-memor
     expect(schema.required).toEqual(expect.arrayContaining(["analysis", "nextSteps", "decisions", "gaps"]));
     expect(schema.properties.nextSteps.items.required).toEqual(expect.arrayContaining(["evidence", "rationale"]));
     expect(request.reasoning.effort).toBe("medium");
+    expect(request.max_output_tokens).toBe(25_000);
+  });
+
+  it.each([
+    [{status: "incomplete", incomplete_details: {reason: "max_output_tokens"}, output: []}, /reached its token limit/],
+    [{status: "incomplete", incomplete_details: {reason: "content_filter"}, output: []}, /declined/],
+    [{status: "completed", output: [{type: "message", content: [{type: "refusal", refusal: "private provider text"}]}]}, /declined/],
+    [{status: "completed", output: [{type: "message", content: [{type: "output_text", text: JSON.stringify(simpleReport([]))}]}]}, /returned no findings/],
+    [{status: "completed", output: [{type: "message", content: [{type: "output_text", text: JSON.stringify(simpleReport([["bad", "uncited"]]))}]}]}, /could not be validated/],
+  ] as const)("preserves the previous review and makes no second request after an unusable response", async (response, message) => {
+    const f = fixture();
+    await f.run();
+    const before = f.stored.get(target.id);
+    f.put(target, costFile, costRaw);
+    f.respond(response);
+    await expect(f.run()).rejects.toThrow(message);
+    expect(f.posted).toHaveLength(2);
+    expect(f.stored.get(target.id)).toBe(before);
   });
 
   it("view and unchanged review make no request; new files send only their contents and the existing synthesis", async () => {

@@ -1,3 +1,7 @@
+## 0.30.37
+
+- Give Review Files more room for reasoning and a complete response. Explain whether OpenAI ran out of tokens, declined the request, or produced an unusable review, while preserving saved reviews. No background retries and no change to which files are sent.
+
 ## 0.30.36
 
 - Collapse the bulk actions panel by default in Inbox folder, Completed, and Converted. The checked count and row checkboxes remain visible; show or hide the controls without changing the selection.

@@ -11,6 +11,8 @@ const TEXT_BUDGET = 700_000;
 const PDF_BUDGET = 6 * 1024 * 1024;
 const MAX_PDFS = 4;
 const STATE_BYTES = 500_000;
+// The Responses API counts reasoning as well as visible output against this cap.
+const MAX_OUTPUT_TOKENS = 25_000;
 const encoder = new TextEncoder();
 
 export interface ReviewTarget { id: string; observedPath: string }
@@ -64,7 +66,9 @@ type InternalPlan = {
 
 export class ObjectiveFileReviewError extends Error {}
 const stale = () => new ObjectiveFileReviewError("The objective or its Files changed. Reopen Review Files to check the new selection.");
-const invalidResponse = () => new ObjectiveFileReviewError("OpenAI did not return a complete, usable review. The previous review was kept.");
+const reviewFailure = (message: string) => new ObjectiveFileReviewError(message + " Any saved review was kept.");
+const invalidResponse = () => reviewFailure("OpenAI returned a review that could not be read.");
+const refusedReview = () => reviewFailure("OpenAI declined to review this material.");
 const collision = () => new ObjectiveFileReviewError("The saved-review filename is already used by an unrelated or invalid file. It was not changed.");
 
 export function isReviewArtifact(name: string): boolean { return name.toLowerCase() === REVIEW_FILENAME.toLowerCase() || name.toLowerCase().endsWith(".objective-file-review.fjg.json"); }
@@ -176,6 +180,8 @@ const developerPrompt = [
   "Separate reported facts from inferences, recommendations and open verification questions. Qualify evidence that is stale or indirect. If current evidence contradicts old synthesis, prefer current evidence and explain discrepancies without inventing a resolution.",
   "Put the most valuable next actions first, each with a concrete action and why it matters. Use an owner or due date only if explicitly supported by cited evidence; otherwise return an empty string. Never invent a status, owner, date, quote, or commitment. Do not write changes to the objective.",
   "Cite ONLY the provided IDs of current file evidence. Cite all material claims; cite multiple independently supporting sources where appropriate. Never cite an excluded/removed source. Treat prior review as context, not newly reread unchanged source contents. A filename alone is not evidence. Paraphrase relevant material; avoid long quotations and unnecessary private detail.",
+  "Keep the report detailed but concise: prioritize material findings, combine duplicates, and normally use 1 to 5 distinct entries per section. Use no more than 20 entries per section, 12 unique evidence IDs per entry, 1400 characters for text, 200 for owner, 120 for due, and 1000 for rationale. Text and next-step rationale must not be blank.",
+  "Cite at least one source for each fact, inference or recommendation. An uncited verification question is acceptable. If evidence is too limited for definite conclusions, use an open verification question in gaps rather than an entirely empty report.",
   "Distinguish what cannot be assessed because a source was removed, unsupported, over the limit, unreadable, or is represented only by retained prior evidence. An empty section is preferable to speculation.",
 ].join("\n");
 
@@ -216,7 +222,7 @@ function buildRequest(plan: InternalPlan, prior: ReviewReport | null) {
       ? { id: doc.id, path: doc.path, text: doc.text } : { id: doc.id, path: doc.path, filename: doc.id + ".pdf" }),
   };
   return {
-    model: REVIEW_MODEL, reasoning: { effort: "medium" }, store: false, truncation: "disabled", max_output_tokens: 9_000,
+    model: REVIEW_MODEL, reasoning: { effort: "medium" }, store: false, truncation: "disabled", max_output_tokens: MAX_OUTPUT_TOKENS,
     input: [
       { role: "developer", content: [{ type: "input_text", text: developerPrompt }] },
       { role: "user", content: [{ type: "input_text", text: JSON.stringify(payload) }, ...plan.documents
@@ -236,14 +242,14 @@ async function requestReview(plan: InternalPlan, prior: ReviewReport | null, key
       body: JSON.stringify(buildRequest(plan, prior)),
     });
   } catch {
-    throw new ObjectiveFileReviewError("OpenAI could not be reached or the request timed out. The previous review was kept.");
+    throw reviewFailure("OpenAI could not be reached or the request timed out.");
   }
   if (!response.ok) {
     const message = [401,403,404].includes(response.status)
       ? "OpenAI rejected the configured key or it does not have access to GPT-6.2 Sol."
       : response.status === 429 ? "OpenAI usage is limited or the project is out of quota. Check API billing and retry."
       : "OpenAI could not complete this request. Review the selected file coverage and retry.";
-    throw new ObjectiveFileReviewError(message + " The previous review was kept.");
+    throw reviewFailure(message);
   }
   const maxResponseBytes = 1_500_000;
   const declaredLength = Number(response.headers.get("content-length"));
@@ -267,7 +273,19 @@ async function requestReview(plan: InternalPlan, prior: ReviewReport | null, key
   } finally {
     reader.releaseLock();
   }
-  if (!isObject(value) || value.status !== "completed" || !Array.isArray(value.output)) throw invalidResponse();
+  if (!isObject(value)) throw invalidResponse();
+  if (value.status === "incomplete") {
+    const reason = isObject(value.incomplete_details) ? value.incomplete_details.reason : undefined;
+    if (reason === "max_output_tokens") {
+      throw reviewFailure("OpenAI reached its token limit before finishing this review. You can run Review Files again.");
+    }
+    if (reason === "content_filter") throw refusedReview();
+    throw reviewFailure("OpenAI stopped before finishing this review. You can run Review Files again.");
+  }
+  if (value.status === "failed" || value.status === "cancelled") {
+    throw reviewFailure("OpenAI did not finish processing this review. You can run Review Files again.");
+  }
+  if (value.status !== "completed" || !Array.isArray(value.output)) throw invalidResponse();
   const parts: string[] = [];
   for (const output of value.output) {
     if (!isObject(output) || output.type === "reasoning") continue;
@@ -275,6 +293,7 @@ async function requestReview(plan: InternalPlan, prior: ReviewReport | null, key
         (output.status !== undefined && output.status !== "completed") ||
         (output.role !== undefined && output.role !== "assistant")) throw invalidResponse();
     for (const content of output.content) {
+      if (isObject(content) && content.type === "refusal") throw refusedReview();
       if (!isObject(content) || content.type !== "output_text" || typeof content.text !== "string") throw invalidResponse();
       parts.push(content.text);
     }
@@ -285,8 +304,10 @@ async function requestReview(plan: InternalPlan, prior: ReviewReport | null, key
   try { report = JSON.parse(raw); } catch { throw invalidResponse(); }
   const available = new Set(plan.documents.map((document) => document.id));
   if (prior) for (const section of sections) for (const entry of prior[section]) for (const id of entry.evidence) available.add(id);
-  if (!validReport(report, available) ||
-    !sections.some((section) => report[section].length > 0)) throw invalidResponse();
+  if (!validReport(report, available)) throw reviewFailure("OpenAI returned findings that could not be validated against the selected files.");
+  if (!sections.some((section) => report[section].length > 0)) {
+    throw reviewFailure("OpenAI returned no findings or open questions for the selected files.");
+  }
   return report;
 }
 
