@@ -85,7 +85,7 @@ export class QuickCaptureModal extends Modal {
     this.rawInput = captureCard.createEl("textarea", {
       placeholder: "Type what you need to do, or dictate it.",
       attr: {
-        rows: "5",
+        rows: "5", autocapitalize: "none",
         "aria-label": "Objective capture text"
       }
     });
@@ -291,7 +291,7 @@ export class QuickCaptureModal extends Modal {
       const moreFields = detailsSection.createDiv({ cls: "fjg-capture-more-fields" });
       const detailsLabel = moreFields.createEl("label", { text: "Objective details" });
       const details = moreFields.createEl("textarea", {
-        attr: { rows: "4", "aria-label": `Objective ${index + 1} details` }
+        attr: { rows: "4", autocapitalize: "none", "aria-label": `Objective ${index + 1} details` }
       });
       detailsLabel.htmlFor = this.assignId(details, `details-${index + 1}`);
       details.value = draft.details;
@@ -402,7 +402,7 @@ export class QuickCaptureModal extends Modal {
   private inputRow(parent: HTMLElement, label: string, type: string): HTMLInputElement {
     const row = parent.createDiv({ cls: "fjg-capture-form-row" });
     const labelEl = row.createEl("label", { text: label });
-    const input = row.createEl("input", { type });
+    const input = row.createEl("input", { type, attr: type === "text" ? { autocapitalize: "none" } : {} });
     labelEl.htmlFor = this.assignId(input, label.toLowerCase().replace(/\s+/g, "-"));
     return input;
   }

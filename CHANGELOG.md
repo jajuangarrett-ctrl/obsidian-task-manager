@@ -1,3 +1,7 @@
+## 0.30.34
+
+- Keep the search input focused and mounted while updating results in All, Overview, Area, and Move. Turn off keyboard auto-capitalization in Objective Manager search, chat, capture, and common editing fields.
+
 ## 0.30.33
 
 - Add Chat with this objective beside Review Files and in Home details. The existing Talk to Vault panel supports typed or spoken questions with read-only access to that objective and supported text in its own Files folder. It cannot search the rest of the vault or edit objectives.

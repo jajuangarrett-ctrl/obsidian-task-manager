@@ -151,7 +151,7 @@ export class LiveVoiceModal extends Modal {
     const label = form.createEl("label");
     const inputLabel = this.objectiveChat ? "Message this objective" : "Message your dashboard";
     label.createSpan({ text: inputLabel, cls: "fjg-live-input-label" });
-    this.textInput = label.createEl("input", { type: "text", placeholder: this.objectiveChat ? "Ask about this objective’s files…" : "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": inputLabel, enterkeyhint: "send" } });
+    this.textInput = label.createEl("input", { type: "text", placeholder: this.objectiveChat ? "Ask about this objective’s files…" : "Ask a question or request a change…", attr: { maxlength: "4000", "aria-label": inputLabel, enterkeyhint: "send", autocapitalize: "none" } });
     this.textButton = form.createEl("button", { text: "Send", type: "submit", attr: { "aria-label": "Send message" } });
     form.addEventListener("submit", event => { event.preventDefault(); void this.submitText(); });
   }

@@ -85,7 +85,7 @@ export class ObjectivesAppView extends ItemView {
 
     const filters = toolbar.createDiv({ cls: "fjg-app-filters" });
     this.search = filters.createEl("input", {
-      type: "search", placeholder: "Search objectives", attr: { "aria-label": "Search objectives" },
+      type: "search", placeholder: "Search objectives", attr: { "aria-label": "Search objectives", autocapitalize: "none" },
     });
     this.search.addEventListener("input", () => {
       this.query = this.search.value;

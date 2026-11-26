@@ -158,7 +158,7 @@ export class FocusHome {
       const fields=form.createDiv({cls:"fjg-focus-fields"});
       const field=(label:string, key:keyof Draft, type="text")=>{
         const wrap=fields.createEl("label");wrap.createSpan({text:label});
-        const input=type==="textarea"?wrap.createEl("textarea",{attr:{rows:key==="checklist"?"3":"2"}}):wrap.createEl("input",{type});
+        const input=type==="textarea"?wrap.createEl("textarea",{attr:{rows:key==="checklist"?"3":"2",autocapitalize:"none"}}):wrap.createEl("input",{type,attr:type==="text"?{autocapitalize:"none"}:{}});
         input.value=draft[key];input.dataset.focusKey="focus-capture-"+key;
         input.addEventListener("input",()=>{draft[key]=input.value;});
         if(key==="title"){input.required=true;input.maxLength=240;}
@@ -195,7 +195,7 @@ export class FocusHome {
       };
       if(searchable){
         nav.createEl("h2",{text:pane===0?"Lists":"Second list"});
-        const field=nav.createEl("input",{type:"search",placeholder:"Jump to a list",attr:{"aria-label":"Find a list","data-focus-key":"focus-jump"}});
+        const field=nav.createEl("input",{type:"search",placeholder:"Jump to a list",attr:{"aria-label":"Find a list","data-focus-key":"focus-jump",autocapitalize:"none"}});
         field.value=this.search;const options=nav.createDiv();
         field.addEventListener("input",()=>{this.search=field.value;populate(options,this.search);});
         field.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault();options.querySelector("button")?.click();}if(ev.key==="Escape"){this.picker=null;jump("focus-lists");}});

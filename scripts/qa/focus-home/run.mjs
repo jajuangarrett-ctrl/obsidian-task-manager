@@ -240,6 +240,8 @@ async function runScenarios(page, out) {
   await pane2.getByRole("heading",{name:"Anytime",level:2}).waitFor();
 
   await page.getByRole("button",{name:"Quick Entry",exact:true}).click();
+  assert.equal(await page.getByRole("textbox",{name:"Title",exact:true}).getAttribute("autocapitalize"),"none");
+  assert.equal(await page.getByRole("textbox",{name:"Notes",exact:true}).getAttribute("autocapitalize"),"none");
   await page.getByRole("textbox",{name:"Title",exact:true}).fill("Captured from Home");
   await page.getByRole("textbox",{name:"Notes",exact:true}).fill("Keep this draft over rotation");
   await page.getByRole("textbox",{name:/Checklist/}).fill("One\nTwo");
@@ -290,6 +292,25 @@ async function runScenarios(page, out) {
   await page.getByRole("searchbox",{name:"Search All objectives"}).waitFor();
   await page.getByRole("button",{name:/^All Open/}).waitFor();
   await page.getByRole("button",{name:/^All objectives/}).waitFor();
+  for(const [tab,label,summary,expected] of [
+    ["All", "Search All objectives", ".fjg-home-count", /1 matching/],
+    [/^Overview/, "Search Overview objectives", ".fjg-overview-summary", /^1 of/],
+    ["Area", "Search Area objectives", ".fjg-overview-summary", /^1 objectives/],
+    ["Move", "Search Move queue", ".fjg-move-search-results p", /^1 matching/],
+  ]){
+    const target=page.getByRole("tab",{name:tab,exact:typeof tab==="string"});
+    if(await target.getAttribute("aria-selected")!=="true")await target.click();
+    const search=page.getByRole("searchbox",{name:label,exact:true});
+    assert.equal(await search.getAttribute("autocapitalize"),"none");
+    const original=await search.elementHandle();
+    await search.fill("confirm advisor");
+    await page.locator(summary).filter({hasText:expected}).first().waitFor();
+    await search.press("End");
+    await search.pressSequentially(" coverage",{delay:145});
+    assert.equal(await search.inputValue(),"confirm advisor coverage");
+    assert.equal(await original.evaluate(el=>el===document.activeElement && el.isConnected),true,"Filtering must not replace or refocus the field.");
+    await original.dispose();
+  }
   await home.click();await pane1.getByRole("heading",{name:"Today",exact:true,level:2}).waitFor();
   assert.equal(await sectionBar.isVisible(),false,"Returning to Home restores the space-saving default");
   assert.equal(await reveal.evaluate(el=>el===document.activeElement),true);
@@ -339,5 +360,5 @@ async function runScenarios(page, out) {
   assert.equal(await trash.count(),0);
   await deletion.getByRole("button",{name:"Close"}).click();
   assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="trash-preview").map(e=>e.args)),[[{acknowledgeLinks:true}]]);
-  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation");
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation, and stable lowercase search fields");
 }

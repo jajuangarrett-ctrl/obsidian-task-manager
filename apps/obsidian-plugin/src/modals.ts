@@ -179,7 +179,7 @@ export class DashboardProjectPickerModal extends Modal {
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search objective tags", "aria-label": "Search dashboard objective tags" }
+      attr: { autocapitalize: "none", placeholder: "Search objective tags", "aria-label": "Search dashboard objective tags" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
@@ -242,7 +242,7 @@ export class TaskProjectPickerModal extends Modal {
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search objective tags", "aria-label": "Search objective tags" }
+      attr: { autocapitalize: "none", placeholder: "Search objective tags", "aria-label": "Search objective tags" }
     });
     search.value = this.query;
     search.addEventListener("input", () => {
@@ -349,7 +349,7 @@ export class TaskRelocationModal extends Modal {
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-project-picker-search",
-      attr: { placeholder: "Search Programs and Areas", "aria-label": "Search objective destination folders" }
+      attr: { autocapitalize: "none", placeholder: "Search Programs and Areas", "aria-label": "Search objective destination folders" }
     });
     search.value = this.query;
     search.disabled = this.moving;
@@ -524,6 +524,7 @@ export class CreateProjectModal extends Modal {
       .setName("Project name")
       .setDesc("This name will appear in the dashboard, Quick Capture, and Chrome clipper.")
       .addText((text) => {
+        text.inputEl.setAttribute("autocapitalize", "none");
         text.setPlaceholder("Project name");
         text.onChange((value) => this.value.name = value);
         window.setTimeout(() => text.inputEl.focus(), 0);
@@ -533,6 +534,7 @@ export class CreateProjectModal extends Modal {
       .setDesc("Optional starting context for the project workspace.")
       .addTextArea((area) => {
         area.inputEl.rows = 5;
+        area.inputEl.setAttribute("autocapitalize", "none");
         area.onChange((value) => this.value.description = value);
       });
     new Setting(this.contentEl).addButton((button) => button
@@ -589,6 +591,7 @@ export class RenameProjectModal extends Modal {
       .setDesc("Use a unique name without folder-path characters.")
       .addText((text) => {
         input = text.inputEl;
+        input.setAttribute("autocapitalize", "none");
         text.setValue(this.currentName);
         text.inputEl.setAttribute("aria-label", `New name for ${this.currentName}`);
         text.onChange((value) => {
@@ -655,6 +658,7 @@ export class RenameTaskModal extends Modal {
       .setDesc("Use a unique name without folder-path characters.")
       .addText((text) => {
         input = text.inputEl;
+        input.setAttribute("autocapitalize", "none");
         text.setValue(this.currentTitle);
         text.inputEl.setAttribute("aria-label", `New name for ${this.currentTitle}`);
         text.onChange((value) => {
@@ -712,9 +716,10 @@ export class CreateTaskModal extends Modal {
 
   onOpen(): void {
     this.setTitle("Create Objective Workspace");
-    new Setting(this.contentEl).setName("Title").addText((text) => text.onChange((value) => this.value.title = value));
+    new Setting(this.contentEl).setName("Title").addText((text) => { text.inputEl.setAttribute("autocapitalize", "none"); text.onChange((value) => this.value.title = value); });
     new Setting(this.contentEl).setName("Details").addTextArea((area) => {
       area.inputEl.rows = 6;
+      area.inputEl.setAttribute("autocapitalize", "none");
       area.onChange((value) => this.value.details = value);
     });
     new Setting(this.contentEl).setName("Status").addDropdown((dropdown) => {
@@ -760,6 +765,7 @@ export class TextEntryModal extends Modal {
     this.setTitle(this.titleText);
     new Setting(this.contentEl).setName("Update").addTextArea((area) => {
       area.inputEl.rows = 8;
+      area.inputEl.setAttribute("autocapitalize", "none");
       area.onChange((value) => this.text = value);
     });
     new Setting(this.contentEl).addButton((button) => button
@@ -813,7 +819,7 @@ export class TaskUpdateCaptureModal extends Modal {
     const search = this.contentEl.createEl("input", {
       type: "search",
       cls: "fjg-task-update-capture-search",
-      attr: { placeholder: "Search objective title, project, person, or ID", "aria-label": "Search existing objectives" }
+      attr: { autocapitalize: "none", placeholder: "Search objective title, project, person, or ID", "aria-label": "Search existing objectives" }
     });
     search.addEventListener("input", () => {
       this.query = search.value;
@@ -828,6 +834,7 @@ export class TaskUpdateCaptureModal extends Modal {
 
     new Setting(this.contentEl).setName("Update").setDesc("Review or edit before saving.").addTextArea((area) => {
       area.inputEl.rows = 8;
+      area.inputEl.setAttribute("autocapitalize", "none");
       area.inputEl.value = this.text;
       area.onChange((value) => {
         this.text = value;
@@ -973,7 +980,7 @@ export class TaskFileModal extends Modal {
     const title = panel.createEl("input", {
       type: "text",
       placeholder: "Meeting notes, draft, research…",
-      attr: { "aria-label": "Related note title" }
+      attr: { "aria-label": "Related note title", autocapitalize: "none" }
     });
     title.id = "fjg-task-related-note-title";
     title.value = this.noteTitle;
@@ -981,7 +988,7 @@ export class TaskFileModal extends Modal {
     const bodyLabel = panel.createEl("label", { text: "Starting notes (optional)" });
     const body = panel.createEl("textarea", {
       placeholder: "Add context now, or leave this blank and write in the new note.",
-      attr: { "aria-label": "Starting note content", rows: "7" }
+      attr: { "aria-label": "Starting note content", rows: "7", autocapitalize: "none" }
     });
     body.id = "fjg-task-related-note-body";
     body.value = this.noteBody;

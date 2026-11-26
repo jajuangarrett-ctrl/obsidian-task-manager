@@ -14,7 +14,7 @@ export class SubtaskEditModal extends Modal {
     let parentId = "";
     if (this.captureService) {
       const service = this.captureService;
-      const search = this.contentEl.createEl("input", { type: "search", placeholder: "Search objectives by title…", cls: "fjg-parent-search", attr: { "aria-label": "Search parent objectives" } });
+      const search = this.contentEl.createEl("input", { type: "search", placeholder: "Search objectives by title…", cls: "fjg-parent-search", attr: { autocapitalize: "none", "aria-label": "Search parent objectives" } });
       const choice = this.contentEl.createDiv({ cls: "fjg-parent-choice", attr: { "aria-live": "polite" } });
       const results = this.contentEl.createDiv({ cls: "fjg-parent-results" });
       choice.setText("Choose the objective this action belongs to.");
@@ -34,13 +34,13 @@ export class SubtaskEditModal extends Modal {
     }
     let title = this.sub?.title || "", due = this.sub?.due || "", notes = this.sub?.notes || "";
     let status = this.sub?.status || "do-soon";
-    new Setting(this.contentEl).setName("Title").addText((text) => text.setValue(title).onChange((value) => title = value));
+    new Setting(this.contentEl).setName("Title").addText((text) => { text.inputEl.setAttribute("autocapitalize", "none"); text.setValue(title).onChange((value) => title = value); });
     new Setting(this.contentEl).setName("Status").addDropdown((select) => {
       for (const value of TASK_STATUSES.filter((item) => item !== "archived")) select.addOption(value, statusLabel(value));
       select.setValue(status).onChange((value) => status = value as typeof status);
     });
     new Setting(this.contentEl).setName("Due date").addText((text) => { text.inputEl.type = "date"; text.setValue(due).onChange((value) => due = value); });
-    new Setting(this.contentEl).setName("Notes").addTextArea((text) => { text.inputEl.rows = 5; text.setValue(notes).onChange((value) => notes = value); });
+    new Setting(this.contentEl).setName("Notes").addTextArea((text) => { text.inputEl.rows = 5; text.inputEl.setAttribute("autocapitalize", "none"); text.setValue(notes).onChange((value) => notes = value); });
     const saveAction = async (): Promise<boolean> => {
       if (this.saving || this.closed) return false;
       if (this.captureService && !parentId) throw new Error("Choose a parent objective.");
@@ -89,7 +89,7 @@ export class ConvertSubtasksModal extends Modal {
     const parentLabel = this.contentEl.createEl("label", { text: "Parent objective" });
     const parentSearch = this.contentEl.createEl("input", {
       type: "search", placeholder: "Search parent objectives by title…",
-      cls: "fjg-parent-search", attr: { "aria-label": "Search parent objectives", id: "fjg-parent-search" }
+      cls: "fjg-parent-search", attr: { autocapitalize: "none", "aria-label": "Search parent objectives", id: "fjg-parent-search" }
     });
     parentLabel.htmlFor = "fjg-parent-search";
     const parentChoice = this.contentEl.createDiv({ cls: "fjg-parent-choice", attr: { "aria-live": "polite" } });
@@ -116,7 +116,7 @@ export class ConvertSubtasksModal extends Modal {
       }
     };
     parentSearch.addEventListener("input", () => { parentId = ""; renderParents(); renderPreview(); });
-    const search = this.contentEl.createEl("input", { type: "search", placeholder: "Find objectives to convert", attr: { "aria-label": "Find objectives to convert" } });
+    const search = this.contentEl.createEl("input", { type: "search", placeholder: "Find objectives to convert", attr: { autocapitalize: "none", "aria-label": "Find objectives to convert" } });
     const list = this.contentEl.createDiv({ cls: "fjg-convert-list" });
     const preview = this.contentEl.createDiv();
     const render = () => {
