@@ -37,6 +37,7 @@ import {
   taskUpdatesFolderPath,
   transitionTaskRecord,
   updateTaskFields,
+  validatePlanningDay,
   validateTaskRecord
 } from "@fjg/task-core";
 import type { CatalogTask, CreateTaskItem } from "@fjg/task-protocol";
@@ -88,7 +89,7 @@ export interface TaskRelatedFile {
   preview: string;
 }
 
-export type NewTaskWorkspaceInput = NewTaskInput & { destination?: string };
+export type NewTaskWorkspaceInput = NewTaskInput & { destination?: string; initialActions?: string[] };
 
 export interface IndexedTask {
   record: TaskRecord;
@@ -941,6 +942,18 @@ export class TaskWorkspaceService {
     audit: { requestId?: string; actor?: string } = {}
   ): Promise<IndexedTask> {
     let record = createTaskRecord(input);
+    const names = new Set<string>();
+    for (const action of input.initialActions || []) {
+      const title = action.trim();
+      if (!title) continue;
+      const clean = sanitizeTitleForPath(title);
+      if ([".", ".."].includes(clean)) throw new Error("Enter a descriptive action title.");
+      const base = `Subtasks/${clean}`;
+      let folder = base, suffix = 2;
+      while (names.has(folder.toLowerCase())) folder = `${base} (${suffix++})`;
+      names.add(folder.toLowerCase());
+      record.subtasks.push({id:createTaskId(),title,completed:false,status:"do-soon",due:"",notes:"",history:"",source_task_id:"",attachment_folder:folder});
+    }
     if (this.index.has(record.task_id) || this.creatingIds.has(record.task_id)) throw new Error(`Task ID ${record.task_id} already exists.`);
     this.creatingIds.add(record.task_id);
     try {
@@ -1973,6 +1986,26 @@ export class TaskWorkspaceService {
       }
     }
     return result;
+  }
+
+  /** Set only the planning day; preserve deadline, status, body, and unknown metadata. */
+  async changePlanningDay(taskId: string, day: string, observedPath: string, expected?: string): Promise<IndexedTask> {
+    const planned = validatePlanningDay(day);
+    const task = this.getById(taskId);
+    if (task.archived || task.record.__fjgSourceArchived || task.record.converted_to || task.record.status === "completed" || task.taskFile.path !== observedPath)
+      throw new Error("This objective changed or is closed. Refresh before scheduling.");
+    const apply = (source: string) => {
+      const { record } = parseTaskMarkdown(source);
+      if (task.taskFile.path !== observedPath || record.task_id !== taskId || record.converted_to || ["archived", "completed"].includes(record.status))
+        throw new Error("This objective changed or is closed. Refresh before scheduling.");
+      const prior = record.scheduled_for || "";
+      if (expected !== undefined && prior !== expected) throw new Error("The planning day changed. Nothing was overwritten.");
+      return prior === planned ? source : patchConversionMetadata(source, { scheduled_for: planned, updated_at: new Date().toISOString() });
+    };
+    if (typeof this.app.vault.process === "function") await this.app.vault.process(task.taskFile, apply);
+    else await this.app.vault.modify(task.taskFile, apply(await this.app.vault.read(task.taskFile)));
+    await this.refresh();
+    return this.getById(taskId);
   }
 
   async changeDueDate(

@@ -1,3 +1,9 @@
+## 0.30.23
+
+- Home now opens Focus Lists, with folded single-pane, unfolded Book Split and optional Sidebar or Single List layouts. Unfolded portrait gives the active list the whole pane.
+- The former Home dashboard and its existing filters and status rows are now under **All**.
+- Adds Things-inspired Today, Upcoming, Inbox, Anytime, Someday, Logbook, and area lists; inline details, checklists, Quick Entry, and planning-day scheduling with Undo. Planning does not change deadlines.
+
 ## 0.30.20
 
 - Add **Review Files** and **View Review** to objective Files rows on desktop and mobile. Get cited analysis, conflicting evidence, prioritized next steps, blockers, and decisions using GPT-6.2 Sol.

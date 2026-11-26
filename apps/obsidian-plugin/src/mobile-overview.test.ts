@@ -20,6 +20,7 @@ class Element {
   children: Element[] = [];
   handlers: Record<string, () => unknown> = {};
   dataset: Record<string,string> = {};
+  style = { removeProperty() {} };
   scrollTop = 0;
   scrollLeft = 0;
   hidden = false;
@@ -80,7 +81,7 @@ function setup(mobile: boolean) {
   };
   const view = Object.assign(Object.create(TaskDashboardView.prototype), {
     containerEl: container, mode: "overview", overviewSelected: "", overviewQuery: "Long", overviewWorkspaceId: "",
-    rowPositions: new Map(), collapsedOverviewStatuses: new Set(["delegate"]), app, taskPlugin: plugin,
+    focusHome: {snapshot: vi.fn()}, rowPositions: new Map(), collapsedOverviewStatuses: new Set(["delegate"]), app, taskPlugin: plugin,
     renderHeader: (node: Element) => node.createDiv({ cls: "test-dashboard-header" }), renderSectionTabs: vi.fn(),
     cancelSearchRender: vi.fn()
   }) as TaskDashboardView;

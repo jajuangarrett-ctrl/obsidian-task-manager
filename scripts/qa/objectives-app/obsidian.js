@@ -72,3 +72,6 @@ export const MarkdownRenderer = { async render(_app, markdown, target) { target.
 export class Modal extends Component {}
 export class WorkspaceLeaf {}
 export const Keymap = { isModEvent: () => "tab" };
+export class FuzzySuggestModal extends Modal {}
+export class Setting {}
+export async function requestUrl() { throw new Error("Network is forbidden in this fixture."); }

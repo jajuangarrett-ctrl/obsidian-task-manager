@@ -55,6 +55,7 @@ export function createTaskRecord(input: NewTaskInput, now = new Date()): TaskRec
     status,
     priority: input.priority || "normal",
     due: cleanDate(input.due),
+    ...(input.scheduledFor ? { scheduled_for: validatePlanningDay(input.scheduledFor) } : {}),
     created_at: createdAt,
     updated_at: input.updatedAt || createdAt,
     completed_at: completedAt,
@@ -209,6 +210,7 @@ function normalizeRecord(record: TaskRecord): TaskRecord {
     status: normalizeStatus(record.status),
     priority: record.priority === "low" || record.priority === "high" ? record.priority : "normal",
     due: cleanDate(record.due),
+    ...(planningDay(record.scheduled_for) ? { scheduled_for: planningDay(record.scheduled_for) } : {}),
     created_at: cleanInline(record.created_at),
     updated_at: cleanInline(record.updated_at),
     completed_at: cleanInline(record.completed_at),
@@ -297,6 +299,21 @@ function cleanTitle(value: unknown): string {
 
 function cleanInline(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+/** Reject impossible calendar dates without converting a local day to UTC. */
+export function planningDay(value: unknown): string {
+  const day = typeof value === "string" ? value.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.startsWith("0000")) return "";
+  const utc = new Date(day + "T00:00:00Z");
+  return Number.isFinite(+utc) && utc.toISOString().slice(0, 10) === day ? day : "";
+}
+
+export function validatePlanningDay(value: string): string {
+  if (!value.trim()) return "";
+  const day = planningDay(value);
+  if (!day) throw new Error("Choose a valid planning date.");
+  return day;
 }
 
 function cleanDate(value: unknown): string {

@@ -1,0 +1,286 @@
+import { Notice, setIcon, TFolder } from "obsidian";
+import { statusLabel, validatePlanningDay } from "@fjg/task-core";
+import type FjgTaskManagerPlugin from "../main";
+import type { IndexedTask } from "./workspace-service";
+import { objectiveAreas } from "./area-model";
+import { localDateKey } from "./dashboard-date";
+import { canScheduleFocusObjective, canUseFocusObjective, FOCUS_LISTS, focusGroups, type FocusList } from "./focus-home-model";
+
+type Pane = 0 | 1;
+type Draft = { title: string; notes: string; when: string; checklist: string; tags: string; destination: string };
+type Undo = { text: string; apply: () => Promise<unknown> };
+type Drag = { type: "objective"; id: string; path: string; prior: string } | {type:"capture"};
+const emptyDraft = (when = "", destination = ""): Draft => ({title:"",notes:"",when,checklist:"",tags:"",destination});
+const description = (s: string) => s.split(/\r?\n/).map(x=>x.trim())
+  .filter(x=>x && !/^#{1,6}\s|^[-*]\s*\[[x ]\]/i.test(x)).slice(0,3).join(" ").slice(0,700);
+const isTextInput = (el: Element | null): el is HTMLInputElement|HTMLTextAreaElement =>
+  el?.tagName==="INPUT" || el?.tagName==="TEXTAREA";
+
+export class FocusHome {
+  private lists: [FocusList, FocusList] = ["today", "upcoming"];
+  private activePane: Pane = 0;
+  private selected: [string,string] = ["",""];
+  private layout: "split" | "sidebar" | "single" = "split";
+  private readonly positions = new Map<string,number>();
+  private picker: Pane | null = null;
+  private search = "";
+  private draft?: Draft;
+  private drag?: Drag;
+  private undo?: Undo;
+  private busy = false;
+  private restoreKey = "";
+  private promiseError = "";
+  private scheduleId = "";
+  private postpone = "";
+  constructor(private plugin: FjgTaskManagerPlugin, private redraw: () => void) {}
+
+  snapshot(root: HTMLElement): void {
+    root.querySelectorAll<HTMLElement>("[data-focus-scroll]").forEach(el => {
+      if (el.getClientRects().length) this.positions.set(el.dataset.focusScroll!,el.scrollTop);
+    });
+  }
+
+  render(root: HTMLElement, tasks: IndexedTask[]): void {
+    const areas = objectiveAreas(this.plugin.app.vault.getAllLoadedFiles().filter(f=>f instanceof TFolder).map(f=>f.path),tasks);
+    const picks = [...FOCUS_LISTS, ...areas.map(a=>({key:`area:${a.path}` as const,label:a.label,icon:"folder",tone:"blue"}))];
+    const label = (key:FocusList)=>picks.find(p=>p.key===key)?.label || "Today";
+    for(const p of [0,1] as const) if (!picks.some(x=>x.key===this.lists[p])) this.lists[p]=p===0?"today":"upcoming";
+    const shell = root.createEl("section",{cls:"fjg-focus-home",attr:{"aria-label":"Focus Lists"}});
+    shell.dataset.layout=this.layout;
+    shell.dataset.activePane=String(this.activePane);
+    const button=(parent:HTMLElement,text:string,act:()=>void,opts:{cls?:string,icon?:string,key?:string,label?:string,pressed?:boolean}={})=>{
+      const el=parent.createEl("button",{type:"button",cls:opts.cls,attr:{
+        ...(opts.key?{"data-focus-key":opts.key}:{}),...(opts.label?{"aria-label":opts.label}:{}),...(opts.pressed===undefined?{}:{"aria-pressed":String(opts.pressed)})}});
+      if(opts.icon) setIcon(el.createSpan({cls:"fjg-focus-icon",attr:{"aria-hidden":"true"}}),opts.icon);
+      if(text) el.createSpan({text});
+      el.addEventListener("click",act);return el;
+    };
+    const jump=(key:string)=>{this.restoreKey=key;this.redraw();};
+    const run=(action:()=>Promise<unknown>,from?:HTMLButtonElement|HTMLInputElement)=>void this.run(action,from);
+    const taskNow=(task:IndexedTask,editing=true)=>{
+      const current=this.plugin.workspaceService.getById(task.record.task_id);
+      if (current.taskFile.path!==task.taskFile.path || (editing && !canUseFocusObjective(current))) throw new Error("This objective changed. Reopen it before editing.");
+      return current;
+    };
+    const changeDay=(task:IndexedTask, day:string, prior=task.record.scheduled_for||"")=>{
+      if(day===prior) return;
+      run(async()=>{
+        const current=taskNow(task);
+        const saved=await this.plugin.workspaceService.changePlanningDay(current.record.task_id,day,current.taskFile.path,prior);
+        this.scheduleId="";this.undo={text:day?"Planning day updated":"Planning day cleared",apply:()=>this.plugin.workspaceService.changePlanningDay(current.record.task_id,prior,saved.taskFile.path,day)};
+        this.plugin.refreshDashboard();
+      });
+    };
+    const capture=(date="",pane:Pane=0)=>{
+      const list=this.lists[pane]; this.draft??=emptyDraft(date,list.startsWith("area:")?list.slice(5):"");
+      this.promiseError="";jump("focus-capture-title");
+    };
+    const setList=(pane:Pane,key:FocusList)=>{
+      this.lists[pane]=key;this.selected[pane]="";this.picker=null;this.search="";this.scheduleId="";
+      jump(pane===0?"focus-primary-pick":"focus-secondary-pick");
+    };
+    const toolbar=shell.createDiv({cls:"fjg-focus-toolbar"});
+    button(toolbar,"Lists",()=>{this.picker=this.picker!==null?null:this.activePane; this.search="";jump(this.picker!==null?"focus-jump":"focus-lists");},{icon:"panel-left",key:"focus-lists"});
+    const layout=toolbar.createEl("select",{cls:"fjg-focus-layout",attr:{"aria-label":"Home layout","data-focus-key":"focus-layout"}});
+    for(const [key,text] of [["split","Book Split"],["sidebar","Sidebar"],["single","Single List"]])layout.createEl("option",{value:key,text});
+    layout.value=this.layout;layout.addEventListener("change",()=>{this.layout=layout.value as typeof this.layout;if(this.layout!=="split")this.activePane=0;this.picker=null;jump("focus-layout");});
+    button(toolbar,"",()=>this.plugin.openLiveVoice(()=>JSON.stringify({mode:"home",focusList:this.lists[0],secondaryList:this.layout==="split"?this.lists[1]:undefined})),{label:"Talk to Vault",icon:"mic"});
+    if(this.undo){
+      const undo=this.undo, notice=shell.createDiv({cls:"fjg-focus-undo",attr:{role:"status"}});
+      notice.createSpan({text:undo.text});
+      button(notice,"Undo",()=>run(async()=>{await undo.apply();this.undo=undefined;this.plugin.refreshDashboard();}),{key:"focus-undo"});
+      button(notice,"",()=>{this.undo=undefined;this.redraw();},{icon:"x",label:"Dismiss undo"});
+    }
+    if(this.promiseError && !this.draft) shell.createEl("p",{cls:"fjg-focus-error",text:this.promiseError,attr:{role:"alert"}});
+
+    if(this.draft) {
+      shell.addClass("is-capturing");
+      const draft=this.draft, form=shell.createEl("form",{cls:"fjg-focus-capture",attr:{"aria-label":"Quick Entry"}});
+      const head=form.createDiv({cls:"fjg-focus-capture-head"}); head.createEl("h2",{text:"New objective"});
+      button(head,"Cancel",()=>{if(this.busy)return;this.draft=undefined;this.promiseError="";jump("focus-add-0");},{icon:"x"});
+      const fields=form.createDiv({cls:"fjg-focus-fields"});
+      const field=(label:string, key:keyof Draft, type="text")=>{
+        const wrap=fields.createEl("label");wrap.createSpan({text:label});
+        const input=type==="textarea"?wrap.createEl("textarea",{attr:{rows:key==="checklist"?"3":"2"}}):wrap.createEl("input",{type});
+        input.value=draft[key];input.dataset.focusKey="focus-capture-"+key;
+        input.addEventListener("input",()=>{draft[key]=input.value;});
+        if(key==="title"){input.required=true;input.maxLength=240;}
+        return input;
+      };
+      field("Title","title");field("Notes","notes","textarea");field("Checklist · one action per line","checklist","textarea");field("Tags · comma separated","tags");field("When · optional","when","date");
+      const dest=fields.createEl("label"); dest.createSpan({text:"Save to"});
+      const choose=dest.createEl("select");
+      choose.createEl("option",{value:"",text:"Inbox"});
+      for(const a of areas) choose.createEl("option",{value:a.path,text:a.label});
+      choose.value=draft.destination;choose.addEventListener("change",()=>{draft.destination=choose.value;});
+      if(this.promiseError) fields.createEl("p",{text:this.promiseError,cls:"fjg-focus-error",attr:{role:"alert"}});
+      const footer=form.createDiv({cls:"fjg-focus-capture-footer"}); const save=footer.createEl("button",{type:"submit",cls:"mod-cta",text:"Save Objective"});
+      save.disabled=this.busy;
+      form.addEventListener("submit",event=>{event.preventDefault();run(async()=>{
+        if(!draft.title.trim()) throw new Error("Enter an objective title.");
+        await this.plugin.workspaceService.createTask({title:draft.title.trim(),details:draft.notes,status:"inbox",scheduledFor:validatePlanningDay(draft.when),destination:draft.destination||undefined,
+          tags:draft.tags.split(",").map(t=>t.trim()).filter(Boolean),initialActions:draft.checklist.split(/\r?\n/).map(t=>t.trim()).filter(Boolean)});
+        this.draft=undefined;this.restoreKey="focus-add-0";this.plugin.refreshDashboard();new Notice("Objective captured.");
+      },save);});
+      this.restore(shell);
+      return;
+    }
+
+    const listNav=(parent:HTMLElement,pane:Pane,searchable:boolean)=>{
+      const nav=parent.createEl("nav",{cls:"fjg-focus-lists",attr:{"aria-label":searchable?"Choose a focus list":"Focus lists sidebar"}});
+      const populate=(target:HTMLElement,query="")=>{
+        target.empty();const q=query.toLocaleLowerCase().trim();
+        for(const pick of picks.filter(x=>!q || x.label.toLocaleLowerCase().includes(q))){
+          const item=button(target,pick.label,()=>setList(pane,pick.key),{icon:pick.icon,pressed:this.lists[pane]===pick.key});
+          item.dataset.tone=pick.tone;if(pick.key.startsWith("area:"))item.addClass("is-area");
+        }
+        if(!target.childElementCount)target.createEl("p",{text:"No matching lists",cls:"fjg-focus-empty"});
+      };
+      if(searchable){
+        nav.createEl("h2",{text:pane===0?"Lists":"Second list"});
+        const field=nav.createEl("input",{type:"search",placeholder:"Jump to a list",attr:{"aria-label":"Find a list","data-focus-key":"focus-jump"}});
+        field.value=this.search;const options=nav.createDiv();
+        field.addEventListener("input",()=>{this.search=field.value;populate(options,this.search);});
+        field.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault();options.querySelector("button")?.click();}if(ev.key==="Escape"){this.picker=null;jump("focus-lists");}});
+        populate(options,this.search);
+      }else populate(nav);
+    };
+
+    if(this.picker!==null){
+      const back=shell.createDiv({cls:"fjg-focus-picker"});
+      button(back,"Back to list",()=>{this.picker=null;jump("focus-lists");},{icon:"chevron-left"});
+      listNav(back,this.picker,true);this.restore(shell);return;
+    }
+
+    const today=localDateKey();
+    const body=shell.createDiv({cls:"fjg-focus-body"});
+    const sidebar=body.createDiv({cls:"fjg-focus-sidebar"}); if(this.layout==="sidebar") listNav(sidebar,0,false);
+    for(const pane of [0,1] as const){
+      if(pane===1 && this.layout!=="split") continue;
+      const list=this.lists[pane], scrollerKey=pane+":"+list;
+      const part=body.createEl("section",{cls:`fjg-focus-pane is-pane-${pane}`,attr:{"aria-label":pane===0?"Primary focus list":"Secondary focus list"}});
+      const activate=()=>{this.activePane=pane;shell.dataset.activePane=String(pane);};
+      part.addEventListener("pointerdown",activate);
+      part.addEventListener("focusin",activate);
+      const paneHeader=part.createDiv({cls:"fjg-focus-pane-header"});
+      const selectedList=picks.find(p=>p.key===list);
+      const heading=paneHeader.createEl("h2",{cls:"fjg-focus-heading"});
+      heading.dataset.tone=selectedList?.tone||"blue";
+      setIcon(heading.createSpan({cls:"fjg-focus-list-icon",attr:{"aria-hidden":"true"}}),selectedList?.icon||"list");
+      heading.createSpan({text:label(list)});
+      button(paneHeader,"",()=>{this.picker=pane;this.search="";jump("focus-jump");},{icon:"chevron-down",label:pane?"Choose second list":"Choose primary list",key:pane?"focus-secondary-pick":"focus-primary-pick"});
+      const scroller=part.createDiv({cls:"fjg-focus-scroll",attr:{"data-focus-scroll":scrollerKey}});
+      const groups=focusGroups(tasks,list,today,areas);
+      if(!groups.some(g=>g.tasks.length))scroller.createEl("p",{cls:"fjg-focus-empty",text:list==="today"?"Nothing planned for today. Add an objective or schedule one from another list.":"Nothing in this list yet."});
+      const drop=(element:HTMLElement,day:string)=>{
+        element.addEventListener("dragover",event=>{if(!this.drag || this.busy)return;event.preventDefault();element.addClass("is-drop");});
+        element.addEventListener("dragleave",()=>element.removeClass("is-drop"));
+        element.addEventListener("drop",event=>{
+          const dragging=this.drag;this.drag=undefined;element.removeClass("is-drop");if(!dragging||this.busy)return;event.preventDefault();
+          if(dragging.type==="capture")capture(day,pane);
+          else {const current=tasks.find(t=>t.record.task_id===dragging.id&&t.taskFile.path===dragging.path);
+            if(current&&canScheduleFocusObjective(current))changeDay(current,day,dragging.prior);}
+        });
+      };
+      for(const group of groups){
+        const section=scroller.createEl("section",{cls:"fjg-focus-group"});
+        if(group.label){
+          const caption=section.createDiv({cls:"fjg-focus-date"});
+          caption.createEl("h3",{text:group.label});
+          if(group.scheduleDay)drop(caption,group.scheduleDay);
+        }
+        for(const task of group.tasks){
+          const r=task.record,id=r.task_id,done=r.status==="completed", opened=this.selected[pane]===id;
+          const row=section.createDiv({cls:`fjg-focus-row${opened?" is-open":""}`});
+          const check=button(row,"",()=>run(async()=>{
+            const current=taskNow(task);
+            if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before completing.");
+            const saved=await this.plugin.workspaceService.changeStatus(id,done?"restore":"completed");
+            this.undo={text:done?"Objective reopened":"Objective completed",apply:async()=>{
+              const now=taskNow(saved);
+              if(now.record.status!==saved.record.status || now.record.updated_at!==saved.record.updated_at)throw new Error("This objective has changed since that action.");
+              await this.plugin.workspaceService.changeStatus(id,r.status);
+            }};
+            this.plugin.refreshDashboard();
+          },check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
+          const name=button(row,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
+          name.setAttribute("aria-expanded",String(opened));name.createSpan({text:r.title});
+          const sub=[statusLabel(r.status), r.scheduled_for?`Planned ${r.scheduled_for}`:"",r.due?`Due ${r.due}`:""].filter(Boolean).join(" · ");
+          name.createEl("small",{text:sub});
+          if(canScheduleFocusObjective(task)){
+            name.draggable=true;
+            name.addEventListener("dragstart",ev=>{this.drag={type:"objective",id,path:task.taskFile.path,prior:r.scheduled_for||""};ev.dataTransfer?.setData("text/plain","Objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="move";});
+            name.addEventListener("dragend",()=>{this.drag=undefined;});
+          }
+
+          if(opened){
+            const detail=section.createDiv({cls:"fjg-focus-detail"});
+            const preview=description(task.notes);
+            if(preview)detail.createEl("p",{text:preview});
+            if(r.subtasks.length){
+              detail.createEl("h4",{text:"Checklist"});
+              for(const action of r.subtasks.filter(x=>x.status!=="archived")){
+                const toggle=button(detail,action.title,()=>run(async()=>{
+                  const current=taskNow(task),fresh=current.record.subtasks.find(x=>x.id===action.id);
+                  if(!fresh||fresh.status!==action.status||current.record.status==="completed")throw new Error("This action changed. Reopen it before editing.");
+                  await this.plugin.workspaceService.updateSubtask(id,action.id,{status:action.completed?"do-soon":"completed"});
+                  this.plugin.refreshDashboard();
+                }),{cls:"fjg-focus-action",icon:action.completed?"circle-check":"circle",pressed:action.completed});
+                toggle.disabled=done;
+              }
+            }
+            const tools=detail.createDiv({cls:"fjg-focus-tools"});
+            if(!done){
+              button(tools,"When",()=>{this.scheduleId=this.scheduleId===id?"":id;this.postpone=r.scheduled_for||"";jump(this.scheduleId?`focus-when-${pane}-${id}`:`focus-row-${pane}-${id}`);},{icon:"calendar-days"});
+              button(tools,"Deadline",()=>this.plugin.openTaskDueDateModal(id));
+              button(tools,"Add action",()=>this.plugin.openObjectiveActionModal(id));
+            }
+            button(tools,"Files",()=>this.plugin.openObjectiveWorkspace(id,true));
+            button(tools,"Updates",()=>run(()=>this.plugin.openTaskUpdates(id)));
+            const more=tools.createEl("details");more.createEl("summary",{text:"More"});
+            const other=more.createDiv({cls:"fjg-focus-more"});
+            button(other,"Rename",()=>this.plugin.openRenameTaskModal(id));
+            if(!done)button(other,"Move",()=>this.plugin.openTaskRelocationModal(id));
+            button(other,"Open note",()=>run(()=>this.plugin.openTask(id)));
+            if(this.scheduleId===id && !done){
+              const date=detail.createDiv({cls:"fjg-focus-schedule"});
+              const input=date.createEl("input",{type:"date",attr:{"aria-label":`Planning day for ${r.title}`,"data-focus-key":`focus-when-${pane}-${id}`}});input.value=this.postpone;
+              input.addEventListener("input",()=>{this.postpone=input.value;});
+              button(date,"Save",()=>changeDay(task,input.value));
+              button(date,"Today",()=>changeDay(task,today));
+              button(date,"Clear",()=>changeDay(task,""));
+            }
+          }
+        }
+      }
+      scroller.scrollTop=this.positions.get(scrollerKey)||0;
+      const action=part.createDiv({cls:"fjg-focus-addbar"});
+      const add=button(action,"",()=>capture("",pane),{cls:"fjg-focus-plus",label:pane?"Quick Entry from second list":"Quick Entry",icon:"plus",key:`focus-add-${pane}`});
+      add.draggable=true;
+      add.addEventListener("dragstart",ev=>{this.drag={type:"capture"};ev.dataTransfer?.setData("text/plain","New objective");if(ev.dataTransfer)ev.dataTransfer.effectAllowed="copy";});
+      add.addEventListener("dragend",()=>{this.drag=undefined;});
+    }
+    shell.addEventListener("keydown",event=>{
+      if(event.key==="Escape" && this.scheduleId){this.scheduleId="";this.redraw();}
+      if((event.key==="/" || (event.key==="k"&&(event.metaKey||event.ctrlKey)))&&!isTextInput(shell.ownerDocument.activeElement)){
+        event.preventDefault();event.stopPropagation();this.picker=0;this.search="";jump("focus-jump");
+      }
+    });
+    this.restore(shell);
+  }
+
+  private restore(shell: HTMLElement): void {
+    if(!this.restoreKey)return;
+    const key=this.restoreKey;this.restoreKey="";
+    const target=Array.from(shell.querySelectorAll<HTMLElement>("[data-focus-key]")).find(el=>el.dataset.focusKey===key&&el.getClientRects().length);
+    target?.focus({preventScroll:true});
+  }
+
+  private async run(action:()=>Promise<unknown>, control?:HTMLButtonElement|HTMLInputElement):Promise<void>{
+    if(this.busy)return;
+    this.busy=true;if(control)control.disabled=true;this.promiseError="";
+    try{await action();}
+    catch(error){this.promiseError=error instanceof Error?error.message:String(error);this.redraw();}
+    finally{this.busy=false;if(control)control.disabled=false;if(this.draft && this.promiseError)this.redraw();}
+  }
+}

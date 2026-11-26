@@ -2373,3 +2373,20 @@ it("renames objective files across statuses without changing those statuses or t
   expect(await vault.read(project.projectFile as never)).toBe(originalProject);
   expect((await service.renameObjectiveFiles("all")).renamed).toHaveLength(0);
 });
+
+it("plans an objective independently of its deadline and refuses stale undo or a moved path", async () => {
+  const {service,vault}=createService(true);
+  await service.initialize();
+  const item=await service.createTask({title:"Plan a workshop",due:"2026-12-06",initialActions:["Draft","Draft"]});
+  const id=item.record.task_id;
+  expect(item.record.subtasks.map(s=>s.attachment_folder)).toEqual(["Subtasks/Draft","Subtasks/Draft (2)"]);
+  const initial=await vault.read(item.taskFile as never);
+  await vault.modify(item.taskFile as never,initial.replace("---\n","---\ncustom_note: keep me\n"));
+  const planned=await service.changePlanningDay(id,"2026-11-27",item.taskFile.path,"");
+  expect(planned.record).toMatchObject({task_id:id,due:"2026-12-06",status:"inbox",scheduled_for:"2026-11-27"});
+  expect(await vault.read(item.taskFile as never)).toContain("custom_note: keep me");
+  await expect(service.changePlanningDay(id,"",item.taskFile.path,"2026-11-28")).rejects.toThrow(/changed/);
+  await expect(service.changePlanningDay(id,"2026-12-03","wrong/path.md")).rejects.toThrow(/changed/);
+  await expect(service.changePlanningDay(id,"2026-02-31",item.taskFile.path)).rejects.toThrow(/valid/);
+  expect((await service.changePlanningDay(id,"",item.taskFile.path,"2026-11-27")).record.scheduled_for).toBeUndefined();
+});

@@ -2,7 +2,7 @@ import {localDateKey,validDateKey} from "./dashboard-date";
 import { isConvertedOriginal, isTaskStatus, TASK_STATUSES } from "@fjg/task-core";
 import type { TaskRecord, TaskStatus } from "@fjg/task-core";
 
-export type DashboardMode = "home" | "overview" | "area" | "move" | "tasks" | "kanban" | "projects" | "people";
+export type DashboardMode = "home" | "all" | "overview" | "area" | "move" | "tasks" | "kanban" | "projects" | "people";
 export type TaskViewKey = "converted" | "recent" | "all-open" | "upcoming" | "due" | "no-project" | TaskStatus;
 
 export const RECENT_TASK_LIMIT = 30;

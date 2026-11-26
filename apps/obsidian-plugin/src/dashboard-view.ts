@@ -1,3 +1,4 @@
+import { FocusHome } from "./focus-home";
 import {watchLocalDate} from "./dashboard-date";
 import { mountExpandedContent } from "./lazy-details";
 import { renderObjectiveFilesDisclosure } from "./objective-file-review-ui";
@@ -42,6 +43,7 @@ export { TASK_DASHBOARD_VIEW } from "./dashboard-view-type";
 
 export class TaskDashboardView extends ItemView {
   private mode: DashboardMode = "home";
+  private readonly focusHome: FocusHome;
   private tabPosition = 0;
   private homeScope: HomeScope = "open";
   private homeQuery = "";
@@ -96,6 +98,7 @@ export class TaskDashboardView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private readonly taskPlugin: FjgTaskManagerPlugin) {
     super(leaf);
+    this.focusHome = new FocusHome(taskPlugin, () => this.render());
   }
 
   getViewType(): string {
@@ -116,6 +119,15 @@ export class TaskDashboardView extends ItemView {
 
   onResize(): void {
     if (this.pendingRender && this.containerEl.isShown()) this.render();
+    this.fitFocusViewport();
+  }
+
+  private fitFocusViewport(): void {
+    const root = this.contentEl;
+    const vv = root.ownerDocument.defaultView?.visualViewport;
+    if (vv && this.mode === "home" && root.querySelector(".fjg-focus-home.is-capturing")) {
+      root.style.setProperty("--focus-visible-height", `${Math.max(140, Math.floor(vv.height + vv.offsetTop - root.getBoundingClientRect().top))}px`);
+    } else root.style.removeProperty("--focus-visible-height");
   }
 
   private cancelSearchRender(): void {
@@ -135,6 +147,13 @@ export class TaskDashboardView extends ItemView {
     this.stopDateWatch?.();
     const doc=this.containerEl.ownerDocument;
     this.stopDateWatch=watchLocalDate(()=>this.render(),doc.defaultView||window,doc);
+    const viewport=doc.defaultView?.visualViewport;
+    if(viewport){
+      const fit=()=>this.fitFocusViewport();
+      viewport.addEventListener("resize",fit);
+      viewport.addEventListener("scroll",fit);
+      this.register(()=>{viewport.removeEventListener("resize",fit);viewport.removeEventListener("scroll",fit);});
+    }
     this.view = this.taskPlugin.settings.dashboardDefault;
     const renderWhenVisible = () => {
       if (this.pendingRender && this.containerEl.isShown()) this.render();
@@ -161,11 +180,15 @@ export class TaskDashboardView extends ItemView {
     const panelTop = root.querySelector<HTMLElement>(".fjg-overview-details")?.scrollTop ?? 0;
     this.tabPosition = root.querySelector<HTMLElement>(".fjg-dashboard-tabs")?.scrollLeft ?? this.tabPosition;
     root.querySelectorAll<HTMLElement>("[data-home-row]").forEach(row => this.rowPositions.set(row.dataset.homeRow!, row.scrollLeft));
-    const focused = root.querySelector<HTMLInputElement>("input:focus");
+    this.focusHome.snapshot(root);
+    const focused = root.querySelector<HTMLInputElement | HTMLTextAreaElement>("input:focus, textarea:focus");
     const focusKey = focused?.dataset.focusKey;
     const caret = focused?.selectionStart;
+    const caretEnd = focused?.selectionEnd;
     root.empty();
     root.addClass("fjg-task-dashboard");
+    root.toggleClass("fjg-task-dashboard-focus", this.mode === "home");
+    if (this.mode !== "home") root.style.removeProperty("--focus-visible-height");
     const allTasks = this.taskPlugin.workspaceService.list({ includeArchived: true });
     const mobileDetail = Platform.isMobile && this.mode === "overview" && this.overviewSelected
       ? allTasks.find(task => task.record.task_id === this.overviewSelected && !task.archived && task.record.status !== "archived")
@@ -176,7 +199,7 @@ export class TaskDashboardView extends ItemView {
       return;
     }
 
-    this.renderHeader(root);
+    if (this.mode !== "home") this.renderHeader(root);
     const tasks = this.taskPlugin.workspaceService.list();
     const projects = summarizeProjects(
       tasks.map((task) => task.record),
@@ -184,7 +207,10 @@ export class TaskDashboardView extends ItemView {
     );
     this.renderSectionTabs(root, projects.filter((project) => project.key !== NO_PROJECT).length, allTasks.filter(task => !task.archived).length);
     if (this.mode === "home") {
-      this.renderHome(root, allTasks);
+      this.focusHome.render(root, allTasks);
+      this.fitFocusViewport();
+    } else if (this.mode === "all") {
+      this.renderAll(root, allTasks);
     } else if (this.mode === "people") {
       this.renderPeople(root, allTasks);
     } else if (this.mode === "move") {
@@ -210,7 +236,7 @@ export class TaskDashboardView extends ItemView {
     root.scrollTop = top;
     const details = root.querySelector<HTMLElement>(".fjg-overview-details");
     if (details) details.scrollTop = panelTop;
-    if (focusKey) { const input = root.querySelector<HTMLInputElement>(`input[data-focus-key="${focusKey}"]`); input?.focus(); if (caret != null) input?.setSelectionRange(caret,caret); }
+    if (focusKey && !root.contains(root.ownerDocument.activeElement)) { const input = Array.from(root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input[data-focus-key], textarea[data-focus-key]")).find(e => e.dataset.focusKey === focusKey); input?.focus({preventScroll:true}); if (caret != null) input?.setSelectionRange(caret,caretEnd ?? caret); }
   }
 
   private renderHeader(root: HTMLElement): void {
@@ -267,6 +293,7 @@ export class TaskDashboardView extends ItemView {
       attr: { role: "tablist", "aria-label": "Objective Manager sections" }
     });
     this.sectionTab(tabs, "home", "Home", "house");
+    this.sectionTab(tabs, "all", "All", "layout-list");
     this.sectionTab(tabs, "tasks", "Objectives", "list-checks");
     this.sectionTab(tabs, "overview", "Overview", "layout-grid", taskCount);
     this.sectionTab(tabs, "area", "Area", "folder-tree");
@@ -299,9 +326,9 @@ export class TaskDashboardView extends ItemView {
     });
   }
 
-  private renderHome(root: HTMLElement, tasks: IndexedTask[]): void {
+  private renderAll(root: HTMLElement, tasks: IndexedTask[]): void {
     const heading=root.createDiv({cls:"fjg-section-heading"});
-    heading.createEl("h2",{text:"Home"});
+    heading.createEl("h2",{text:"All"});
     heading.createEl("p",{text:"Scan status, browse objectives, and open a workspace. Shift-click a card to browse its folder."});
     const scope=root.createDiv({cls:"fjg-home-scopes"});
     for(const [key,label] of [["open","All Open"],["completed","Completed"],["all","All objectives"]] as const){
@@ -309,11 +336,11 @@ export class TaskDashboardView extends ItemView {
       button.toggleClass("is-active",this.homeScope===key);button.addEventListener("click",()=>{this.homeScope=key;this.render();});
     }
     const filters=root.createDiv({cls:"fjg-home-filters"});
-    const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search Home objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.queueSearchRender(() => this.render());});
+    const search=filters.createEl("input",{type:"search",placeholder:"Search every objective in this scope",attr:{"aria-label":"Search All objectives","data-focus-key":"home-search"}});search.value=this.homeQuery;search.addEventListener("input",()=>{this.homeQuery=search.value;this.queueSearchRender(() => this.render());});
     const select=(label:string,choices:[string,string][],value:string,changed:(value:string)=>void)=>{const el=filters.createEl("select",{attr:{"aria-label":label}});for(const [key,name] of choices)el.createEl("option",{value:key,text:name});el.value=value;el.addEventListener("change",()=>{changed(el.value);this.render();});};
-    select("Filter Home by People",[["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(value=>[value,value] as [string,string])],this.person,value=>this.person=value);
-    select("Filter Home by status",[["","All statuses"],...OBJECTIVE_STATUS_CHOICES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
-    select("Sort Home objectives",[["updated","Updated newest"],["due","Due first"]],this.homeSort,value=>this.homeSort=value as HomeSort);
+    select("Filter All by People",[["","All People"],["__none__","No People"],...this.taskPlugin.workspaceService.peopleNames().map(value=>[value,value] as [string,string])],this.person,value=>this.person=value);
+    select("Filter All by status",[["","All statuses"],...OBJECTIVE_STATUS_CHOICES.map(value=>[value,statusLabel(value)] as [string,string])],this.homeStatus,value=>this.homeStatus=value);
+    select("Sort All objectives",[["updated","Updated newest"],["due","Due first"]],this.homeSort,value=>this.homeSort=value as HomeSort);
     const clear=filters.createEl("button",{text:"Clear filters"});clear.addEventListener("click",()=>{this.homeQuery="";this.homeProject="";this.person="";this.homeStatus="";this.render();});
     const view=filters.createEl("button",{text:this.homeList?"Status rows":"All results list",attr:{"aria-pressed":String(this.homeList)}});view.addEventListener("click",()=>{this.homeList=!this.homeList;this.render();});
     const visible=filterHomeTasks(tasks,this.homeScope,this.homeQuery,this.homeProject,this.homeStatus,this.homeSort,this.person);

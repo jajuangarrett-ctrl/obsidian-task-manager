@@ -37,6 +37,8 @@ export interface TaskRecord {
   status: TaskStatus;
   priority: TaskPriority;
   due: string;
+  /** Optional local calendar day for planning, distinct from due. */
+  scheduled_for?: string;
   created_at: string;
   updated_at: string;
   completed_at: string;
@@ -90,6 +92,7 @@ export interface NewTaskInput {
   status?: string;
   priority?: TaskPriority;
   due?: string;
+  scheduledFor?: string;
   project?: string;
   people?: string[];
   agendaSelected?: boolean;
