@@ -1,3 +1,5 @@
+import { ObjectiveSelection } from "../../../apps/obsidian-plugin/src/objective-selection.ts";
+
 import { DeleteObjectiveModal } from "../../../apps/obsidian-plugin/src/delete-objective-modal.ts";
 import { TaskRelocationModal } from "../../../apps/obsidian-plugin/src/modals.ts";
 import { TFile, TFolder } from "obsidian";
@@ -26,6 +28,10 @@ const tasks=[
  ...Array.from({length:34},(_,i)=>make("Fixture row "+String(i).padStart(2,"0"),"do-first",{scheduled_for:day})),
  ...Array.from({length:29},(_,i)=>make("Coming row "+String(i).padStart(2,"0"),"do-soon",{scheduled_for:later})),
 ];
+const convertedParent=make("Synthetic parent objective with a long title spanning several lines when viewed in a narrow workspace pane","waiting");
+const convertedOriginal=make("Follow up regarding overdue payments and confirm the remaining balances with the accounting team before the next program review meeting","waiting",{converted_to:{parent_task_id:convertedParent.record.task_id,action_id:"converted-action"}});
+convertedParent.record.subtasks.push({id:"converted-action",source_task_id:convertedOriginal.record.task_id,title:"Check each outstanding balance and document the final reconciliation with the accounting team",status:"do-soon"});
+tasks.push(convertedOriginal,convertedParent);
 const duplicate=new Set();
 const get=id=>{if(duplicate.has(id))throw Error("Conflicting copies.");const t=tasks.find(t=>t.record.task_id===id);if(!t)throw Error("Not indexed");return t;};
 const app={workspace:{on:()=>()=>{}},vault:{getAllLoadedFiles:()=>[new TFolder(area)]}};
@@ -34,7 +40,7 @@ const holdSave=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{reso
 const gate=async()=>{if(saveGate){const pending=saveGate; await pending.promise;}};
 const finishSave=fail=>{const pending=saveGate; saveGate=undefined;if(fail)pending.reject(new Error("Fixture save failed"));else pending.resolve();};
 const service={
- list:()=>tasks,getById:get,projectNames:()=>[],peopleNames:()=>[],refresh:async()=>{},
+ list:()=>tasks,getById:get,objectiveFiles:()=>[],projectNames:()=>[],peopleNames:()=>[],refresh:async()=>{},
  async createTask(p) {const t=make(p.title,p.status,{scheduled_for:p.scheduledFor,subtasks:p.initialActions.map((title,i)=>({id:"a"+i,title,status:"do-soon"})),tags:p.tags},p.destination);tasks.unshift(t);window.fixtureEvents.push({action:"capture",p});return t;},
  async changePlanningDay(id,day,path,prior){
    const t=get(id); if(path!==t.taskFile.path||prior!==(t.record.scheduled_for||""))throw Error("Stale instance");
@@ -45,7 +51,7 @@ const service={
  async updateSubtask(id,a,{status}){await gate();const r=get(id).record;const action=r.subtasks.find(x=>x.id===a);action.status=status;action.completed=status==="completed";},
 };
 const record=(name)=>(...args)=>window.fixtureEvents.push({action:name,args});
-const plugin={app,workspaceService:service,settings:{dashboardDefault:"do-first",inboxRoot:"08 Tasks/Inbox"},refreshDashboard:()=>view.render(),openLiveVoice:record("voice"),openObjectiveChat:record("objective-chat"),openTaskDueDateModal:record("deadline"),openObjectiveWorkspace:record("files"),openTaskUpdates:record("updates"),openRenameTaskModal:record("rename"),openTaskRelocationModal:()=>new TaskRelocationModal(app,"Synthetic objective","08 Tasks/Inbox/Files",[
+const plugin={app,objectiveSelection:new ObjectiveSelection(),workspaceService:service,settings:{dashboardDefault:"do-first",inboxRoot:"08 Tasks/Inbox"},refreshDashboard:()=>view.render(),openLiveVoice:record("voice"),openObjectiveChat:record("objective-chat"),openTaskDueDateModal:record("deadline"),openObjectiveWorkspace:record("files"),openTaskUpdates:record("updates"),openRenameTaskModal:record("rename"),openTaskRelocationModal:()=>new TaskRelocationModal(app,"Synthetic objective","08 Tasks/Inbox/Files",[
   "02 Programs/Synthetic Program","02 Programs/Synthetic Program/Long Folder Name for Wrapping on Narrow Mobile Screens",
   "03 Areas/Synthetic reference"
 ],async (path)=>record("move")(path)).open(),openTask:record("open"),openObjectiveActionModal:record("add-action")};
@@ -56,5 +62,5 @@ const openDelete=(blocked=false)=>new DeleteObjectiveModal(app,{
   actions:[],externalFiles:[],incoming:["Other note.md"],linkWarnings:[{source:"Other note.md",target:"Vault/Synthetic/Attachment.md",attachment:true}],
   blockers:blocked?["Contains another objective"]:[],fingerprint:"synthetic"
 },async confirmation=>record("trash-preview")(confirmation)).open();
-window.focusFixture={openDelete,day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
+window.focusFixture={convertedTitle:convertedOriginal.record.title,openDelete,day,tomorrow,later,holdSave,finishSave,rerender:()=>view.render(),duplicate:()=>duplicate.add(tasks.find(t=>t.record.title==="Confirm advisor coverage").record.task_id)};
 view.onOpen().then(()=>{document.body.dataset.fixtureReady="true";}).catch(e=>{document.body.dataset.fixtureError=String(e);throw e;});

@@ -311,6 +311,41 @@ async function runScenarios(page, out) {
     assert.equal(await original.evaluate(el=>el===document.activeElement && el.isConnected),true,"Filtering must not replace or refocus the field.");
     await original.dispose();
   }
+  await page.getByRole("tab",{name:"Objectives",exact:true}).click();
+  await page.locator('button[data-view="converted"]').click();
+  await page.getByRole("searchbox",{name:"Search objectives in the current view"}).fill("");
+
+  const convertedTitle=await page.evaluate(()=>window.focusFixture.convertedTitle);
+  const convertedCard=page.locator(".fjg-task-rows .fjg-task-row").filter({has:page.getByRole("button",{name:convertedTitle,exact:true})});
+  const convertedName=convertedCard.getByRole("button",{name:convertedTitle,exact:true});
+  await convertedName.waitFor();
+
+  for(const [viewport,pane,stacked] of [[386,386,true],[871,871,true],[1100,340,true],[1280,1280,false]]){
+    await page.setViewportSize({width:viewport,height:678});
+    await page.locator(".workspace-leaf").evaluate((el,w)=>el.style.width=w+"px",pane);
+    assert.equal(await convertedCard.count(),1);
+    const metrics=await convertedName.evaluate(el=>{
+      const card=el.closest(".fjg-task-row"), main=el.closest(".fjg-task-main"), controls=card.querySelector(".fjg-task-controls");
+      const box=card.getBoundingClientRect();
+      const labels=[el,...card.querySelectorAll(".fjg-conversion-info button")];
+      return {
+        width:el.getBoundingClientRect().width,
+        stacked:controls.getBoundingClientRect().top>=main.getBoundingClientRect().bottom,
+        inside:controls.getBoundingClientRect().right<=box.right+1,
+        labelsFit:labels.every(label=>label.scrollWidth<=label.clientWidth+1 && label.scrollHeight<=label.clientHeight+1),
+      };
+    });
+    assert.ok(metrics.width>=Math.min(210,pane*0.56),`Long title must be readable at ${viewport}/${pane}: ${JSON.stringify(metrics)}`);
+    assert.equal(metrics.stacked,stacked);
+    assert.ok(metrics.inside && metrics.labelsFit,`Card and link labels stay visible at ${viewport}/${pane}: ${JSON.stringify(metrics)}`);
+    assert.equal(await convertedCard.getByText("Work continues in the linked action",{exact:true}).isVisible(),true);
+  }
+  const more=convertedCard.locator(".fjg-task-more > summary");
+  await more.click();
+  await convertedCard.getByRole("button",{name:`Rename ${convertedTitle}`,exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.fixtureEvents.at(-1).action),"rename");
+  await page.locator(".workspace-leaf").evaluate(el=>el.style.removeProperty("width"));
+  await page.setViewportSize({width:386,height:678});
   await home.click();await pane1.getByRole("heading",{name:"Today",exact:true,level:2}).waitFor();
   assert.equal(await sectionBar.isVisible(),false,"Returning to Home restores the space-saving default");
   assert.equal(await reveal.evaluate(el=>el===document.activeElement),true);
@@ -360,5 +395,5 @@ async function runScenarios(page, out) {
   assert.equal(await trash.count(),0);
   await deletion.getByRole("button",{name:"Close"}).click();
   assert.deepEqual(await page.evaluate(()=>window.fixtureEvents.filter(e=>e.action==="trash-preview").map(e=>e.args)),[[{acknowledgeLinks:true}]]);
-  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation, and stable lowercase search fields");
+  console.log("PASS Home toolbar visibility and space, folded, book split, portrait active pane, sidebar/single, touch targets, checklist, plan/undo retains deadline, capture resize, All, themed Move folder selection, and explicit no-typing Trash confirmation, stable lowercase search fields, and readable Converted cards across pane sizes");
 }

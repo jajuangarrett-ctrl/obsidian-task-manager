@@ -1,3 +1,7 @@
+## 0.30.35
+
+- Keep long objective titles and linked action names readable. In narrow panes, put the action buttons below the title and conversion details.
+
 ## 0.30.34
 
 - Keep the search input focused and mounted while updating results in All, Overview, Area, and Move. Turn off keyboard auto-capitalization in Objective Manager search, chat, capture, and common editing fields.

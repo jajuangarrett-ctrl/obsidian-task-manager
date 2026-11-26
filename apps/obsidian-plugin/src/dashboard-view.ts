@@ -1043,7 +1043,7 @@ export class TaskDashboardView extends ItemView {
     copyPath.createSpan({ text: "Copy" });
     copyPath.addEventListener("click", () => void this.taskPlugin.copyTaskFolderPath(task.record.task_id));
     if (converted) {
-      controls.createSpan({text:"Work continues in the linked action"});
+      main.createEl("p", { text: "Work continues in the linked action", cls: "fjg-task-conversion-note" });
     } else if (task.record.status === "completed" || task.record.status === "archived") {
       const reopen = controls.createEl("button", {
         text: "Reopen",
