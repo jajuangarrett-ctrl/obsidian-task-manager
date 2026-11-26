@@ -1,9 +1,10 @@
 import { Notice, setIcon, TFolder } from "obsidian";
-import { planningDay, statusLabel, validatePlanningDay } from "@fjg/task-core";
+import { canTransition, planningDay, statusLabel, validatePlanningDay, type TaskStatus } from "@fjg/task-core";
 import type FjgTaskManagerPlugin from "../main";
 import type { IndexedTask } from "./workspace-service";
 import { objectiveAreas } from "./area-model";
 import { localDateKey } from "./dashboard-date";
+import { OBJECTIVE_STATUS_CHOICES } from "./dashboard-model";
 import { canScheduleFocusObjective, canUseFocusObjective, FOCUS_LISTS, focusGroups, type FocusList } from "./focus-home-model";
 
 type Pane = 0 | 1;
@@ -56,7 +57,7 @@ export class FocusHome {
       el.addEventListener("click",act);return el;
     };
     const jump=(key:string)=>{this.restoreKey=key;this.redraw();};
-    const run=(action:()=>Promise<unknown>,from?:HTMLButtonElement|HTMLInputElement)=>void this.run(action,from);
+    const run=(action:()=>Promise<unknown>,from?:HTMLButtonElement|HTMLInputElement|HTMLSelectElement)=>void this.run(action,from);
     const taskNow=(task:IndexedTask,editing=true)=>{
       const current=this.plugin.workspaceService.getById(task.record.task_id);
       if (current.taskFile.path!==task.taskFile.path || (editing && !canUseFocusObjective(current))) throw new Error("This objective changed. Reopen it before editing.");
@@ -198,22 +199,33 @@ export class FocusHome {
         for(const task of group.tasks){
           const r=task.record,id=r.task_id,done=r.status==="completed", opened=this.selected[pane]===id;
           const row=section.createDiv({cls:`fjg-focus-row${opened?" is-open":""}`});
-          const check=button(row,"",()=>run(async()=>{
+          const setStatus=async(target:TaskStatus|"restore")=>{
             const current=taskNow(task);
-            if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before completing.");
-            const saved=await this.plugin.workspaceService.changeStatus(id,done?"restore":"completed");
-            this.undo={text:done?"Objective reopened":"Objective completed",apply:async()=>{
+            if(current.record.status!==r.status)throw new Error("This objective changed. Refresh before changing its status.");
+            if(target!=="restore" && (target===r.status || !OBJECTIVE_STATUS_CHOICES.some(option=>option===target) || !canTransition(r.status,target))) return;
+            const saved=await this.plugin.workspaceService.changeStatus(id,target);
+            this.undo={text:`Status changed to ${statusLabel(saved.record.status)}`,apply:async()=>{
               const now=taskNow(saved);
               if(now.record.status!==saved.record.status || now.record.updated_at!==saved.record.updated_at)throw new Error("This objective has changed since that action.");
               await this.plugin.workspaceService.changeStatus(id,r.status);
             }};
             this.plugin.refreshDashboard();
-          },check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
-          const name=button(row,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
+          };
+          const check=button(row,"",()=>run(()=>setStatus(done?"restore":"completed"),check),{cls:"fjg-focus-check",icon:done?"circle-check":"circle",label:`${done?"Reopen":"Complete"} ${r.title}`});
+          const entry=row.createDiv({cls:"fjg-focus-entry"});
+          const name=button(entry,"",()=>{this.selected[pane]=opened?"":id;this.scheduleId="";jump(`focus-row-${pane}-${id}`);},{cls:"fjg-focus-title",key:`focus-row-${pane}-${id}`});
           name.setAttribute("aria-expanded",String(opened));name.createSpan({text:r.title});
           const due=planningDay(r.due), past=!!due && due<today && !done;
-          const sub=name.createEl("small",{cls:"fjg-focus-meta"});
-          sub.createSpan({text:statusLabel(r.status)});
+          const sub=entry.createDiv({cls:"fjg-focus-meta"});
+          // A native select, outside the title button, matches All and opens the iOS picker.
+          const status=sub.createEl("select",{cls:"fjg-focus-status",attr:{"aria-label":`Status for ${r.title}`}});
+          for(const value of OBJECTIVE_STATUS_CHOICES) if(canTransition(r.status,value)) status.createEl("option",{text:statusLabel(value),value});
+          status.value=r.status;
+          status.addEventListener("change",()=>{
+            const target=status.value as TaskStatus;
+            status.value=r.status;
+            run(()=>setStatus(target),status);
+          });
           if(r.scheduled_for)sub.createSpan({text:`Planned ${r.scheduled_for}`});
           if(r.due)sub.createSpan({text:`${past?"Past due":"Due"} ${r.due}`,cls:past?"fjg-focus-overdue":undefined});
           if(canScheduleFocusObjective(task)){
@@ -285,7 +297,7 @@ export class FocusHome {
     target?.focus({preventScroll:true});
   }
 
-  private async run(action:()=>Promise<unknown>, control?:HTMLButtonElement|HTMLInputElement):Promise<void>{
+  private async run(action:()=>Promise<unknown>, control?:HTMLButtonElement|HTMLInputElement|HTMLSelectElement):Promise<void>{
     if(this.busy)return;
     this.busy=true;if(control)control.disabled=true;this.promiseError="";
     try{await action();}

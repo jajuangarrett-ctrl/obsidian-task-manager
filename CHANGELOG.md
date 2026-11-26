@@ -1,3 +1,7 @@
+## 0.30.25
+
+- Tap the status below an objective’s title in Home to open the same native status picker as All. Status changes use the existing objective history and can be undone in Home; the title still opens inline details.
+
 ## 0.30.24
 
 - Fix crowded and overlapping Focus Lists text under mobile themes that give buttons a fixed height; long objective titles and their metadata now have room to wrap.

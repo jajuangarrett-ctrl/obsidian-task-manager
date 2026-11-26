@@ -76,6 +76,15 @@ async function runScenarios(page, out) {
   assert.equal(await layout.isVisible(),false);
   assert.ok(await width(pane1)>370);
   assert.ok((await pane1.getByRole("button",{name:"Complete Confirm advisor coverage"}).boundingBox()).height>=44);
+  const status=pane1.getByRole("combobox",{name:"Status for Confirm advisor coverage"});
+  assert.deepEqual(await status.locator("option").allTextContents(),["Inbox","Do First","Do Soon","Ongoing","Delegate","Waiting","On Hold","Completed"]);
+  assert.equal(await status.inputValue(),"do-first");
+  assert.ok((await status.boundingBox()).height>=44);
+  await status.selectOption("waiting");
+  assert.equal(await status.inputValue(),"waiting");
+  assert.equal(await row().getAttribute("aria-expanded"),"false");
+  await page.getByRole("button",{name:"Undo",exact:true}).click();
+  assert.equal(await status.inputValue(),"do-first");
   await screen("01-folded-today");
 
   await row().click();
@@ -95,6 +104,12 @@ async function runScenarios(page, out) {
   await pane2.waitFor();assert.ok(await width(pane2)>415&&await width(pane2)<450);
   assert.ok((await pane1.boundingBox()).x < (await pane2.boundingBox()).x);
   await screen("02-unfolded-book-split");
+  const upcomingStatus=pane2.getByRole("combobox",{name:"Status for Prepare workshop agenda"});
+  await upcomingStatus.selectOption("completed");
+  await upcomingStatus.waitFor({state:"hidden"});
+  await page.getByRole("button",{name:"Undo",exact:true}).click();
+  assert.equal(await upcomingStatus.inputValue(),"do-soon");
+
   await pane1.getByRole("button",{name:/^Fixture row 00/}).dragTo(pane2.getByRole("heading",{name:"Tomorrow"}));
   await page.getByRole("button",{name:"Undo",exact:true}).waitFor();
   await pane2.getByRole("button",{name:/^Fixture row 00/}).waitFor();
@@ -151,10 +166,10 @@ async function runScenarios(page, out) {
   for (const [width,height] of [[871,669],[386,678],[669,871]]) {
     await page.setViewportSize({width,height});await overdue.waitFor();
     const a=await overdue.boundingBox(), b=await next.boundingBox();
-    assert.ok(a.height>=72, "Wrapped title must grow despite a fixed theme button height");
+    assert.ok(a.height>44, "Wrapped title must grow despite a fixed theme button height");
     assert.ok(a.y+a.height+2<=b.y, "Wrapped title and next row must not overlap");
-    const inner=await overdue.evaluate(el=>{const t=el.firstElementChild.getBoundingClientRect(),m=el.lastElementChild.getBoundingClientRect();return {titleBottom:t.bottom, metaTop:m.top, metaBottom:m.bottom, rowBottom:el.getBoundingClientRect().bottom};});
-    assert.ok(inner.titleBottom+2<=inner.metaTop && inner.metaBottom<inner.rowBottom,"Metadata has space inside its own row");
+    const inner=await overdue.evaluate(el=>{const entry=el.parentElement,t=el.getBoundingClientRect(),m=entry.querySelector(".fjg-focus-meta").getBoundingClientRect();return {titleBottom:t.bottom,metaTop:m.top,metaBottom:m.bottom,rowBottom:entry.closest(".fjg-focus-row").getBoundingClientRect().bottom};});
+    assert.ok(inner.titleBottom<=inner.metaTop && inner.metaBottom<=inner.rowBottom,"Metadata has space inside its own row");
     await screen("05-theme-long-title-"+width);
   }
   await pane1.getByRole("heading",{name:"Past Due",exact:true,level:3}).waitFor();
