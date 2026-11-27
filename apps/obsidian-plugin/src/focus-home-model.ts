@@ -8,6 +8,7 @@ export const FOCUS_LISTS = [
   { key: "past-due", label: "Past Due", icon: "calendar-clock", tone: "red" },
   { key: "upcoming", label: "Upcoming", icon: "calendar-days", tone: "pink" },
   { key: "anytime", label: "Anytime", icon: "layers", tone: "teal" },
+  { key: "waiting", label: "Waiting", icon: "hourglass", tone: "amber" },
   { key: "someday", label: "Someday", icon: "archive", tone: "amber" },
   { key: "logbook", label: "Logbook", icon: "book-check", tone: "green" },
 ] as const;
@@ -57,6 +58,7 @@ export function focusGroups(tasks: readonly IndexedTask[], list: FocusList, toda
         const day = dates.find(date=>date>today);
         if (day) add(day,day===addFocusDays(today,1)?"Tomorrow":focusDayLabel(day),task,day);
       } else if (list==="inbox" ? r.status==="inbox" && !plan
+        : list==="waiting" ? r.status==="waiting"
         : list==="someday" ? r.status==="on-hold"
         : list==="anytime" ? !dates.length && ["do-first","do-soon","ongoing"].includes(r.status)
         : list.startsWith("area:") && objectiveAreaPath(task,areas)===list.slice(5)) {

@@ -283,6 +283,14 @@ async function runScenarios(page, out) {
   assert.equal(await pane1.getByText(/Completed overdue fixture/).count(),0);
   assert.equal(await pane1.getByText(/Confirm advisor coverage/).count(),0);
   await pane1.getByRole("button",{name:"Choose primary list"}).click();
+  const pickList=page.getByRole("navigation",{name:"Choose a focus list"});
+  await pickList.getByRole("searchbox",{name:"Find a list"}).fill("wait");
+  await pickList.getByRole("button",{name:"Waiting",exact:true}).click();
+  await pane1.getByRole("heading",{name:/^Waiting/,level:2}).waitFor();
+  await overdue.waitFor();
+  assert.equal(await next.count(),0,"Waiting only shows objectives with that status");
+  assert.equal(await pane1.getByText(/Follow up regarding overdue payments/).count(),0,"Converted originals stay out of Waiting");
+  await pane1.getByRole("button",{name:"Choose primary list"}).click();
   await page.getByRole("button",{name:"Today",exact:true}).click();
 
   await reveal.tap();

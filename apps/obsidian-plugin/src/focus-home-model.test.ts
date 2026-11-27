@@ -30,6 +30,21 @@ describe("Focus Lists smart filters",()=>{
     expect(labels(tasks,"logbook")).toEqual(["Done"]);
     expect(focusGroups(tasks,"area:02 Programs/One Tasks",anchor,[{name:"One",label:"One",path:"02 Programs/One Tasks",count:4}])[0].tasks).toHaveLength(4);
   });
+  it("lists active Waiting objectives regardless of scheduling, without mixing in On Hold or archived records",()=>{
+    const overdue=make("Overdue waiting","waiting","2026-11-25");
+    const undated=make("Undated blocker","waiting");
+    const upcoming=make("Scheduled waiting","waiting","2026-12-15","2026-12-02");
+    const tasks=[undated,upcoming,overdue,overdue,
+      make("On hold","on-hold"),make("Finished","completed"),
+      {...make("Archived workspace","waiting"),archived:true},
+      make("Archived source","waiting","","",{__fjgSourceArchived:true}),
+      make("Converted original","waiting","","",{converted_to:{parent_task_id:"a",action_id:"b",converted_at:"now"}})];
+    expect(labels(tasks,"waiting")).toEqual(["Overdue waiting","Scheduled waiting","Undated blocker"]);
+    expect(focusGroups(tasks,"waiting",anchor,[],"blocker")[0].tasks).toEqual([undated]);
+    expect(labels(tasks,"someday")).toEqual(["On hold"]);
+    expect(labels(tasks,"past-due")).toEqual(["Overdue waiting"]);
+    expect(labels([{...undated,record:{...undated.record,status:"do-soon"}}],"waiting")).toEqual([]);
+  });
   it("round-trips an optional planning day without touching due or accepting impossible dates",()=>{
     const record=createTaskRecord({title:"Plan it",due:"2026-12-01",scheduledFor:"2026-11-27"});
     expect(parseTaskMarkdown(renderTaskMarkdown(record)).record).toMatchObject({due:"2026-12-01",scheduled_for:"2026-11-27"});

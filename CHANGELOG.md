@@ -1,3 +1,7 @@
+## 0.30.39
+
+- Add **Waiting** to the Home focus lists. It shows objectives with the Waiting status, whether scheduled or not, without changing Today, Past Due, or Someday.
+
 ## 0.30.38
 
 - Create a folder immediately for each new action, including actions entered with a new objective. Older actions without a folder show an empty Files list and receive a unique folder on the first explicit attachment or Copy path operation. Existing folders are not reassigned.
